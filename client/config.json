@@ -1,0 +1,5 @@
+{
+  "DialTimeout": 30,
+  "PrivateKey": "",
+  "Services": ["httpproxy", "moonlight"]
+}
