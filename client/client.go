@@ -194,4 +194,6 @@ func (tc *TunnelClient) listenService(serviceId byte, portIdOffset int, protocol
 
 func main() {
 	NewTunnelClient().Start()
+
+	select{}
 }
