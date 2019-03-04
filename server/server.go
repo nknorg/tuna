@@ -133,34 +133,32 @@ func (ts *TunnelServer) Start() {
 
 	for _, serviceName := range ts.config.Services {
 		// retry subscription once a minute (regardless of result)
-		go func() {
-			var waitTime time.Duration
-			for {
-				txid, err := w.SubscribeToFirstAvailableBucket(
-					serviceName,
-					serviceName,
-					ts.config.SubscriptionDuration,
-					strings.Join([]string{
-						ip,
-						strconv.Itoa(ts.config.ListenTCP),
-						strconv.Itoa(ts.config.ListenUDP),
-					}, ","),
-				)
-				if err != nil {
-					if err == AlreadySubscribed {
-						waitTime = time.Duration(ts.config.SubscriptionInterval) * time.Second
-						log.Println(err)
-					} else {
-						log.Panicln("Couldn't subscribe:", err)
-					}
+		var waitTime time.Duration
+		for {
+			txid, err := w.SubscribeToFirstAvailableBucket(
+				serviceName,
+				serviceName,
+				ts.config.SubscriptionDuration,
+				strings.Join([]string{
+					ip,
+					strconv.Itoa(ts.config.ListenTCP),
+					strconv.Itoa(ts.config.ListenUDP),
+				}, ","),
+			)
+			if err != nil {
+				if err == AlreadySubscribed {
+					waitTime = time.Duration(ts.config.SubscriptionInterval) * time.Second
+					log.Println(err)
 				} else {
-					waitTime = time.Duration(ts.config.SubscriptionDuration) * 20 * time.Second
-					log.Println("Subscribed to topic successfully:", txid)
+					log.Panicln("Couldn't subscribe:", err)
 				}
-
-				time.Sleep(waitTime)
+			} else {
+				waitTime = time.Duration(ts.config.SubscriptionDuration) * 20 * time.Second
+				log.Println("Subscribed to topic successfully:", txid)
 			}
-		}()
+
+			time.Sleep(waitTime)
+		}
 	}
 }
 
