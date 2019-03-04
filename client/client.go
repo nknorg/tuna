@@ -106,7 +106,7 @@ func (tc *TunnelClient) connectToNode(serviceId byte, protocol tuna.Protocol, fo
 						address = addressParts[0] + ":" + addressParts[2]
 					}
 
-					if conn != nil {
+					if conn[serviceId] != nil {
 						tuna.Close(conn[serviceId])
 					}
 					conn[serviceId], err = net.DialTimeout(
