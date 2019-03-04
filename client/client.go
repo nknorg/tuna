@@ -44,7 +44,13 @@ func NewTunnelClient() *TunnelClient {
 
 	wallet := NewWalletSDK(account)
 
-	return &TunnelClient{config: config, wallet: wallet}
+	return &TunnelClient{
+		config,
+		make(map[byte]net.Conn),
+		make(map[byte]net.Conn),
+		make(map[byte]*smux.Session),
+		wallet,
+	}
 }
 
 func (tc *TunnelClient) Start() {
