@@ -1,5 +1,5 @@
 hash: f390d2cc23420dcb265c62fbd08fa4165637be123ce5abe18c84a58eb5d48b59
-updated: 2019-03-04T02:12:43.6834085+03:00
+updated: 2019-03-05T10:44:39.23375+03:00
 imports:
 - name: github.com/gogo/protobuf
   version: 636bf0302bc95575d69441b25a2603156ffdddf1
@@ -113,7 +113,7 @@ imports:
 - name: github.com/rdegges/go-ipify
   version: 2d94a6a86c4055118cc30fae2aaed47ec01f2210
 - name: github.com/syndtr/goleveldb
-  version: 4217c9f31f5816db02addc94e56061da77f288d8
+  version: 3a907f965fc16db5f7787e18d4434bbe46d47f6e
   subpackages:
   - leveldb
   - leveldb/cache
@@ -136,9 +136,9 @@ imports:
   subpackages:
   - sm4
 - name: github.com/trueinsider/smux
-  version: 035af7b7da48dddc617e3e08230492c8b307d719
+  version: 424be8395d81e8b4fb43045ae3aab9a5b5c45d80
 - name: github.com/trueinsider/tuna
-  version: 3418ad9e40ac7b510795b63dafebf0404b40dcac
+  version: 3a0f16ce7c9851685cb3f7b854e6674e35c7e715
 - name: github.com/xtaci/kcp-go
   version: f48db19e7a48fe347571d6bfc52a7585a53c5315
 - name: golang.org/x/crypto
@@ -168,7 +168,7 @@ imports:
   - internal/socket
   - ipv4
 - name: golang.org/x/sys
-  version: c2f5717e611cf8e89a852a41081355194d80c943
+  version: 30e92a19ae4a77dde818b8c3d41d51e4850cba12
   repo: https://github.com/golang/sys
   vcs: git
   subpackages:
