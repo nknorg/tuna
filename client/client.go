@@ -141,11 +141,11 @@ func (tc *TunnelClient) getSession(serviceId byte, protocol tuna.Protocol, force
 		if err != nil {
 			return nil, err
 		}
-		session, err := smux.Client(conn, nil)
+		tc.session[serviceId], err = smux.Client(conn, nil)
 		if err != nil {
 			return tc.getSession(serviceId, protocol, true, true)
 		}
-		return session, nil
+		return tc.session[serviceId], nil
 	}
 
 	return tc.session[serviceId], nil
