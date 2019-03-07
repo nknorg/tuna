@@ -148,11 +148,11 @@ func (ts *TunnelServer) Start() {
 					}, ","),
 				)
 				if err != nil {
+					waitTime = time.Duration(ts.config.SubscriptionInterval) * time.Second
 					if err == AlreadySubscribed {
-						waitTime = time.Duration(ts.config.SubscriptionInterval) * time.Second
 						log.Println(err)
 					} else {
-						log.Panicln("Couldn't subscribe:", err)
+						log.Println("Couldn't subscribe:", err)
 					}
 				} else {
 					waitTime = time.Duration(ts.config.SubscriptionDuration) * 20 * time.Second
