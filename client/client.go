@@ -135,16 +135,13 @@ func (tc *TunnelClient) connectToNode(serviceId byte, protocol tuna.Protocol, fo
 	return conn[serviceId], nil
 }
 
-func (tc *TunnelClient) getSession(serviceId byte, protocol tuna.Protocol, forceSession bool, forceConn bool) (*smux.Session, error) {
-	if tc.session[serviceId] == nil || tc.session[serviceId].IsClosed() || forceSession {
-		conn, err := tc.connectToNode(serviceId, protocol, forceConn)
+func (tc *TunnelClient) getSession(serviceId byte, protocol tuna.Protocol, force bool) (*smux.Session, error) {
+	if tc.session[serviceId] == nil || tc.session[serviceId].IsClosed() || force {
+		conn, err := tc.connectToNode(serviceId, protocol, force)
 		if err != nil {
 			return nil, err
 		}
-		tc.session[serviceId], err = smux.Client(conn, nil)
-		if err != nil {
-			return tc.getSession(serviceId, protocol, true, true)
-		}
+		tc.session[serviceId], _ = smux.Client(conn, nil)
 		return tc.session[serviceId], nil
 	}
 
@@ -152,7 +149,7 @@ func (tc *TunnelClient) getSession(serviceId byte, protocol tuna.Protocol, force
 }
 
 func (tc *TunnelClient) openStream(serviceId byte, portId byte, protocol tuna.Protocol, force bool) (*smux.Stream, error) {
-	session, err := tc.getSession(serviceId, protocol, force, false)
+	session, err := tc.getSession(serviceId, protocol, force)
 	if err != nil {
 		return nil, err
 	}

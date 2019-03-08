@@ -102,12 +102,7 @@ func (ts *TunnelServer) listenService(protocol tuna.Protocol, port string) {
 				continue
 			}
 
-			session, err := smux.Server(conn, nil)
-			if err != nil {
-				log.Println("Couldn't create smux session:", err)
-				tuna.Close(conn)
-				continue
-			}
+			session, _ := smux.Server(conn, nil)
 
 			go ts.handleSession(conn, session)
 		}
