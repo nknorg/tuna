@@ -27,9 +27,18 @@ type Configuration struct {
 
 type TunnelServer struct {
 	config      Configuration
-	ListenerTCP string
-	ListenerUDP string
-	timeout     time.Duration
+	serviceConn map[connKey]*net.UDPConn
+}
+
+type clientAddr struct {
+	ip   string
+	port int
+}
+
+type connKey struct {
+	addr      clientAddr
+	serviceId byte
+	portId    byte
 }
 
 func NewTunnelServer() *TunnelServer {
@@ -41,9 +50,7 @@ func NewTunnelServer() *TunnelServer {
 
 	return &TunnelServer{
 		config,
-		":" + strconv.Itoa(config.ListenTCP),
-		":" + strconv.Itoa(config.ListenUDP),
-		time.Duration(config.DialTimeout) * time.Second,
+		make(map[connKey]*net.UDPConn),
 	}
 }
 
@@ -72,7 +79,7 @@ func (ts *TunnelServer) handleSession(conn net.Conn, session *smux.Session) {
 		}
 		host := "127.0.0.1:" + strconv.Itoa(port)
 
-		conn, err := net.DialTimeout(string(protocol), host, ts.timeout)
+		conn, err := net.DialTimeout(string(protocol), host, time.Duration(ts.config.DialTimeout) * time.Second)
 		if err != nil {
 			log.Println("Couldn't connect to host", host, "with error:", err)
 			tuna.Close(stream)
@@ -87,8 +94,8 @@ func (ts *TunnelServer) handleSession(conn net.Conn, session *smux.Session) {
 	tuna.Close(conn)
 }
 
-func (ts *TunnelServer) listenService(protocol tuna.Protocol, port string) {
-	listener, err := net.Listen(string(protocol), port)
+func (ts *TunnelServer) listenTCP(port int) {
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: port})
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
 	}
@@ -109,6 +116,72 @@ func (ts *TunnelServer) listenService(protocol tuna.Protocol, port string) {
 	}()
 }
 
+func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, serviceId byte, portId byte) (*net.UDPConn, error) {
+	connKey := connKey{clientAddr{addr.IP.String(), addr.Port}, serviceId, portId}
+	var conn *net.UDPConn
+	var ok bool
+	if conn, ok = ts.serviceConn[connKey]; !ok {
+		service := tuna.Services[serviceId]
+		port := service.UDP[portId]
+		var err error
+		conn, err = net.DialUDP("udp", nil, &net.UDPAddr{Port: port})
+		if err != nil {
+			log.Println("Couldn't connect to local UDP port", port, "with error:", err)
+			tuna.Close(conn)
+			return conn, err
+		}
+
+		ts.serviceConn[connKey] = conn
+
+		go func() {
+			serviceBuffer := make([]byte, 2048)
+			for {
+				n, err := conn.Read(serviceBuffer)
+				if err != nil {
+					log.Println("Couldn't receive data from service:", err)
+					tuna.Close(conn)
+					break
+				}
+				n, err = conn.WriteToUDP(append([]byte{serviceId, portId}, serviceBuffer[:n]...), addr)
+				if err != nil {
+					log.Println("Couldn't send data to client:", err)
+					tuna.Close(conn)
+					break
+				}
+			}
+		}()
+	}
+
+	return conn, nil
+}
+
+func (ts *TunnelServer) listenUDP(port int) {
+	clientConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: port})
+	if err != nil {
+		log.Println("Couldn't bind listener:", err)
+	}
+
+	clientBuffer := make([]byte, 2048)
+	go func() {
+		for {
+			n, addr, err := clientConn.ReadFromUDP(clientBuffer)
+			if err != nil {
+				log.Println("Couldn't receive data from client:", err)
+			}
+			serviceId := clientBuffer[0]
+			portId := clientBuffer[1]
+			serviceConn, err := ts.getServiceConn(addr, serviceId, portId)
+			if err != nil {
+				continue
+			}
+			_, err = serviceConn.Write(clientBuffer[2:n])
+			if err != nil {
+				log.Println("Couldn't send data to service:", err)
+			}
+		}
+	}()
+}
+
 func (ts *TunnelServer) Start() {
 	ip, err := ipify.GetIp()
 	if err != nil {
@@ -123,8 +196,8 @@ func (ts *TunnelServer) Start() {
 
 	w := NewWalletSDK(account)
 
-	ts.listenService(tuna.TCP, ts.ListenerTCP)
-	ts.listenService(tuna.UDP, ts.ListenerUDP)
+	ts.listenTCP(ts.config.ListenTCP)
+	ts.listenUDP(ts.config.ListenUDP)
 
 	for _, _serviceName := range ts.config.Services {
 		serviceName := _serviceName

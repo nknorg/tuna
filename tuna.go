@@ -28,6 +28,9 @@ func Pipe(dest io.WriteCloser, src io.ReadCloser) {
 }
 
 func Close(conn io.Closer) {
+	if conn == nil {
+		return
+	}
 	err := conn.Close()
 	if err != nil {
 		log.Println("Error while closing:", err)
