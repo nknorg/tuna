@@ -200,6 +200,7 @@ func (tc *TunaClient) listenTCP(serviceId byte, ports []int) {
 		if err != nil {
 			log.Panicln("Couldn't bind listener:", err)
 		}
+		portId := byte(i)
 		go func() {
 			for {
 				conn, err := listener.Accept()
@@ -209,7 +210,7 @@ func (tc *TunaClient) listenTCP(serviceId byte, ports []int) {
 					continue
 				}
 
-				stream, err := tc.openStream(serviceId, byte(i), false)
+				stream, err := tc.openStream(serviceId, portId, false)
 				if err != nil {
 					log.Println("Couldn't open stream:", err)
 					tuna.Close(conn)

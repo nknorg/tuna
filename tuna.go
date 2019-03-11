@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"reflect"
 )
 
 type Protocol string
@@ -28,7 +29,7 @@ func Pipe(dest io.WriteCloser, src io.ReadCloser) {
 }
 
 func Close(conn io.Closer) {
-	if conn == nil {
+	if conn == nil || reflect.ValueOf(conn).IsNil() {
 		return
 	}
 	err := conn.Close()
