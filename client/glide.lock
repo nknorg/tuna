@@ -1,5 +1,5 @@
-hash: f390d2cc23420dcb265c62fbd08fa4165637be123ce5abe18c84a58eb5d48b59
-updated: 2019-03-05T10:44:39.23375+03:00
+hash: a896ba75fd88b7bbedb2d530d53c7a8d6329f6fc87ab47b642a2db9ff982f62c
+updated: 2019-03-11T07:02:15.7439246+03:00
 imports:
 - name: github.com/gogo/protobuf
   version: 636bf0302bc95575d69441b25a2603156ffdddf1
@@ -11,7 +11,7 @@ imports:
   - sortkeys
   - types
 - name: github.com/golang/crypto
-  version: 8dd112bcdc25174059e45e07517d9fc663123347
+  version: c2843e01d9a2bc60bb26ad24e09734fdc2d9ec58
   subpackages:
   - ripemd160
   - ssh/terminal
@@ -35,7 +35,7 @@ imports:
 - name: github.com/imdario/mergo
   version: 9f23e2d6bd2a77f959b2bf6acdbefd708a83a4a4
 - name: github.com/itchyny/base58-go
-  version: fab293004121aca58c909390f8d4dbd872f448a6
+  version: 052491f7f249da060fa9e3022043d8b4a980b8f9
 - name: github.com/jackpal/gateway
   version: cbcf4e3f3baee7952fc386c8b2534af4d267c875
 - name: github.com/jackpal/go-nat-pmp
@@ -45,7 +45,7 @@ imports:
 - name: github.com/klauspost/cpuid
   version: 0da02118eaa37aa89aea6776b464a4ad00990af1
 - name: github.com/klauspost/reedsolomon
-  version: 09979cdf932f53a31ccb4f926cc9ffd4c9b00dbe
+  version: a9588190c00b0ccd742218388f6ff68bbad83e5c
 - name: github.com/nknorg/go-nat
   version: 6339479af9cce1e6c4f5efe96c0306fb6149397c
 - name: github.com/nknorg/go-portscanner
@@ -104,6 +104,8 @@ imports:
   - protobuf
   - transport
   - util
+- name: github.com/nknorg/tuna
+  version: 963a12250281ad1b9db06e069c5f33eb6a11e747
 - name: github.com/op/go-logging
   version: 970db520ece77730c7e4724c61121037378659d9
 - name: github.com/patrickmn/go-cache
@@ -132,17 +134,15 @@ imports:
 - name: github.com/templexxx/xor
   version: 4e92f724b73b7aaf61869bb1ae5817822e738430
 - name: github.com/tjfoc/gmsm
-  version: f915c2cebf5850514873a887913b9e47840e07b7
+  version: fb33d2540a9bca895fba5ca76c7b1f81667320f7
   subpackages:
   - sm4
 - name: github.com/trueinsider/smux
   version: 424be8395d81e8b4fb43045ae3aab9a5b5c45d80
-- name: github.com/trueinsider/tuna
-  version: 3a0f16ce7c9851685cb3f7b854e6674e35c7e715
 - name: github.com/xtaci/kcp-go
   version: f48db19e7a48fe347571d6bfc52a7585a53c5315
 - name: golang.org/x/crypto
-  version: 8dd112bcdc25174059e45e07517d9fc663123347
+  version: c2843e01d9a2bc60bb26ad24e09734fdc2d9ec58
   repo: https://github.com/golang/crypto
   vcs: git
   subpackages:
@@ -156,7 +156,7 @@ imports:
   - twofish
   - xtea
 - name: golang.org/x/net
-  version: 16b79f2e4e95ea23b2bf9903c9809ff7b013ce85
+  version: 56fb01167e7d1e1d17dd87993d34c963f4356e87
   repo: https://github.com/golang/net
   vcs: git
   subpackages:
@@ -168,14 +168,14 @@ imports:
   - internal/socket
   - ipv4
 - name: golang.org/x/sys
-  version: 30e92a19ae4a77dde818b8c3d41d51e4850cba12
+  version: 10058d7d4faa7dd5ef860cbd31af00903076e7b8
   repo: https://github.com/golang/sys
   vcs: git
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: d14c52b222ee852cdba8b07206ca0c614b389876
+  version: 5d731a35f4867878fc89f7744f7b6debb3beded6
   subpackages:
   - encoding
   - encoding/charmap
