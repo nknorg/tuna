@@ -11,9 +11,9 @@ import (
 
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/vault"
+	"github.com/nknorg/tuna"
 	"github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
-	"github.com/trueinsider/tuna"
 )
 
 type Configuration struct {

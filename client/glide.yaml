@@ -1,4 +1,4 @@
-package: github.com/trueinsider/tuna/client
+package: github.com/nknorg/tuna/client
 import:
   - package: github.com/nknorg/nkn-sdk-go
   - package: github.com/trueinsider/smux
