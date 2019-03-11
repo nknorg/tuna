@@ -104,8 +104,6 @@ imports:
   - protobuf
   - transport
   - util
-- name: github.com/nknorg/tuna
-  version: 6574825f960201b5bb0f6cf0ebae8618ac03fc0b
 - name: github.com/op/go-logging
   version: 970db520ece77730c7e4724c61121037378659d9
 - name: github.com/patrickmn/go-cache
