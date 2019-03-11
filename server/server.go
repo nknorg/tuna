@@ -26,7 +26,7 @@ type Configuration struct {
 	Services             []string `json:"Services"`
 }
 
-type TunnelServer struct {
+type TunaServer struct {
 	config      Configuration
 	serviceConn map[connKey]*net.UDPConn
 	clientConn  *net.UDPConn
@@ -38,20 +38,20 @@ type connKey struct {
 	connId     uint16
 }
 
-func NewTunnelServer() *TunnelServer {
+func NewTunaServer() *TunaServer {
 	tuna.Init()
 	Init()
 
 	config := Configuration{}
 	tuna.ReadJson("config.json", &config)
 
-	return &TunnelServer{
+	return &TunaServer{
 		config: config,
 		serviceConn: make(map[connKey]*net.UDPConn),
 	}
 }
 
-func (ts *TunnelServer) handleSession(conn net.Conn, session *smux.Session) {
+func (ts *TunaServer) handleSession(conn net.Conn, session *smux.Session) {
 	for {
 		stream, err := session.AcceptStream()
 		if err != nil {
@@ -91,7 +91,7 @@ func (ts *TunnelServer) handleSession(conn net.Conn, session *smux.Session) {
 	tuna.Close(conn)
 }
 
-func (ts *TunnelServer) listenTCP(port int) {
+func (ts *TunaServer) listenTCP(port int) {
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: port})
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
@@ -113,12 +113,13 @@ func (ts *TunnelServer) listenTCP(port int) {
 	}()
 }
 
-func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId byte, portId byte) (*net.UDPConn, error) {
+func (ts *TunaServer) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId byte, portId byte) (*net.UDPConn, error) {
 	connKey := connKey{
 		addr.IP.String(),
 		addr.Port,
 		*(*uint16)(unsafe.Pointer(&connId[0])),
 	}
+	log.Println("connId", connKey.connId)
 	var conn *net.UDPConn
 	var ok bool
 	if conn, ok = ts.serviceConn[connKey]; !ok {
@@ -157,7 +158,7 @@ func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, connId []byte, service
 	return conn, nil
 }
 
-func (ts *TunnelServer) listenUDP(port int) {
+func (ts *TunaServer) listenUDP(port int) {
 	var err error
 	ts.clientConn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
 	if err != nil {
@@ -172,6 +173,7 @@ func (ts *TunnelServer) listenUDP(port int) {
 				log.Println("Couldn't receive data from client:", err)
 				continue
 			}
+			log.Println("got", clientBuffer[:n], "from", addr)
 			serviceConn, err := ts.getServiceConn(addr, clientBuffer[0:2], clientBuffer[2], clientBuffer[3])
 			if err != nil {
 				continue
@@ -184,7 +186,7 @@ func (ts *TunnelServer) listenUDP(port int) {
 	}()
 }
 
-func (ts *TunnelServer) Start() {
+func (ts *TunaServer) Start() {
 	ip, err := ipify.GetIp()
 	if err != nil {
 		log.Panicln("Couldn't get IP:", err)
@@ -235,7 +237,7 @@ func (ts *TunnelServer) Start() {
 }
 
 func main() {
-	NewTunnelServer().Start()
+	NewTunaServer().Start()
 
 	select{}
 }

@@ -22,7 +22,7 @@ type Configuration struct {
 	Services    []string `json:"Services"`
 }
 
-type TunnelClient struct {
+type TunaClient struct {
 	config      Configuration
 	tcpConn     map[byte]net.Conn
 	udpConn     map[byte]*net.UDPConn
@@ -37,7 +37,7 @@ type connKey struct {
 	portId    byte
 }
 
-func NewTunnelClient() *TunnelClient {
+func NewTunaClient() *TunaClient {
 	tuna.Init()
 	Init()
 
@@ -52,7 +52,7 @@ func NewTunnelClient() *TunnelClient {
 
 	wallet := NewWalletSDK(account)
 
-	return &TunnelClient{
+	return &TunaClient{
 		config,
 		make(map[byte]net.Conn),
 		make(map[byte]*net.UDPConn),
@@ -63,7 +63,7 @@ func NewTunnelClient() *TunnelClient {
 	}
 }
 
-func (tc *TunnelClient) Start() {
+func (tc *TunaClient) Start() {
 	for _, serviceName := range tc.config.Services {
 		serviceId, err := tuna.GetServiceId(serviceName)
 		if err != nil {
@@ -75,7 +75,7 @@ func (tc *TunnelClient) Start() {
 	}
 }
 
-func (tc *TunnelClient) getServerTCPConn(serviceId byte, force bool) (net.Conn, error) {
+func (tc *TunaClient) getServerTCPConn(serviceId byte, force bool) (net.Conn, error) {
 	err := tc.createServerConn(serviceId, force)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (tc *TunnelClient) getServerTCPConn(serviceId byte, force bool) (net.Conn, 
 	return tc.tcpConn[serviceId], nil
 }
 
-func (tc *TunnelClient) getServerUDPConn(serviceId byte, force bool) (*net.UDPConn, error) {
+func (tc *TunaClient) getServerUDPConn(serviceId byte, force bool) (*net.UDPConn, error) {
 	err := tc.createServerConn(serviceId, force)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (tc *TunnelClient) getServerUDPConn(serviceId byte, force bool) (*net.UDPCo
 	return tc.udpConn[serviceId], nil
 }
 
-func (tc *TunnelClient) createServerConn(serviceId byte, force bool) error {
+func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
 	service := tuna.Services[serviceId]
 	hasTCP := len(service.TCP) > 0
 	hasUDP := len(service.UDP) > 0
@@ -169,7 +169,7 @@ func (tc *TunnelClient) createServerConn(serviceId byte, force bool) error {
 	return nil
 }
 
-func (tc *TunnelClient) getSession(serviceId byte, force bool) (*smux.Session, error) {
+func (tc *TunaClient) getSession(serviceId byte, force bool) (*smux.Session, error) {
 	if tc.session[serviceId] == nil || tc.session[serviceId].IsClosed() || force {
 		conn, err := tc.getServerTCPConn(serviceId, force)
 		if err != nil {
@@ -182,7 +182,7 @@ func (tc *TunnelClient) getSession(serviceId byte, force bool) (*smux.Session, e
 	return tc.session[serviceId], nil
 }
 
-func (tc *TunnelClient) openStream(serviceId byte, portId byte, force bool) (*smux.Stream, error) {
+func (tc *TunaClient) openStream(serviceId byte, portId byte, force bool) (*smux.Stream, error) {
 	session, err := tc.getSession(serviceId, force)
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func (tc *TunnelClient) openStream(serviceId byte, portId byte, force bool) (*sm
 	return stream, err
 }
 
-func (tc *TunnelClient) listenTCP(serviceId byte, ports []int) {
+func (tc *TunaClient) listenTCP(serviceId byte, ports []int) {
 	for i, port := range ports {
 		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: port})
 		if err != nil {
@@ -223,7 +223,7 @@ func (tc *TunnelClient) listenTCP(serviceId byte, ports []int) {
 	}
 }
 
-func (tc *TunnelClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
+func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 	service := tuna.Services[serviceId]
 	hasUDP := len(service.UDP) > 0
 
@@ -308,7 +308,7 @@ func (tc *TunnelClient) listenUDP(serviceId byte, portIdOffset int, ports []int)
 }
 
 func main() {
-	NewTunnelClient().Start()
+	NewTunaClient().Start()
 
 	select{}
 }
