@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/vault"
@@ -28,17 +29,13 @@ type Configuration struct {
 type TunnelServer struct {
 	config      Configuration
 	serviceConn map[connKey]*net.UDPConn
-}
-
-type clientAddr struct {
-	ip   string
-	port int
+	clientConn  *net.UDPConn
 }
 
 type connKey struct {
-	addr      clientAddr
-	serviceId byte
-	portId    byte
+	clientIp   string
+	clientPort int
+	connId     uint16
 }
 
 func NewTunnelServer() *TunnelServer {
@@ -49,8 +46,8 @@ func NewTunnelServer() *TunnelServer {
 	tuna.ReadJson("config.json", &config)
 
 	return &TunnelServer{
-		config,
-		make(map[connKey]*net.UDPConn),
+		config: config,
+		serviceConn: make(map[connKey]*net.UDPConn),
 	}
 }
 
@@ -116,8 +113,12 @@ func (ts *TunnelServer) listenTCP(port int) {
 	}()
 }
 
-func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, serviceId byte, portId byte) (*net.UDPConn, error) {
-	connKey := connKey{clientAddr{addr.IP.String(), addr.Port}, serviceId, portId}
+func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId byte, portId byte) (*net.UDPConn, error) {
+	connKey := connKey{
+		addr.IP.String(),
+		addr.Port,
+		*(*uint16)(unsafe.Pointer(&connId[0])),
+	}
 	var conn *net.UDPConn
 	var ok bool
 	if conn, ok = ts.serviceConn[connKey]; !ok {
@@ -133,6 +134,7 @@ func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, serviceId byte, portId
 
 		ts.serviceConn[connKey] = conn
 
+		prefix := []byte{connId[0], connId[1], serviceId, portId}
 		go func() {
 			serviceBuffer := make([]byte, 2048)
 			for {
@@ -142,7 +144,7 @@ func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, serviceId byte, portId
 					tuna.Close(conn)
 					break
 				}
-				n, err = conn.WriteToUDP(append([]byte{serviceId, portId}, serviceBuffer[:n]...), addr)
+				_, err = ts.clientConn.WriteToUDP(append(prefix, serviceBuffer[:n]...), addr)
 				if err != nil {
 					log.Println("Couldn't send data to client:", err)
 					tuna.Close(conn)
@@ -156,25 +158,25 @@ func (ts *TunnelServer) getServiceConn(addr *net.UDPAddr, serviceId byte, portId
 }
 
 func (ts *TunnelServer) listenUDP(port int) {
-	clientConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: port})
+	var err error
+	ts.clientConn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
 	}
 
-	clientBuffer := make([]byte, 2048)
 	go func() {
+		clientBuffer := make([]byte, 2048)
 		for {
-			n, addr, err := clientConn.ReadFromUDP(clientBuffer)
+			n, addr, err := ts.clientConn.ReadFromUDP(clientBuffer)
 			if err != nil {
 				log.Println("Couldn't receive data from client:", err)
+				continue
 			}
-			serviceId := clientBuffer[0]
-			portId := clientBuffer[1]
-			serviceConn, err := ts.getServiceConn(addr, serviceId, portId)
+			serviceConn, err := ts.getServiceConn(addr, clientBuffer[0:2], clientBuffer[2], clientBuffer[3])
 			if err != nil {
 				continue
 			}
-			_, err = serviceConn.Write(clientBuffer[2:n])
+			_, err = serviceConn.Write(clientBuffer[4:n])
 			if err != nil {
 				log.Println("Couldn't send data to service:", err)
 			}
@@ -201,7 +203,6 @@ func (ts *TunnelServer) Start() {
 
 	for _, _serviceName := range ts.config.Services {
 		serviceName := _serviceName
-		// retry subscription once a minute (regardless of result)
 		go func() {
 			var waitTime time.Duration
 			for {
@@ -218,13 +219,13 @@ func (ts *TunnelServer) Start() {
 				if err != nil {
 					waitTime = time.Duration(ts.config.SubscriptionInterval) * time.Second
 					if err == AlreadySubscribed {
-						log.Println(err)
+						log.Println("Already subscribed to topic", serviceName)
 					} else {
-						log.Println("Couldn't subscribe:", err)
+						log.Println("Couldn't subscribe to topic", serviceName, "because:", err)
 					}
 				} else {
 					waitTime = time.Duration(ts.config.SubscriptionDuration) * 20 * time.Second
-					log.Println("Subscribed to topic successfully:", txid)
+					log.Println("Subscribed to topic", serviceName, "successfully:", txid)
 				}
 
 				time.Sleep(waitTime)
