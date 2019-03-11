@@ -15,6 +15,7 @@ Edit `config.json` with your data:
 }
 ```
 `DialTimeout` timeout for NKN node connection  
+`UDPTimeout`  timeout for UDP *connections*  
 `PrivateKey` your private key  
 `Services` services you want to use  
 

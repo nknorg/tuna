@@ -13,11 +13,13 @@ import (
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna"
+	"github.com/patrickmn/go-cache"
 	"github.com/trueinsider/smux"
 )
 
 type Configuration struct {
 	DialTimeout uint16   `json:"DialTimeout"`
+	UDPTimeout  uint16   `json:"UDPTimeout"`
 	PrivateKey  string   `json:"PrivateKey"`
 	Services    []string `json:"Services"`
 }
@@ -27,7 +29,7 @@ type TunaClient struct {
 	tcpConn     map[byte]net.Conn
 	udpConn     map[byte]*net.UDPConn
 	serviceConn map[connKey]*net.UDPConn
-	clientAddr  map[uint16]*net.UDPAddr
+	clientAddr  *cache.Cache
 	session     map[byte]*smux.Session
 	wallet      *WalletSDK
 }
@@ -57,7 +59,7 @@ func NewTunaClient() *TunaClient {
 		make(map[byte]net.Conn),
 		make(map[byte]*net.UDPConn),
 		make(map[connKey]*net.UDPConn),
-		make(map[uint16]*net.UDPAddr),
+		cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
 		make(map[byte]*smux.Session),
 		wallet,
 	}
@@ -99,7 +101,7 @@ func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
 	if hasTCP && tc.tcpConn[serviceId] == nil || hasUDP && tc.udpConn[serviceId] == nil || force {
 		serviceName := tuna.Services[serviceId].Name
 
-		RandomBucket:
+	RandomBucket:
 		for {
 			lastBucket, err := tc.wallet.GetTopicBucketsCount(serviceName)
 			if err != nil {
@@ -114,7 +116,7 @@ func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
 
 			subscribersIndexes := rand.Perm(subscribersCount)
 
-			RandomSubscriber:
+		RandomSubscriber:
 			for {
 				if len(subscribersIndexes) == 0 {
 					continue RandomBucket
@@ -248,7 +250,7 @@ func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 			}
 
 			connKey := connKey{buffer[2], buffer[3]}
-			connId := *(*uint16)(unsafe.Pointer(&buffer[0]))
+			connId := tuna.GetConnIdString(buffer)
 
 			var serviceConn *net.UDPConn
 			var ok bool
@@ -257,11 +259,12 @@ func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 				continue
 			}
 
-			var clientAddr *net.UDPAddr
-			if clientAddr, ok = tc.clientAddr[connId]; !ok {
+			var x interface{}
+			if x, ok = tc.clientAddr.Get(connId); !ok {
 				log.Println("Couldn't get client address for:", connId)
 				continue
 			}
+			clientAddr := x.(*net.UDPAddr)
 
 			_, err = serviceConn.WriteToUDP(buffer[4:n], clientAddr)
 			if err != nil {
@@ -288,17 +291,15 @@ func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 					continue
 				}
 
-				connKey := uint16(addr.Port)
-				if _, ok := tc.clientAddr[connKey]; !ok {
-					tc.clientAddr[connKey] = addr
-				}
+				connKey := strconv.Itoa(addr.Port)
+				tc.clientAddr.Set(connKey, addr, cache.DefaultExpiration)
 
 				serverConn, err := tc.getServerUDPConn(serviceId, false)
 				if err != nil {
 					log.Println("Couldn't get remote connection:", err)
 					continue
 				}
-				connId := *(*[2]byte)(unsafe.Pointer(&addr.Port))
+				connId := GetConnIdData(addr.Port)
 				_, err = serverConn.Write(append([]byte{connId[0], connId[1], serviceId, portId}, localBuffer[:n]...))
 				if err != nil {
 					log.Println("Couldn't send data to server:", err)
@@ -308,8 +309,12 @@ func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 	}
 }
 
+func GetConnIdData(port int) [2]byte {
+	return *(*[2]byte)(unsafe.Pointer(&port))
+}
+
 func main() {
 	NewTunaClient().Start()
 
-	select{}
+	select {}
 }

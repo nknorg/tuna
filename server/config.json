@@ -2,6 +2,7 @@
   "ListenTCP": 30004,
   "ListenUDP": 30005,
   "DialTimeout": 30,
+  "UDPTimeout": 60,
   "PrivateKey": "",
   "SubscriptionDuration": 60,
   "SubscriptionInterval": 20,

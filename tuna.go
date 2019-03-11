@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
+	"strconv"
+	"unsafe"
 )
 
 type Protocol string
@@ -62,4 +64,8 @@ func GetServiceId(serviceName string) (byte, error) {
 
 func Init() {
 	ReadJson("services.json", &Services)
+}
+
+func GetConnIdString(data []byte) string {
+	return strconv.Itoa(int(*(*uint16)(unsafe.Pointer(&data[0]))))
 }

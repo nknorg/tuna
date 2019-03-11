@@ -21,6 +21,7 @@ Edit `config.json` with your data:
 `ListenTCP` TCP port to listen for connections  
 `ListenUDP` UDP port to listen for connections  
 `DialTimeout` timeout for connections to services  
+`UDPTimeout`  timeout for UDP *connections*  
 `PrivateKey` your private key  
 `SubscriptionDuration` duration for subscription in blocks  
 `SubscriptionInterval` interval for subscription in seconds  

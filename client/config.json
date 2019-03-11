@@ -1,5 +1,6 @@
 {
   "DialTimeout": 30,
+  "UDPTimeout": 60,
   "PrivateKey": "",
   "Services": ["httpproxy", "moonlight"]
 }
