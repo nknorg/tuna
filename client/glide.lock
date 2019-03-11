@@ -1,5 +1,5 @@
 hash: a896ba75fd88b7bbedb2d530d53c7a8d6329f6fc87ab47b642a2db9ff982f62c
-updated: 2019-03-11T07:02:15.7439246+03:00
+updated: 2019-03-12T00:58:08.1167895+03:00
 imports:
 - name: github.com/gogo/protobuf
   version: 636bf0302bc95575d69441b25a2603156ffdddf1
@@ -105,7 +105,7 @@ imports:
   - transport
   - util
 - name: github.com/nknorg/tuna
-  version: 963a12250281ad1b9db06e069c5f33eb6a11e747
+  version: 6574825f960201b5bb0f6cf0ebae8618ac03fc0b
 - name: github.com/op/go-logging
   version: 970db520ece77730c7e4724c61121037378659d9
 - name: github.com/patrickmn/go-cache
@@ -156,7 +156,7 @@ imports:
   - twofish
   - xtea
 - name: golang.org/x/net
-  version: 56fb01167e7d1e1d17dd87993d34c963f4356e87
+  version: d8887717615a059821345a5c23649351b52a1c0b
   repo: https://github.com/golang/net
   vcs: git
   subpackages:
@@ -168,7 +168,7 @@ imports:
   - internal/socket
   - ipv4
 - name: golang.org/x/sys
-  version: 10058d7d4faa7dd5ef860cbd31af00903076e7b8
+  version: c8c8c57fd1e1a977c10821a559dda983a9a9a3b5
   repo: https://github.com/golang/sys
   vcs: git
   subpackages:
