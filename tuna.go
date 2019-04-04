@@ -2,7 +2,6 @@ package tuna
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,18 +15,23 @@ type Protocol string
 const TCP Protocol = "tcp"
 const UDP Protocol = "udp"
 
-var Services []Service
-
-type Service struct {
-	Name string `json:"name"`
-	TCP  []int  `json:"tcp"`
-	UDP  []int  `json:"udp"`
+type Metadata struct {
+	IP         string `json:"ip"`
+	TCPPort    int    `json:"tcpPort"`
+	UDPPort    int    `json:"udpPort"`
+	ServiceId  byte   `json:"serviceId"`
+	ServiceTCP []int  `json:"serviceTcp"`
+	ServiceUDP []int  `json:"serviceUdp"`
 }
 
 func Pipe(dest io.WriteCloser, src io.ReadCloser) {
 	defer dest.Close()
 	defer src.Close()
-	io.Copy(dest, src)
+	n, err := io.Copy(dest, src)
+	if err != nil {
+		log.Println("Pipe closed (written "+strconv.FormatInt(n, 10)+") with error:", err)
+	}
+	log.Println("Pipe closed (written " + strconv.FormatInt(n, 10) + ")")
 }
 
 func Close(conn io.Closer) {
@@ -50,20 +54,6 @@ func ReadJson(fileName string, value interface{}) {
 	if err != nil {
 		log.Panicln("Couldn't unmarshal json:", err)
 	}
-}
-
-func GetServiceId(serviceName string) (byte, error) {
-	for i, service := range Services {
-		if service.Name == serviceName {
-			return byte(i), nil
-		}
-	}
-
-	return 0, errors.New("Service " + serviceName + " not found")
-}
-
-func Init() {
-	ReadJson("services.json", &Services)
 }
 
 func GetConnIdString(data []byte) string {

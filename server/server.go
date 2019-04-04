@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"net"
 	"strconv"
-	"strings"
 	"time"
 
 	. "github.com/nknorg/nkn-sdk-go"
@@ -28,23 +28,43 @@ type Configuration struct {
 	Services             []string `json:"Services"`
 }
 
+type Service struct {
+	Name string `json:"name"`
+	TCP  []int  `json:"tcp"`
+	UDP  []int  `json:"udp"`
+}
+
 type TunaServer struct {
 	config      Configuration
+	services    []Service
 	serviceConn *cache.Cache
 	clientConn  *net.UDPConn
 }
 
 func NewTunaServer() *TunaServer {
-	tuna.Init()
 	Init()
 
 	config := Configuration{}
 	tuna.ReadJson("config.json", &config)
 
+	var services []Service
+	tuna.ReadJson("services.json", &services)
+
 	return &TunaServer{
 		config:      config,
+		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
 	}
+}
+
+func (ts *TunaServer) getServiceId(serviceName string) (byte, error) {
+	for i, service := range ts.services {
+		if service.Name == serviceName {
+			return byte(i), nil
+		}
+	}
+
+	return 0, errors.New("Service " + serviceName + " not found")
 }
 
 func (ts *TunaServer) handleSession(conn net.Conn, session *smux.Session) {
@@ -59,7 +79,7 @@ func (ts *TunaServer) handleSession(conn net.Conn, session *smux.Session) {
 		serviceId := metadata[0]
 		portId := int(metadata[1])
 
-		service, err := getService(serviceId)
+		service, err := ts.getService(serviceId)
 		if err != nil {
 			log.Println(err)
 			tuna.Close(stream)
@@ -121,11 +141,11 @@ func (ts *TunaServer) listenTCP(port int) {
 	}()
 }
 
-func getService(serviceId byte) (*tuna.Service, error) {
-	if int(serviceId) >= len(tuna.Services) {
-		return nil, errors.New("Wrong serviceId received: " + strconv.Itoa(int(serviceId)))
+func (ts *TunaServer) getService(serviceId byte) (*Service, error) {
+	if int(serviceId) >= len(ts.services) {
+		return nil, errors.New("Wrong serviceId: " + strconv.Itoa(int(serviceId)))
 	}
-	return &tuna.Services[serviceId], nil
+	return &ts.services[serviceId], nil
 }
 
 func (ts *TunaServer) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId byte, portId byte) (*net.UDPConn, error) {
@@ -134,7 +154,7 @@ func (ts *TunaServer) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId
 	var x interface{}
 	var ok bool
 	if x, ok = ts.serviceConn.Get(connKey); !ok {
-		service, err := getService(serviceId)
+		service, err := ts.getService(serviceId)
 		if err != nil {
 			log.Println(err)
 			return nil, err
@@ -220,6 +240,23 @@ func (ts *TunaServer) Start() {
 
 	for _, _serviceName := range ts.config.Services {
 		serviceName := _serviceName
+		serviceId, err := ts.getServiceId(serviceName)
+		if err != nil {
+			log.Panicln(err)
+		}
+		service, err := ts.getService(serviceId)
+		if err != nil {
+			log.Panicln(err)
+		}
+		metadata := tuna.Metadata{
+			IP:         ip,
+			TCPPort:    ts.config.ListenTCP,
+			UDPPort:    ts.config.ListenUDP,
+			ServiceId:  serviceId,
+			ServiceTCP: service.TCP,
+			ServiceUDP: service.UDP,
+		}
+		metadataRaw, err := json.Marshal(metadata)
 		go func() {
 			var waitTime time.Duration
 			for {
@@ -227,11 +264,7 @@ func (ts *TunaServer) Start() {
 					serviceName,
 					serviceName,
 					ts.config.SubscriptionDuration,
-					strings.Join([]string{
-						ip,
-						strconv.Itoa(ts.config.ListenTCP),
-						strconv.Itoa(ts.config.ListenUDP),
-					}, ","),
+					string(metadataRaw),
 				)
 				if err != nil {
 					waitTime = time.Duration(ts.config.SubscriptionInterval) * time.Second

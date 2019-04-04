@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"math/rand"
 	"net"
 	"strconv"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -25,26 +25,22 @@ type Configuration struct {
 }
 
 type TunaClient struct {
+	serviceName string
 	config      Configuration
-	tcpConn     map[byte]net.Conn
-	udpConn     map[byte]*net.UDPConn
-	serviceConn map[connKey]*net.UDPConn
+	serviceConn map[int]*net.UDPConn
 	clientAddr  *cache.Cache
-	session     map[byte]*smux.Session
 	wallet      *WalletSDK
+	metadata    *tuna.Metadata
+	tcpPortIds  map[int]byte
+	udpPortIds  map[int]byte
+	udpPorts    map[byte]int
+	tcpConn     net.Conn
+	udpConn     *net.UDPConn
+	session     *smux.Session
 }
 
-type connKey struct {
-	serviceId byte
-	portId    byte
-}
-
-func NewTunaClient() *TunaClient {
-	tuna.Init()
+func NewTunaClient(serviceName string, config Configuration) *TunaClient {
 	Init()
-
-	config := Configuration{}
-	tuna.ReadJson("config.json", &config)
 
 	privateKey, _ := hex.DecodeString(config.PrivateKey)
 	account, err := vault.NewAccountWithPrivatekey(privateKey)
@@ -55,60 +51,55 @@ func NewTunaClient() *TunaClient {
 	wallet := NewWalletSDK(account)
 
 	return &TunaClient{
-		config,
-		make(map[byte]net.Conn),
-		make(map[byte]*net.UDPConn),
-		make(map[connKey]*net.UDPConn),
-		cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
-		make(map[byte]*smux.Session),
-		wallet,
+		serviceName: serviceName,
+		config:      config,
+		serviceConn: make(map[int]*net.UDPConn),
+		clientAddr:  cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
+		wallet:      wallet,
 	}
 }
 
 func (tc *TunaClient) Start() {
-	for _, serviceName := range tc.config.Services {
-		serviceId, err := tuna.GetServiceId(serviceName)
+	for {
+		err := tc.createServerConn(true)
 		if err != nil {
-			log.Panicln(err)
+			log.Println("Couldn't connect to node:", err)
+			time.Sleep(1 * time.Second)
+			continue
 		}
-		service := tuna.Services[serviceId]
-		tc.listenTCP(serviceId, service.TCP)
-		tc.listenUDP(serviceId, len(service.TCP), service.UDP)
+
+		tc.listenTCP(tc.metadata.ServiceTCP)
+		tc.listenUDP(len(tc.metadata.ServiceTCP), tc.metadata.ServiceUDP)
+		break
 	}
 }
 
-func (tc *TunaClient) getServerTCPConn(serviceId byte, force bool) (net.Conn, error) {
-	err := tc.createServerConn(serviceId, force)
+func (tc *TunaClient) getServerTCPConn(force bool) (net.Conn, error) {
+	err := tc.createServerConn(force)
 	if err != nil {
 		return nil, err
 	}
-	return tc.tcpConn[serviceId], nil
+	return tc.tcpConn, nil
 }
 
-func (tc *TunaClient) getServerUDPConn(serviceId byte, force bool) (*net.UDPConn, error) {
-	err := tc.createServerConn(serviceId, force)
+func (tc *TunaClient) getServerUDPConn(force bool) (*net.UDPConn, error) {
+	err := tc.createServerConn(force)
 	if err != nil {
 		return nil, err
 	}
-	return tc.udpConn[serviceId], nil
+	return tc.udpConn, nil
 }
 
-func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
-	service := tuna.Services[serviceId]
-	hasTCP := len(service.TCP) > 0
-	hasUDP := len(service.UDP) > 0
-
-	if hasTCP && tc.tcpConn[serviceId] == nil || hasUDP && tc.udpConn[serviceId] == nil || force {
-		serviceName := tuna.Services[serviceId].Name
-
+func (tc *TunaClient) createServerConn(force bool) error {
+	if tc.tcpConn == nil || tc.udpConn == nil || force {
 	RandomBucket:
 		for {
-			lastBucket, err := tc.wallet.GetTopicBucketsCount(serviceName)
+			lastBucket, err := tc.wallet.GetTopicBucketsCount(tc.serviceName)
 			if err != nil {
 				return err
 			}
 			bucket := uint32(rand.Intn(int(lastBucket) + 1))
-			subscribers, err := tc.wallet.GetSubscribers(serviceName, bucket)
+			subscribers, err := tc.wallet.GetSubscribers(tc.serviceName, bucket)
 			if err != nil {
 				return err
 			}
@@ -124,18 +115,27 @@ func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
 				var subscriberIndex int
 				subscriberIndex, subscribersIndexes = subscribersIndexes[0], subscribersIndexes[1:]
 				i := 0
-				for subscriber, metadata := range subscribers {
+				for subscriber, metadataString := range subscribers {
 					if i != subscriberIndex {
 						i++
 						continue
 					}
 
-					addressParts := strings.Split(metadata, ",")
+					tc.metadata = &tuna.Metadata{}
+					err := json.Unmarshal([]byte(metadataString), tc.metadata)
+					if err != nil {
+						log.Println("Couldn't unmarshal metadata:", err)
+						continue RandomSubscriber
+					}
+
+					hasTCP := len(tc.metadata.ServiceTCP) > 0
+					hasUDP := len(tc.metadata.ServiceUDP) > 0
 
 					if hasTCP {
-						tuna.Close(tc.tcpConn[serviceId])
-						address := addressParts[0] + ":" + addressParts[1]
-						tc.tcpConn[serviceId], err = net.DialTimeout(
+						tuna.Close(tc.tcpConn)
+
+						address := tc.metadata.IP + ":" + strconv.Itoa(tc.metadata.TCPPort)
+						tc.tcpConn, err = net.DialTimeout(
 							string(tuna.TCP),
 							address,
 							time.Duration(tc.config.DialTimeout)*time.Second,
@@ -145,12 +145,17 @@ func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
 							continue RandomSubscriber
 						}
 						log.Println("Connected to TCP at", address, "from", subscriber)
+
+						tc.tcpPortIds = make(map[int]byte)
+						for i, port := range tc.metadata.ServiceTCP {
+							tc.tcpPortIds[port] = byte(i)
+						}
 					}
 					if hasUDP {
-						tuna.Close(tc.udpConn[serviceId])
-						port, _ := strconv.Atoi(addressParts[2])
-						address := net.UDPAddr{IP: net.ParseIP(addressParts[0]), Port: port}
-						tc.udpConn[serviceId], err = net.DialUDP(
+						tuna.Close(tc.udpConn)
+
+						address := net.UDPAddr{IP: net.ParseIP(tc.metadata.IP), Port: tc.metadata.UDPPort}
+						tc.udpConn, err = net.DialUDP(
 							string(tuna.UDP),
 							nil,
 							&address,
@@ -160,6 +165,14 @@ func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
 							continue RandomSubscriber
 						}
 						log.Println("Connected to UDP at", address, "from", subscriber)
+
+						tc.udpPortIds = make(map[int]byte)
+						tc.udpPorts = make(map[byte]int)
+						for i, port := range tc.metadata.ServiceUDP {
+							portId := byte(i)
+							tc.udpPortIds[port] = portId
+							tc.udpPorts[portId] = port
+						}
 					}
 
 					break RandomBucket
@@ -171,38 +184,40 @@ func (tc *TunaClient) createServerConn(serviceId byte, force bool) error {
 	return nil
 }
 
-func (tc *TunaClient) getSession(serviceId byte, force bool) (*smux.Session, error) {
-	if tc.session[serviceId] == nil || tc.session[serviceId].IsClosed() || force {
-		conn, err := tc.getServerTCPConn(serviceId, force)
+func (tc *TunaClient) getSession(force bool) (*smux.Session, error) {
+	if tc.session == nil || tc.session.IsClosed() || force {
+		conn, err := tc.getServerTCPConn(force)
 		if err != nil {
 			return nil, err
 		}
-		tc.session[serviceId], _ = smux.Client(conn, nil)
-		return tc.session[serviceId], nil
+		tc.session, _ = smux.Client(conn, nil)
 	}
 
-	return tc.session[serviceId], nil
+	return tc.session, nil
 }
 
-func (tc *TunaClient) openStream(serviceId byte, portId byte, force bool) (*smux.Stream, error) {
-	session, err := tc.getSession(serviceId, force)
+func (tc *TunaClient) openStream(port int, force bool) (*smux.Stream, error) {
+	session, err := tc.getSession(force)
 	if err != nil {
 		return nil, err
 	}
+	serviceId := tc.metadata.ServiceId
+	portId := tc.tcpPortIds[port]
 	stream, err := session.OpenStream(serviceId, portId)
 	if err != nil {
-		return tc.openStream(serviceId, portId, true)
+		return tc.openStream(port, true)
 	}
 	return stream, err
 }
 
-func (tc *TunaClient) listenTCP(serviceId byte, ports []int) {
-	for i, port := range ports {
+func (tc *TunaClient) listenTCP(ports []int) {
+	for _, _port := range ports {
+		port := _port
 		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: port})
 		if err != nil {
 			log.Panicln("Couldn't bind listener:", err)
 		}
-		portId := byte(i)
+
 		go func() {
 			for {
 				conn, err := listener.Accept()
@@ -212,7 +227,7 @@ func (tc *TunaClient) listenTCP(serviceId byte, ports []int) {
 					continue
 				}
 
-				stream, err := tc.openStream(serviceId, portId, false)
+				stream, err := tc.openStream(port, false)
 				if err != nil {
 					log.Println("Couldn't open stream:", err)
 					tuna.Close(conn)
@@ -226,18 +241,15 @@ func (tc *TunaClient) listenTCP(serviceId byte, ports []int) {
 	}
 }
 
-func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
-	service := tuna.Services[serviceId]
-	hasUDP := len(service.UDP) > 0
-
-	if !hasUDP {
+func (tc *TunaClient) listenUDP(portIdOffset int, ports []int) {
+	if len(ports) == 0 {
 		return
 	}
 
 	go func() {
 		buffer := make([]byte, 2048)
 		for {
-			serverConn, err := tc.getServerUDPConn(serviceId, false)
+			serverConn, err := tc.getServerUDPConn(false)
 			if err != nil {
 				log.Println("Couldn't get server connection:", err)
 				continue
@@ -249,13 +261,14 @@ func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 				continue
 			}
 
-			connKey := connKey{buffer[2], buffer[3]}
+			portId := buffer[3]
+			port := tc.udpPorts[portId]
 			connId := tuna.GetConnIdString(buffer)
 
 			var serviceConn *net.UDPConn
 			var ok bool
-			if serviceConn, ok = tc.serviceConn[connKey]; !ok {
-				log.Println("Couldn't get service conn for:", connKey)
+			if serviceConn, ok = tc.serviceConn[port]; !ok {
+				log.Println("Couldn't get service conn for port:", port)
 				continue
 			}
 
@@ -273,14 +286,14 @@ func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 		}
 	}()
 
-	for i, port := range ports {
+	for _, _port := range ports {
+		port := _port
 		localConn, err := net.ListenUDP(string(tuna.UDP), &net.UDPAddr{Port: port})
 		if err != nil {
 			log.Panicln("Couldn't bind listener:", err)
 		}
-		portId := byte(i)
-		connKey := connKey{serviceId, portId}
-		tc.serviceConn[connKey] = localConn
+
+		tc.serviceConn[port] = localConn
 
 		go func() {
 			localBuffer := make([]byte, 2048)
@@ -294,12 +307,14 @@ func (tc *TunaClient) listenUDP(serviceId byte, portIdOffset int, ports []int) {
 				connKey := strconv.Itoa(addr.Port)
 				tc.clientAddr.Set(connKey, addr, cache.DefaultExpiration)
 
-				serverConn, err := tc.getServerUDPConn(serviceId, false)
+				serverConn, err := tc.getServerUDPConn(false)
 				if err != nil {
 					log.Println("Couldn't get remote connection:", err)
 					continue
 				}
 				connId := GetConnIdData(addr.Port)
+				serviceId := tc.metadata.ServiceId
+				portId := tc.udpPortIds[port]
 				_, err = serverConn.Write(append([]byte{connId[0], connId[1], serviceId, portId}, localBuffer[:n]...))
 				if err != nil {
 					log.Println("Couldn't send data to server:", err)
@@ -314,7 +329,12 @@ func GetConnIdData(port int) [2]byte {
 }
 
 func main() {
-	NewTunaClient().Start()
+	config := Configuration{}
+	tuna.ReadJson("config.json", &config)
+
+	for _, serviceName := range config.Services {
+		NewTunaClient(serviceName, config).Start()
+	}
 
 	select {}
 }
