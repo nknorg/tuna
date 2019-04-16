@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"log"
 	"net"
 	"strconv"
@@ -20,7 +19,8 @@ import (
 type Configuration struct {
 	ListenTCP            int      `json:"ListenTCP"`
 	ListenUDP            int      `json:"ListenUDP"`
-	DialTimeout          uint32   `json:"DialTimeout"`
+	Reverse              bool     `json:"Reverse"`
+	DialTimeout          uint16   `json:"DialTimeout"`
 	UDPTimeout           uint16   `json:"UDPTimeout"`
 	PrivateKey           string   `json:"PrivateKey"`
 	SubscriptionDuration uint32   `json:"SubscriptionDuration"`
@@ -38,6 +38,7 @@ type TunaServer struct {
 	config      Configuration
 	services    []Service
 	serviceConn *cache.Cache
+	common      *tuna.Common
 	clientConn  *net.UDPConn
 }
 
@@ -67,7 +68,9 @@ func (ts *TunaServer) getServiceId(serviceName string) (byte, error) {
 	return 0, errors.New("Service " + serviceName + " not found")
 }
 
-func (ts *TunaServer) handleSession(conn net.Conn, session *smux.Session) {
+func (ts *TunaServer) handleSession(conn net.Conn) {
+	session, _ := smux.Server(conn, nil)
+
 	for {
 		stream, err := session.AcceptStream()
 		if err != nil {
@@ -134,9 +137,7 @@ func (ts *TunaServer) listenTCP(port int) {
 				continue
 			}
 
-			session, _ := smux.Server(conn, nil)
-
-			go ts.handleSession(conn, session)
+			go ts.handleSession(conn)
 		}
 	}()
 }
@@ -221,22 +222,63 @@ func (ts *TunaServer) listenUDP(port int) {
 	}()
 }
 
-func (ts *TunaServer) Start() {
-	ip, err := ipify.GetIp()
-	if err != nil {
-		log.Panicln("Couldn't get IP:", err)
+func (ts *TunaServer) updateAllMetadata(ip string, tcpPort int, udpPort int, wallet *WalletSDK) {
+	for _, _serviceName := range ts.config.Services {
+		serviceName := _serviceName
+		serviceId, err := ts.getServiceId(serviceName)
+		if err != nil {
+			log.Panicln(err)
+		}
+		service, err := ts.getService(serviceId)
+		if err != nil {
+			log.Panicln(err)
+		}
+		tuna.UpdateMetadata(
+			serviceName,
+			serviceId,
+			service.TCP,
+			service.UDP,
+			ip,
+			tcpPort,
+			udpPort,
+			ts.config.SubscriptionDuration,
+			ts.config.SubscriptionInterval,
+			wallet,
+		)
 	}
+}
 
+func (ts *TunaServer) Start() {
 	privateKey, _ := hex.DecodeString(ts.config.PrivateKey)
 	account, err := vault.NewAccountWithPrivatekey(privateKey)
 	if err != nil {
 		log.Panicln("Couldn't load account:", err)
 	}
 
-	w := NewWalletSDK(account)
+	wallet := NewWalletSDK(account)
+
+	if ts.config.Reverse {
+		ts.startReverse(wallet)
+		return
+	}
+
+	ip, err := ipify.GetIp()
+	if err != nil {
+		log.Panicln("Couldn't get IP:", err)
+	}
 
 	ts.listenTCP(ts.config.ListenTCP)
 	ts.listenUDP(ts.config.ListenUDP)
+
+	ts.updateAllMetadata(ip, ts.config.ListenTCP, ts.config.ListenUDP, wallet)
+}
+
+func (ts *TunaServer) startReverse(wallet *WalletSDK) {
+	ts.common = &tuna.Common{
+		ServiceName: "reverse",
+		Wallet: wallet,
+		DialTimeout: ts.config.DialTimeout,
+	}
 
 	for _, _serviceName := range ts.config.Services {
 		serviceName := _serviceName
@@ -248,38 +290,41 @@ func (ts *TunaServer) Start() {
 		if err != nil {
 			log.Panicln(err)
 		}
-		metadata := tuna.Metadata{
-			IP:         ip,
-			TCPPort:    ts.config.ListenTCP,
-			UDPPort:    ts.config.ListenUDP,
-			ServiceId:  serviceId,
-			ServiceTCP: service.TCP,
-			ServiceUDP: service.UDP,
-		}
-		metadataRaw, err := json.Marshal(metadata)
+
 		go func() {
-			var waitTime time.Duration
+			var tcpConn net.Conn
 			for {
-				txid, err := w.SubscribeToFirstAvailableBucket(
-					serviceName,
-					serviceName,
-					ts.config.SubscriptionDuration,
-					string(metadataRaw),
-				)
+				err := ts.common.CreateServerConn(true)
 				if err != nil {
-					waitTime = time.Duration(ts.config.SubscriptionInterval) * time.Second
-					if err == AlreadySubscribed {
-						log.Println("Already subscribed to topic", serviceName)
-					} else {
-						log.Println("Couldn't subscribe to topic", serviceName, "because:", err)
-					}
-				} else {
-					waitTime = time.Duration(ts.config.SubscriptionDuration) * 20 * time.Second
-					log.Println("Subscribed to topic", serviceName, "successfully:", txid)
+					log.Println("Couldn't connect to reverse entry:", err)
+					time.Sleep(1 * time.Second)
+					continue
 				}
 
-				time.Sleep(waitTime)
+				udpConn, _ := ts.common.GetServerUDPConn(false)
+				_, udpPortString, _ := net.SplitHostPort(udpConn.LocalAddr().String())
+				udpPort, _ := strconv.Atoi(udpPortString)
+				serviceMetadata := tuna.CreateRawMetadata(
+					serviceId,
+					service.TCP,
+					service.UDP,
+					"",
+					-1,
+					udpPort,
+				)
+
+				tcpConn, _ = ts.common.GetServerTCPConn(false)
+				_, err = tcpConn.Write(serviceMetadata)
+				if err != nil {
+					log.Println("Couldn't send metadata to reverse entry:", err)
+					time.Sleep(1 * time.Second)
+					continue
+				}
+
+				break
 			}
+
+			go ts.handleSession(tcpConn)
 		}()
 	}
 }

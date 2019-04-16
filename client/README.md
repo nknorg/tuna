@@ -10,14 +10,27 @@ Edit `config.json` with your data:
 ```json
 {
   "DialTimeout": 30,
+  "UDPTimeout": 60,
   "PrivateKey": "",
-  "Services": ["httpproxy", "moonlight"]
+  "Services": ["httpproxy", "moonlight"],
+
+  "Reverse": false,
+  "ReverseTCP": 40004,
+  "ReverseUDP": 40005,
+  "SubscriptionDuration": 60,
+  "SubscriptionInterval": 20
 }
 ```
 `DialTimeout` timeout for NKN node connection  
 `UDPTimeout`  timeout for UDP *connections*  
 `PrivateKey` your private key  
 `Services` services you want to use  
+
+`Reverse` should be used to provide reverse tunnel for those who don't have public IP  
+`ReverseTCP` TCP port to listen for connections  
+`ReverseUDP` UDP port to listen for connections  
+`SubscriptionDuration` duration for subscription in blocks  
+`SubscriptionInterval` interval for subscription in seconds  
 
 Run like this:
 ```shell

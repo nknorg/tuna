@@ -11,7 +11,9 @@ Edit `config.json` with your data:
 {
   "ListenTCP": 30004,
   "ListenUDP": 30005,
+  "Reverse": "false",
   "DialTimeout": 30,
+  "UDPTimeout": 60,
   "PrivateKey": "",
   "SubscriptionDuration": 60,
   "SubscriptionInterval": 20,
@@ -20,6 +22,7 @@ Edit `config.json` with your data:
 ```
 `ListenTCP` TCP port to listen for connections  
 `ListenUDP` UDP port to listen for connections  
+`Reverse` should be used if you don't have public IP and want to use another `server` for accepting clients  
 `DialTimeout` timeout for connections to services  
 `UDPTimeout`  timeout for UDP *connections*  
 `PrivateKey` your private key  
