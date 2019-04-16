@@ -321,10 +321,8 @@ func (ts *TunaServer) startReverse(wallet *WalletSDK) {
 					continue
 				}
 
-				break
+				ts.handleSession(tcpConn)
 			}
-
-			go ts.handleSession(tcpConn)
 		}()
 	}
 }
