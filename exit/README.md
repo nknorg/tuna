@@ -2,7 +2,7 @@
 Simply run:
 ```shell
 glide install
-go build server.go
+go build exit.go
 ```
 
 ## How to use
@@ -32,7 +32,7 @@ Edit `config.json` with your data:
 
 Run like this:
 ```shell
-./server
+./exit
 ```
 
 Then users can connect to your services over NKN through their *tuna* client
