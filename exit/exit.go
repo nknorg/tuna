@@ -17,15 +17,15 @@ import (
 )
 
 type Configuration struct {
-	ListenTCP            int      `json:"ListenTCP"`
-	ListenUDP            int      `json:"ListenUDP"`
-	Reverse              bool     `json:"Reverse"`
-	DialTimeout          uint16   `json:"DialTimeout"`
-	UDPTimeout           uint16   `json:"UDPTimeout"`
-	PrivateKey           string   `json:"PrivateKey"`
-	SubscriptionDuration uint32   `json:"SubscriptionDuration"`
-	SubscriptionInterval uint32   `json:"SubscriptionInterval"`
-	Services             []string `json:"Services"`
+	ListenTCP            int               `json:"ListenTCP"`
+	ListenUDP            int               `json:"ListenUDP"`
+	Reverse              bool              `json:"Reverse"`
+	DialTimeout          uint16            `json:"DialTimeout"`
+	UDPTimeout           uint16            `json:"UDPTimeout"`
+	PrivateKey           string            `json:"PrivateKey"`
+	SubscriptionDuration uint32            `json:"SubscriptionDuration"`
+	SubscriptionInterval uint32            `json:"SubscriptionInterval"`
+	Services             map[string]string `json:"Services"`
 }
 
 type Service struct {
@@ -105,7 +105,8 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 			continue
 		}
 
-		host := "127.0.0.1:" + strconv.Itoa(port)
+		serviceIP := te.config.Services[service.Name]
+		host := serviceIP + ":" + strconv.Itoa(port)
 
 		conn, err := net.DialTimeout(string(protocol), host, time.Duration(te.config.DialTimeout)*time.Second)
 		if err != nil {
@@ -223,8 +224,7 @@ func (te *TunaExit) listenUDP(port int) {
 }
 
 func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int, wallet *WalletSDK) {
-	for _, _serviceName := range te.config.Services {
-		serviceName := _serviceName
+	for serviceName := range te.config.Services {
 		serviceId, err := te.getServiceId(serviceName)
 		if err != nil {
 			log.Panicln(err)
@@ -280,8 +280,7 @@ func (te *TunaExit) startReverse(wallet *WalletSDK) {
 		DialTimeout: te.config.DialTimeout,
 	}
 
-	for _, _serviceName := range te.config.Services {
-		serviceName := _serviceName
+	for serviceName := range te.config.Services {
 		serviceId, err := te.getServiceId(serviceName)
 		if err != nil {
 			log.Panicln(err)

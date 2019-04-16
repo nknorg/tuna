@@ -17,7 +17,7 @@ Edit `config.json` with your data:
   "PrivateKey": "",
   "SubscriptionDuration": 60,
   "SubscriptionInterval": 20,
-  "Services": ["httpproxy", "moonlight"]
+  "Services": {"httpproxy": "127.0.0.1", "moonlight":  "127.0.0.1"}
 }
 ```
 `ListenTCP` TCP port to listen for connections  
