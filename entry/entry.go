@@ -27,6 +27,7 @@ type Configuration struct {
 	Reverse              bool     `json:"Reverse"`
 	ReverseTCP           int      `json:"ReverseTCP"`
 	ReverseUDP           int      `json:"ReverseUDP"`
+	SubscriptionPrefix   string   `json:"SubscriptionPrefix"`
 	SubscriptionDuration uint32   `json:"SubscriptionDuration"`
 	SubscriptionInterval uint32   `json:"SubscriptionInterval"`
 }
@@ -351,6 +352,7 @@ func main() {
 			ip,
 			config.ReverseTCP,
 			config.ReverseUDP,
+			config.SubscriptionPrefix,
 			config.SubscriptionDuration,
 			config.SubscriptionInterval,
 			wallet,

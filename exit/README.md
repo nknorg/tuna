@@ -15,6 +15,7 @@ Edit `config.json` with your data:
   "DialTimeout": 30,
   "UDPTimeout": 60,
   "PrivateKey": "",
+  "SubscriptionPrefix": "tuna%1.",
   "SubscriptionDuration": 60,
   "SubscriptionInterval": 20,
   "Services": {"httpproxy": "127.0.0.1", "moonlight":  "127.0.0.1"}
@@ -26,6 +27,7 @@ Edit `config.json` with your data:
 `DialTimeout` timeout for connections to services  
 `UDPTimeout`  timeout for UDP *connections*  
 `PrivateKey` your private key  
+`SubscriptionPrefix` prefix appended to topics for subscription  
 `SubscriptionDuration` duration for subscription in blocks  
 `SubscriptionInterval` interval for subscription in seconds  
 `Services` services you want to provide  

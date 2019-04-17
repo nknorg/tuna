@@ -23,6 +23,7 @@ type Configuration struct {
 	DialTimeout          uint16            `json:"DialTimeout"`
 	UDPTimeout           uint16            `json:"UDPTimeout"`
 	PrivateKey           string            `json:"PrivateKey"`
+	SubscriptionPrefix   string            `json:"SubscriptionPrefix"`
 	SubscriptionDuration uint32            `json:"SubscriptionDuration"`
 	SubscriptionInterval uint32            `json:"SubscriptionInterval"`
 	Services             map[string]string `json:"Services"`
@@ -241,6 +242,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int, walle
 			ip,
 			tcpPort,
 			udpPort,
+			te.config.SubscriptionPrefix,
 			te.config.SubscriptionDuration,
 			te.config.SubscriptionInterval,
 			wallet,

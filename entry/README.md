@@ -17,6 +17,7 @@ Edit `config.json` with your data:
   "Reverse": false,
   "ReverseTCP": 40004,
   "ReverseUDP": 40005,
+  "SubscriptionPrefix": "tuna%1.",
   "SubscriptionDuration": 60,
   "SubscriptionInterval": 20
 }
@@ -29,6 +30,7 @@ Edit `config.json` with your data:
 `Reverse` should be used to provide reverse tunnel for those who don't have public IP  
 `ReverseTCP` TCP port to listen for connections  
 `ReverseUDP` UDP port to listen for connections  
+`SubscriptionPrefix` prefix appended to topics for subscription  
 `SubscriptionDuration` duration for subscription in blocks  
 `SubscriptionInterval` interval for subscription in seconds  
 

@@ -21,6 +21,8 @@ type Protocol string
 const TCP Protocol = "tcp"
 const UDP Protocol = "udp"
 
+const defaultSubscriptionPrefix string = "tuna%1."
+
 type Metadata struct {
 	IP         string `json:"ip"`
 	TCPPort    int    `json:"tcpPort"`
@@ -286,6 +288,7 @@ func UpdateMetadata(
 	ip string,
 	tcpPort int,
 	udpPort int,
+	subscriptionPrefix string,
 	subscriptionDuration uint32,
 	subscriptionInterval uint32,
 	wallet *WalletSDK,
@@ -298,25 +301,29 @@ func UpdateMetadata(
 		tcpPort,
 		udpPort,
 	)
+	if subscriptionPrefix == "" {
+		subscriptionPrefix = defaultSubscriptionPrefix
+	}
+	topic := subscriptionPrefix + serviceName
 	go func() {
 		var waitTime time.Duration
 		for {
 			txid, err := wallet.SubscribeToFirstAvailableBucket(
-				serviceName,
-				serviceName,
+				"",
+				topic,
 				subscriptionDuration,
 				string(metadataRaw),
 			)
 			if err != nil {
 				waitTime = time.Duration(subscriptionInterval) * time.Second
 				if err == AlreadySubscribed {
-					log.Println("Already subscribed to topic", serviceName)
+					log.Println("Already subscribed to topic", topic)
 				} else {
-					log.Println("Couldn't subscribe to topic", serviceName, "because:", err)
+					log.Println("Couldn't subscribe to topic", topic, "because:", err)
 				}
 			} else {
 				waitTime = time.Duration(subscriptionDuration) * 20 * time.Second
-				log.Println("Subscribed to topic", serviceName, "successfully:", txid)
+				log.Println("Subscribed to topic", topic, "successfully:", txid)
 			}
 
 			time.Sleep(waitTime)
