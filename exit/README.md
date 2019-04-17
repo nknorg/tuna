@@ -11,7 +11,7 @@ Edit `config.json` with your data:
 {
   "ListenTCP": 30004,
   "ListenUDP": 30005,
-  "Reverse": "false",
+  "Reverse": false,
   "DialTimeout": 30,
   "UDPTimeout": 60,
   "PrivateKey": "",
