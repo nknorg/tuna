@@ -21,7 +21,7 @@ type Protocol string
 const TCP Protocol = "tcp"
 const UDP Protocol = "udp"
 
-const defaultSubscriptionPrefix string = "tuna%1."
+const DefaultSubscriptionPrefix string = "tuna%1."
 
 type Metadata struct {
 	IP         string `json:"ip"`
@@ -33,15 +33,16 @@ type Metadata struct {
 }
 
 type Common struct {
-	ServiceName string
-	Wallet       *WalletSDK
-	DialTimeout  uint16
-	Reverse      bool
+	ServiceName        string
+	Wallet             *WalletSDK
+	DialTimeout        uint16
+	SubscriptionPrefix string
+	Reverse            bool
 
-	Metadata     *Metadata
-	TCPPortIds   map[int]byte
-	UDPPortIds   map[int]byte
-	UDPPorts     map[byte]int
+	Metadata   *Metadata
+	TCPPortIds map[int]byte
+	UDPPortIds map[int]byte
+	UDPPorts   map[byte]int
 
 	connected    bool
 	tcpConn      net.Conn
@@ -72,11 +73,11 @@ func (c *Common) GetServerUDPConn(force bool) (*net.UDPConn, error) {
 	return c.udpConn, nil
 }
 
-func (c *Common) SetServerUDPReadChan(udpReadChan chan[]byte) {
+func (c *Common) SetServerUDPReadChan(udpReadChan chan []byte) {
 	c.udpReadChan = udpReadChan
 }
 
-func (c *Common) SetServerUDPWriteChan(udpWriteChan chan[]byte) {
+func (c *Common) SetServerUDPWriteChan(udpWriteChan chan []byte) {
 	c.udpWriteChan = udpWriteChan
 }
 
@@ -114,7 +115,7 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 			if err != nil {
 				log.Println("Couldn't receive data from server:", err)
 				if strings.Contains(err.Error(), "use of closed network connection") {
-					c.udpCloseChan <- struct {}{}
+					c.udpCloseChan <- struct{}{}
 					return
 				}
 				continue
@@ -128,12 +129,12 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 	go func() {
 		for {
 			select {
-			case data := <- c.udpWriteChan:
+			case data := <-c.udpWriteChan:
 				_, err := conn.Write(data)
 				if err != nil {
 					log.Println("Couldn't send data to server:", err)
 				}
-			case <- c.udpCloseChan:
+			case <-c.udpCloseChan:
 				return
 			}
 		}
@@ -204,14 +205,15 @@ func (c *Common) CreateServerConn(force bool) error {
 		if c.Reverse {
 			c.UpdateServerConn()
 		} else {
+			topic := c.SubscriptionPrefix + c.ServiceName
 		RandomBucket:
 			for {
-				lastBucket, err := c.Wallet.GetTopicBucketsCount(c.ServiceName)
+				lastBucket, err := c.Wallet.GetTopicBucketsCount(topic)
 				if err != nil {
 					return err
 				}
 				bucket := uint32(rand.Intn(int(lastBucket) + 1))
-				subscribers, err := c.Wallet.GetSubscribers(c.ServiceName, bucket)
+				subscribers, err := c.Wallet.GetSubscribers(topic, bucket)
 				if err != nil {
 					return err
 				}
@@ -301,9 +303,6 @@ func UpdateMetadata(
 		tcpPort,
 		udpPort,
 	)
-	if subscriptionPrefix == "" {
-		subscriptionPrefix = defaultSubscriptionPrefix
-	}
 	topic := subscriptionPrefix + serviceName
 	go func() {
 		var waitTime time.Duration

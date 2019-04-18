@@ -19,17 +19,17 @@ import (
 )
 
 type Configuration struct {
-	DialTimeout          uint16   `json:"DialTimeout"`
-	UDPTimeout           uint16   `json:"UDPTimeout"`
-	PrivateKey           string   `json:"PrivateKey"`
-	Services             []string `json:"Services"`
+	DialTimeout uint16   `json:"DialTimeout"`
+	UDPTimeout  uint16   `json:"UDPTimeout"`
+	PrivateKey  string   `json:"PrivateKey"`
+	Services    []string `json:"Services"`
 
-	Reverse              bool     `json:"Reverse"`
-	ReverseTCP           int      `json:"ReverseTCP"`
-	ReverseUDP           int      `json:"ReverseUDP"`
-	SubscriptionPrefix   string   `json:"SubscriptionPrefix"`
-	SubscriptionDuration uint32   `json:"SubscriptionDuration"`
-	SubscriptionInterval uint32   `json:"SubscriptionInterval"`
+	Reverse              bool   `json:"Reverse"`
+	ReverseTCP           int    `json:"ReverseTCP"`
+	ReverseUDP           int    `json:"ReverseUDP"`
+	SubscriptionPrefix   string `json:"SubscriptionPrefix"`
+	SubscriptionDuration uint32 `json:"SubscriptionDuration"`
+	SubscriptionInterval uint32 `json:"SubscriptionInterval"`
 }
 
 type TunaEntry struct {
@@ -45,10 +45,11 @@ type TunaEntry struct {
 func NewTunaEntry(serviceName string, reverse bool, config Configuration, wallet *WalletSDK) *TunaEntry {
 	te := &TunaEntry{
 		Common: &tuna.Common{
-			ServiceName: serviceName,
-			Wallet: wallet,
-			Reverse: reverse,
-			DialTimeout: config.DialTimeout,
+			ServiceName:        serviceName,
+			Wallet:             wallet,
+			DialTimeout:        config.DialTimeout,
+			SubscriptionPrefix: config.SubscriptionPrefix,
+			Reverse:            reverse,
 		},
 		config:       config,
 		tcpListeners: make(map[int]*net.TCPListener),
@@ -75,7 +76,7 @@ func (te *TunaEntry) Start() {
 		break
 	}
 
-	<- te.closeChan
+	<-te.closeChan
 }
 
 func (te *TunaEntry) close() {
@@ -164,7 +165,7 @@ func (te *TunaEntry) listenUDP(portIdOffset int, ports []int) {
 				continue
 			}
 
-			data := <- serverReadChan
+			data := <-serverReadChan
 
 			portId := data[3]
 			port := te.UDPPorts[portId]
@@ -270,7 +271,7 @@ func main() {
 				if err != nil {
 					log.Println("Couldn't receive data from server:", err)
 					if strings.Contains(err.Error(), "use of closed network connection") {
-						udpCloseChan <- struct {}{}
+						udpCloseChan <- struct{}{}
 						return
 					}
 					continue
@@ -322,12 +323,12 @@ func main() {
 				go func() {
 					for {
 						select {
-						case data := <- udpWriteChan:
+						case data := <-udpWriteChan:
 							_, err := udpConn.WriteToUDP(data, &udpAddr)
 							if err != nil {
 								log.Println("Couldn't send data to server:", err)
 							}
-						case <- udpCloseChan:
+						case <-udpCloseChan:
 							return
 						}
 					}

@@ -46,7 +46,7 @@ type TunaExit struct {
 func NewTunaExit() *TunaExit {
 	Init()
 
-	config := Configuration{}
+	config := Configuration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	tuna.ReadJson("config.json", &config)
 
 	var services []Service
@@ -277,9 +277,10 @@ func (te *TunaExit) Start() {
 
 func (te *TunaExit) startReverse(wallet *WalletSDK) {
 	te.common = &tuna.Common{
-		ServiceName: "reverse",
-		Wallet: wallet,
-		DialTimeout: te.config.DialTimeout,
+		ServiceName:        "reverse",
+		Wallet:             wallet,
+		DialTimeout:        te.config.DialTimeout,
+		SubscriptionPrefix: te.config.SubscriptionPrefix,
 	}
 
 	for serviceName := range te.config.Services {
