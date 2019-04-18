@@ -231,7 +231,9 @@ func GetConnIdData(port int) [2]byte {
 }
 
 func main() {
-	config := Configuration{}
+	Init()
+
+	config := Configuration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	tuna.ReadJson("config.json", &config)
 
 	privateKey, _ := hex.DecodeString(config.PrivateKey)
@@ -240,7 +242,6 @@ func main() {
 		log.Panicln("Couldn't load account:", err)
 	}
 
-	Init()
 	wallet := NewWalletSDK(account)
 
 	if config.Reverse {
