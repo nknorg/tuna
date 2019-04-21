@@ -359,10 +359,10 @@ func main() {
 			config.SubscriptionInterval,
 			wallet,
 		)
-	}
-
-	for _, serviceName := range config.Services {
-		go NewTunaEntry(serviceName, false, config, wallet).Start()
+	} else {
+		for _, serviceName := range config.Services {
+			go NewTunaEntry(serviceName, false, config, wallet).Start()
+		}
 	}
 
 	select {}
