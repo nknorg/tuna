@@ -339,11 +339,11 @@ func UpdateMetadata(
 func Pipe(dest io.WriteCloser, src io.ReadCloser) {
 	defer dest.Close()
 	defer src.Close()
-	n, err := io.Copy(dest, src)
+	/*n*/_, err := io.Copy(dest, src)
 	if err != nil {
-		log.Println("Pipe closed (written "+strconv.FormatInt(n, 10)+") with error:", err)
+		//log.Println("Pipe closed (written "+strconv.FormatInt(n, 10)+") with error:", err)
 	}
-	log.Println("Pipe closed (written " + strconv.FormatInt(n, 10) + ")")
+	//log.Println("Pipe closed (written " + strconv.FormatInt(n, 10) + ")")
 }
 
 func Close(conn io.Closer) {
