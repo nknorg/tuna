@@ -305,40 +305,37 @@ func main() {
 				metadataRaw := make([]byte, n)
 				copy(metadataRaw, buf)
 
-				_, _, err = udpConn.ReadFromUDP(buf)
-				if err != nil {
-					log.Println("Couldn't receive data from server:", err)
-					continue
-				}
-
 				te := NewTunaEntry("", true, config, wallet)
 				te.SetMetadata(string(metadataRaw))
 
-				ip, _, _ := net.SplitHostPort(tcpConn.RemoteAddr().String())
-				udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: te.Metadata.UDPPort}
-
-				udpReadChan := make(chan []byte)
-				udpWriteChan := make(chan []byte)
-
-				go func() {
-					for {
-						select {
-						case data := <-udpWriteChan:
-							_, err := udpConn.WriteToUDP(data, &udpAddr)
-							if err != nil {
-								log.Println("Couldn't send data to server:", err)
-							}
-						case <-udpCloseChan:
-							return
-						}
-					}
-				}()
-
-				udpReadChans[udpAddr.String()] = udpReadChan
-
 				te.SetServerTCPConn(tcpConn)
-				te.SetServerUDPReadChan(udpReadChan)
-				te.SetServerUDPWriteChan(udpWriteChan)
+
+				if te.Metadata.UDPPort > 0 {
+					ip, _, _ := net.SplitHostPort(tcpConn.RemoteAddr().String())
+					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: te.Metadata.UDPPort}
+
+					udpReadChan := make(chan []byte)
+					udpWriteChan := make(chan []byte)
+
+					go func() {
+						for {
+							select {
+							case data := <-udpWriteChan:
+								_, err := udpConn.WriteToUDP(data, &udpAddr)
+								if err != nil {
+									log.Println("Couldn't send data to server:", err)
+								}
+							case <-udpCloseChan:
+								return
+							}
+						}
+					}()
+
+					udpReadChans[udpAddr.String()] = udpReadChan
+
+					te.SetServerUDPReadChan(udpReadChan)
+					te.SetServerUDPWriteChan(udpWriteChan)
+				}
 				go func() {
 					te.Start()
 					te = nil
