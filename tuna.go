@@ -38,6 +38,7 @@ type Common struct {
 	DialTimeout        uint16
 	SubscriptionPrefix string
 	Reverse            bool
+	ReverseMetadata    *Metadata
 
 	Metadata   *Metadata
 	TCPPortIds map[int]byte
@@ -237,6 +238,11 @@ func (c *Common) CreateServerConn(force bool) error {
 
 						if !c.SetMetadata(metadataString) {
 							continue RandomSubscriber
+						}
+
+						if c.ReverseMetadata != nil {
+							c.Metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
+							c.Metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
 						}
 
 						if !c.UpdateServerConn() {
