@@ -37,23 +37,20 @@ type Service struct {
 
 type TunaExit struct {
 	config      Configuration
+	wallet      *WalletSDK
 	services    []Service
 	serviceConn *cache.Cache
 	common      *tuna.Common
 	clientConn  *net.UDPConn
 }
 
-func NewTunaExit() *TunaExit {
-	Init()
-
-	config := Configuration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
-	tuna.ReadJson("config.json", &config)
-
+func NewTunaExit(config Configuration, wallet *WalletSDK) *TunaExit {
 	var services []Service
 	tuna.ReadJson("services.json", &services)
 
 	return &TunaExit{
 		config:      config,
+		wallet:      wallet,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
 	}
@@ -203,7 +200,10 @@ func (te *TunaExit) listenUDP(port int) {
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
 	}
+	te.readUDP()
+}
 
+func (te *TunaExit) readUDP() {
 	go func() {
 		clientBuffer := make([]byte, 2048)
 		for {
@@ -224,7 +224,7 @@ func (te *TunaExit) listenUDP(port int) {
 	}()
 }
 
-func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int, wallet *WalletSDK) {
+func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 	for serviceName := range te.config.Services {
 		serviceId, err := te.getServiceId(serviceName)
 		if err != nil {
@@ -245,25 +245,12 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int, walle
 			te.config.SubscriptionPrefix,
 			te.config.SubscriptionDuration,
 			te.config.SubscriptionInterval,
-			wallet,
+			te.wallet,
 		)
 	}
 }
 
 func (te *TunaExit) Start() {
-	privateKey, _ := hex.DecodeString(te.config.PrivateKey)
-	account, err := vault.NewAccountWithPrivatekey(privateKey)
-	if err != nil {
-		log.Panicln("Couldn't load account:", err)
-	}
-
-	wallet := NewWalletSDK(account)
-
-	if te.config.Reverse {
-		te.startReverse(wallet)
-		return
-	}
-
 	ip, err := ipify.GetIp()
 	if err != nil {
 		log.Panicln("Couldn't get IP:", err)
@@ -272,65 +259,96 @@ func (te *TunaExit) Start() {
 	te.listenTCP(te.config.ListenTCP)
 	te.listenUDP(te.config.ListenUDP)
 
-	te.updateAllMetadata(ip, te.config.ListenTCP, te.config.ListenUDP, wallet)
+	te.updateAllMetadata(ip, te.config.ListenTCP, te.config.ListenUDP)
 }
 
-func (te *TunaExit) startReverse(wallet *WalletSDK) {
+func (te *TunaExit) StartReverse(serviceName string) {
+	serviceId, err := te.getServiceId(serviceName)
+	if err != nil {
+		log.Panicln(err)
+	}
+	service, err := te.getService(serviceId)
+	if err != nil {
+		log.Panicln(err)
+	}
+
+	reverseMetadata := &tuna.Metadata{}
+	reverseMetadata.ServiceTCP = service.TCP
+	reverseMetadata.ServiceUDP = service.UDP
+
 	te.common = &tuna.Common{
 		ServiceName:        "reverse",
-		Wallet:             wallet,
+		Wallet:             te.wallet,
 		DialTimeout:        te.config.DialTimeout,
+		ReverseMetadata:    reverseMetadata,
 		SubscriptionPrefix: te.config.SubscriptionPrefix,
 	}
 
-	for serviceName := range te.config.Services {
-		serviceId, err := te.getServiceId(serviceName)
-		if err != nil {
-			log.Panicln(err)
-		}
-		service, err := te.getService(serviceId)
-		if err != nil {
-			log.Panicln(err)
-		}
-
-		go func() {
-			var tcpConn net.Conn
-			for {
-				err := te.common.CreateServerConn(true)
-				if err != nil {
-					log.Println("Couldn't connect to reverse entry:", err)
-					time.Sleep(1 * time.Second)
-					continue
-				}
-
-				udpConn, _ := te.common.GetServerUDPConn(false)
-				_, udpPortString, _ := net.SplitHostPort(udpConn.LocalAddr().String())
-				udpPort, _ := strconv.Atoi(udpPortString)
-				serviceMetadata := tuna.CreateRawMetadata(
-					serviceId,
-					service.TCP,
-					service.UDP,
-					"",
-					-1,
-					udpPort,
-				)
-
-				tcpConn, _ = te.common.GetServerTCPConn(false)
-				_, err = tcpConn.Write(serviceMetadata)
-				if err != nil {
-					log.Println("Couldn't send metadata to reverse entry:", err)
-					time.Sleep(1 * time.Second)
-					continue
-				}
-
-				te.handleSession(tcpConn)
+	go func() {
+		var tcpConn net.Conn
+		for {
+			err := te.common.CreateServerConn(true)
+			if err != nil {
+				log.Println("Couldn't connect to reverse entry:", err)
+				time.Sleep(1 * time.Second)
+				continue
 			}
-		}()
-	}
+
+			udpPort := -1
+			udpConn, _ := te.common.GetServerUDPConn(false)
+			if udpConn != nil {
+				_, udpPortString, _ := net.SplitHostPort(udpConn.LocalAddr().String())
+				udpPort, _ = strconv.Atoi(udpPortString)
+			}
+
+			serviceMetadata := tuna.CreateRawMetadata(
+				serviceId,
+				service.TCP,
+				service.UDP,
+				"",
+				-1,
+				udpPort,
+			)
+
+			tcpConn, _ = te.common.GetServerTCPConn(false)
+			_, err = tcpConn.Write(serviceMetadata)
+			if err != nil {
+				log.Println("Couldn't send metadata to reverse entry:", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			te.handleSession(tcpConn)
+
+			if udpConn != nil {
+				te.clientConn = udpConn
+				te.readUDP()
+			}
+		}
+	}()
 }
 
 func main() {
-	NewTunaExit().Start()
+	config := Configuration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
+	tuna.ReadJson("config.json", &config)
+
+	Init()
+
+	privateKey, _ := hex.DecodeString(config.PrivateKey)
+	account, err := vault.NewAccountWithPrivatekey(privateKey)
+	if err != nil {
+		log.Panicln("Couldn't load account:", err)
+	}
+
+	wallet := NewWalletSDK(account)
+
+	if config.Reverse {
+		for serviceName := range config.Services {
+			NewTunaExit(config, wallet).StartReverse(serviceName)
+		}
+	} else {
+		NewTunaExit(config, wallet).Start()
+	}
 
 	select {}
 }
