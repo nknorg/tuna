@@ -342,6 +342,7 @@ func main() {
 				}
 				go func() {
 					te.Start()
+					tuna.Close(tcpConn)
 					te = nil
 				}()
 			}
