@@ -135,6 +135,10 @@ func (te *TunaEntry) listenTCP(ports []int) {
 				if err != nil {
 					log.Println("Couldn't accept connection:", err)
 					tuna.Close(conn)
+					if strings.Contains(err.Error(), "use of closed network connection") {
+						te.close()
+						return
+					}
 					continue
 				}
 
