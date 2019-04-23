@@ -147,7 +147,7 @@ func (c *Common) UpdateServerConn() bool {
 	hasUDP := len(c.Metadata.ServiceUDP) > 0
 
 	var err error
-	if hasTCP {
+	if hasTCP || c.ReverseMetadata != nil {
 		if !c.Reverse {
 			Close(c.tcpConn)
 
@@ -169,7 +169,7 @@ func (c *Common) UpdateServerConn() bool {
 			c.TCPPortIds[port] = byte(i)
 		}
 	}
-	if hasUDP {
+	if hasUDP || c.ReverseMetadata != nil {
 		if !c.Reverse {
 			Close(c.udpConn)
 
