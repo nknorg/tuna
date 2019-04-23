@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	. "github.com/nknorg/nkn-sdk-go"
@@ -210,6 +211,9 @@ func (te *TunaExit) readUDP() {
 			n, addr, err := te.clientConn.ReadFromUDP(clientBuffer)
 			if err != nil {
 				log.Println("Couldn't receive data from client:", err)
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					return
+				}
 				continue
 			}
 			serviceConn, err := te.getServiceConn(addr, clientBuffer[0:2], clientBuffer[2], clientBuffer[3])
