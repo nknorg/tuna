@@ -71,8 +71,14 @@ func (te *TunaEntry) Start() {
 			continue
 		}
 
-		te.listenTCP(te.Metadata.ServiceTCP)
-		te.listenUDP(len(te.Metadata.ServiceTCP), te.Metadata.ServiceUDP)
+		if !te.listenTCP(te.Metadata.ServiceTCP) {
+			te.close()
+			return
+		}
+		if !te.listenUDP(len(te.Metadata.ServiceTCP), te.Metadata.ServiceUDP) {
+			te.close()
+			return
+		}
 		break
 	}
 
@@ -119,12 +125,13 @@ func (te *TunaEntry) openStream(port int, force bool) (*smux.Stream, error) {
 	return stream, err
 }
 
-func (te *TunaEntry) listenTCP(ports []int) {
+func (te *TunaEntry) listenTCP(ports []int) bool {
 	for _, _port := range ports {
 		port := _port
 		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: port})
 		if err != nil {
-			log.Panicln("Couldn't bind listener:", err)
+			log.Println("Couldn't bind listener:", err)
+			return false
 		}
 
 		te.tcpListeners[port] = listener
@@ -154,11 +161,13 @@ func (te *TunaEntry) listenTCP(ports []int) {
 			}
 		}()
 	}
+
+	return true
 }
 
-func (te *TunaEntry) listenUDP(portIdOffset int, ports []int) {
+func (te *TunaEntry) listenUDP(portIdOffset int, ports []int) bool {
 	if len(ports) == 0 {
-		return
+		return true
 	}
 
 	go func() {
@@ -200,7 +209,8 @@ func (te *TunaEntry) listenUDP(portIdOffset int, ports []int) {
 		port := _port
 		localConn, err := net.ListenUDP(string(tuna.UDP), &net.UDPAddr{Port: port})
 		if err != nil {
-			log.Panicln("Couldn't bind listener:", err)
+			log.Println("Couldn't bind listener:", err)
+			return false
 		}
 
 		te.serviceConn[port] = localConn
@@ -229,6 +239,8 @@ func (te *TunaEntry) listenUDP(portIdOffset int, ports []int) {
 			}
 		}()
 	}
+
+	return true
 }
 
 func GetConnIdData(port int) [2]byte {
