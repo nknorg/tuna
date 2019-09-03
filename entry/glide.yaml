@@ -1,4 +1,0 @@
-package: github.com/nknorg/tuna/entry
-import:
-  - package: github.com/nknorg/nkn-sdk-go
-  - package: github.com/trueinsider/smux

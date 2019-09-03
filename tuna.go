@@ -10,10 +10,15 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
 	. "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/nkn/crypto"
+	"github.com/nknorg/nkn/program"
+	"github.com/nknorg/nkn/util/address"
 )
 
 type Protocol string
@@ -21,29 +26,33 @@ type Protocol string
 const TCP Protocol = "tcp"
 const UDP Protocol = "udp"
 
-const DefaultSubscriptionPrefix string = "tuna%1."
+const DefaultSubscriptionPrefix string = "tuna+1."
 
 type Metadata struct {
-	IP         string `json:"ip"`
-	TCPPort    int    `json:"tcpPort"`
-	UDPPort    int    `json:"udpPort"`
-	ServiceId  byte   `json:"serviceId"`
-	ServiceTCP []int  `json:"serviceTcp"`
-	ServiceUDP []int  `json:"serviceUdp"`
+	IP              string `json:"ip"`
+	TCPPort         int    `json:"tcpPort"`
+	UDPPort         int    `json:"udpPort"`
+	ServiceId       byte   `json:"serviceId"`
+	ServiceTCP      []int  `json:"serviceTcp"`
+	ServiceUDP      []int  `json:"serviceUdp"`
+	Price           string `json:"price"`
 }
 
 type Common struct {
 	ServiceName        string
+	MaxPrice           common.Fixed64
 	Wallet             *WalletSDK
 	DialTimeout        uint16
 	SubscriptionPrefix string
 	Reverse            bool
 	ReverseMetadata    *Metadata
 
-	Metadata   *Metadata
-	TCPPortIds map[int]byte
-	UDPPortIds map[int]byte
-	UDPPorts   map[byte]int
+	Price           common.Fixed64
+	PaymentReceiver string
+	Metadata        *Metadata
+	TCPPortIds      map[int]byte
+	UDPPortIds      map[int]byte
+	UDPPorts        map[byte]int
 
 	connected    bool
 	tcpConn      net.Conn
@@ -207,50 +216,70 @@ func (c *Common) CreateServerConn(force bool) error {
 			c.UpdateServerConn()
 		} else {
 			topic := c.SubscriptionPrefix + c.ServiceName
-		RandomBucket:
+		RandomSubscriber:
 			for {
-				lastBucket, err := c.Wallet.GetTopicBucketsCount(topic)
+				c.PaymentReceiver = ""
+				subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
 				if err != nil {
 					return err
 				}
-				bucket := uint32(rand.Intn(int(lastBucket) + 1))
-				subscribers, err := c.Wallet.GetSubscribers(topic, bucket)
+				offset := uint32(rand.Intn(int(subscribersCount)))
+				subscribers, _, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
 				if err != nil {
 					return err
 				}
-				subscribersCount := len(subscribers)
 
-				subscribersIndexes := rand.Perm(subscribersCount)
-
-			RandomSubscriber:
-				for {
-					if len(subscribersIndexes) == 0 {
-						continue RandomBucket
+				for subscriber, metadataString := range subscribers {
+					_, publicKey, _, err := address.ParseClientAddress(subscriber)
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
 					}
-					var subscriberIndex int
-					subscriberIndex, subscribersIndexes = subscribersIndexes[0], subscribersIndexes[1:]
-					i := 0
-					for _, metadataString := range subscribers {
-						if i != subscriberIndex {
-							i++
-							continue
-						}
 
-						if !c.SetMetadata(metadataString) {
-							continue RandomSubscriber
-						}
-
-						if c.ReverseMetadata != nil {
-							c.Metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
-							c.Metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
-						}
-
-						if !c.UpdateServerConn() {
-							continue RandomSubscriber
-						}
-
-						break RandomBucket
+					pubKey, err := crypto.NewPubKeyFromBytes(publicKey)
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
 					}
+
+					programHash, err := program.CreateProgramHash(pubKey)
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
+					}
+
+					paymentReceiver, err := programHash.ToAddress()
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
+					}
+
+					c.PaymentReceiver = paymentReceiver
+					if !c.SetMetadata(metadataString) {
+						continue RandomSubscriber
+					}
+
+					price, err := common.StringToFixed64(c.Metadata.Price)
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
+					}
+					if price > c.MaxPrice {
+						log.Printf("Price %s is bigger than max allowed price %s\n", price.String(), c.MaxPrice.String())
+						continue RandomSubscriber
+					}
+					c.Price = price
+
+					if c.ReverseMetadata != nil {
+						c.Metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
+						c.Metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
+					}
+
+					if !c.UpdateServerConn() {
+						continue RandomSubscriber
+					}
+
+					break RandomSubscriber
 				}
 			}
 		}
@@ -272,14 +301,16 @@ func CreateRawMetadata(
 	ip string,
 	tcpPort int,
 	udpPort int,
+	price string,
 ) []byte {
 	metadata := Metadata{
-		IP:         ip,
-		TCPPort:    tcpPort,
-		UDPPort:    udpPort,
-		ServiceId:  serviceId,
-		ServiceTCP: serviceTCP,
-		ServiceUDP: serviceUDP,
+		IP:              ip,
+		TCPPort:         tcpPort,
+		UDPPort:         udpPort,
+		ServiceId:       serviceId,
+		ServiceTCP:      serviceTCP,
+		ServiceUDP:      serviceUDP,
+		Price:           price,
 	}
 	metadataRaw, err := json.Marshal(metadata)
 	if err != nil {
@@ -296,9 +327,9 @@ func UpdateMetadata(
 	ip string,
 	tcpPort int,
 	udpPort int,
+	price string,
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
-	subscriptionInterval uint32,
 	wallet *WalletSDK,
 ) {
 	metadataRaw := CreateRawMetadata(
@@ -308,24 +339,21 @@ func UpdateMetadata(
 		ip,
 		tcpPort,
 		udpPort,
+		price,
 	)
 	topic := subscriptionPrefix + serviceName
 	go func() {
 		var waitTime time.Duration
 		for {
-			txid, err := wallet.SubscribeToFirstAvailableBucket(
+			txid, err := wallet.Subscribe(
 				"",
 				topic,
 				subscriptionDuration,
 				string(metadataRaw),
 			)
 			if err != nil {
-				waitTime = time.Duration(subscriptionInterval) * time.Second
-				if err == AlreadySubscribed {
-					log.Println("Already subscribed to topic", topic)
-				} else {
-					log.Println("Couldn't subscribe to topic", topic, "because:", err)
-				}
+				waitTime = time.Second
+				log.Println("Couldn't subscribe to topic", topic, "because:", err)
 			} else {
 				waitTime = time.Duration(subscriptionDuration) * 20 * time.Second
 				log.Println("Subscribed to topic", topic, "successfully:", txid)
@@ -336,14 +364,36 @@ func UpdateMetadata(
 	}()
 }
 
-func Pipe(dest io.WriteCloser, src io.ReadCloser) {
+func copyBuffer(dest io.Writer, src io.Reader, written *uint64) error {
+	buf := make([]byte, 32768)
+	for {
+		nr, err := src.Read(buf)
+		if nr > 0 {
+			nw, err := dest.Write(buf[0:nr])
+			if nw > 0 {
+				if written != nil {
+					atomic.AddUint64(written, uint64(nw))
+				}
+			}
+			if err != nil {
+				return err
+			}
+			if nr != nw {
+				return io.ErrShortWrite
+			}
+		}
+		if err != nil && err != io.EOF {
+			return err
+		}
+	}
+}
+
+func Pipe(dest io.WriteCloser, src io.ReadCloser, written *uint64) {
 	defer dest.Close()
 	defer src.Close()
-	/*n*/_, err := io.Copy(dest, src)
-	if err != nil {
-		//log.Println("Pipe closed (written "+strconv.FormatInt(n, 10)+") with error:", err)
+	if err := copyBuffer(dest, src, written); err != nil {
+		//log.Println("Pipe closed with error:", err)
 	}
-	//log.Println("Pipe closed (written " + strconv.FormatInt(n, 10) + ")")
 }
 
 func Close(conn io.Closer) {

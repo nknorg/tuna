@@ -14,11 +14,20 @@ Edit `config.json` with your data:
   "Reverse": false,
   "DialTimeout": 30,
   "UDPTimeout": 60,
-  "PrivateKey": "",
-  "SubscriptionPrefix": "tuna%1.",
+  "Seed": "",
+  "SubscriptionPrefix": "tuna+1.",
   "SubscriptionDuration": 60,
-  "SubscriptionInterval": 20,
-  "Services": {"httpproxy": "127.0.0.1", "moonlight":  "127.0.0.1"}
+  "ClaimInterval": 60,
+  "Services": {
+    "httpproxy": {
+      "address": "127.0.0.1",
+      "price": "0.001"
+    },
+    "moonlight": {
+      "address": "127.0.0.1",
+      "price": "0.001"
+    }
+  }
 }
 ```
 `ListenTCP` TCP port to listen for connections  
@@ -26,10 +35,10 @@ Edit `config.json` with your data:
 `Reverse` should be used if you don't have public IP and want to use another `server` for accepting clients  
 `DialTimeout` timeout for connections to services  
 `UDPTimeout`  timeout for UDP *connections*  
-`PrivateKey` your private key  
+`Seed` your seed  
 `SubscriptionPrefix` prefix appended to topics for subscription  
 `SubscriptionDuration` duration for subscription in blocks  
-`SubscriptionInterval` interval for subscription in seconds  
+`ClaimInterval` payment claim interval for connections  
 `Services` services you want to provide  
 
 Run like this:

@@ -9,25 +9,35 @@ import (
 	"time"
 
 	. "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/nkn/crypto"
+	"github.com/nknorg/nkn/transaction"
 	"github.com/nknorg/nkn/vault"
-	"github.com/nknorg/tuna"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
+
+	"github.com/nknorg/tuna"
 )
 
+type ServiceInfo struct {
+	Address string `json:"address"`
+	Price   string `json:"price"`
+}
+
 type Configuration struct {
-	ListenTCP            int               `json:"ListenTCP"`
-	ListenUDP            int               `json:"ListenUDP"`
-	Reverse              bool              `json:"Reverse"`
-	DialTimeout          uint16            `json:"DialTimeout"`
-	UDPTimeout           uint16            `json:"UDPTimeout"`
-	PrivateKey           string            `json:"PrivateKey"`
-	SubscriptionPrefix   string            `json:"SubscriptionPrefix"`
-	SubscriptionDuration uint32            `json:"SubscriptionDuration"`
-	SubscriptionInterval uint32            `json:"SubscriptionInterval"`
-	Services             map[string]string `json:"Services"`
+	ListenTCP            int                    `json:"ListenTCP"`
+	ListenUDP            int                    `json:"ListenUDP"`
+	Reverse              bool                   `json:"Reverse"`
+	ReverseMaxPrice      string                 `json:"ReverseMaxPrice"`
+	DialTimeout          uint16                 `json:"DialTimeout"`
+	UDPTimeout           uint16                 `json:"UDPTimeout"`
+	Seed                 string                 `json:"Seed"`
+	SubscriptionPrefix   string                 `json:"SubscriptionPrefix"`
+	SubscriptionDuration uint32                 `json:"SubscriptionDuration"`
+	ClaimInterval        uint32                 `json:"ClaimInterval"`
+	Services             map[string]ServiceInfo `json:"Services"`
 }
 
 type Service struct {
@@ -43,6 +53,8 @@ type TunaExit struct {
 	serviceConn *cache.Cache
 	common      *tuna.Common
 	clientConn  *net.UDPConn
+	bytesOut    uint64
+	npc         *NanoPayClaimer
 }
 
 func NewTunaExit(config Configuration, wallet *WalletSDK) *TunaExit {
@@ -78,6 +90,26 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 		}
 
 		metadata := stream.Metadata()
+		if len(metadata) == 0 { // payment stream
+			buf := make([]byte, 2048)
+			n, err := stream.Read(buf)
+			if err != nil {
+				continue
+			}
+			txData := make([]byte, n)
+			copy(txData, buf)
+			tx := new(transaction.Transaction)
+			if err := tx.Unmarshal(txData); err != nil {
+				continue
+			}
+			_, err = te.npc.Claim(tx)
+			if err != nil {
+				continue
+			}
+
+			// TODO mark successful nano pay update
+			continue
+		}
 		serviceId := metadata[0]
 		portId := int(metadata[1])
 
@@ -104,8 +136,8 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 			continue
 		}
 
-		serviceIP := te.config.Services[service.Name]
-		host := serviceIP + ":" + strconv.Itoa(port)
+		serviceInfo := te.config.Services[service.Name]
+		host := serviceInfo.Address + ":" + strconv.Itoa(port)
 
 		conn, err := net.DialTimeout(string(protocol), host, time.Duration(te.config.DialTimeout)*time.Second)
 		if err != nil {
@@ -114,8 +146,8 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 			continue
 		}
 
-		go tuna.Pipe(conn, stream)
-		go tuna.Pipe(stream, conn)
+		go tuna.Pipe(conn, stream, nil)
+		go tuna.Pipe(stream, conn, &te.bytesOut)
 	}
 
 	tuna.Close(session)
@@ -229,7 +261,7 @@ func (te *TunaExit) readUDP() {
 }
 
 func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
-	for serviceName := range te.config.Services {
+	for serviceName, serviceInfo := range te.config.Services {
 		serviceId, err := te.getServiceId(serviceName)
 		if err != nil {
 			log.Panicln(err)
@@ -246,9 +278,9 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 			ip,
 			tcpPort,
 			udpPort,
+			serviceInfo.Price,
 			te.config.SubscriptionPrefix,
 			te.config.SubscriptionDuration,
-			te.config.SubscriptionInterval,
 			te.wallet,
 		)
 	}
@@ -259,6 +291,18 @@ func (te *TunaExit) Start() {
 	if err != nil {
 		log.Panicln("Couldn't get IP:", err)
 	}
+
+	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
+	errChan := make(chan error)
+	te.npc = te.wallet.NewNanoPayClaimer(claimInterval, errChan)
+	go func() {
+		for {
+			// TODO check time of last successful nano pay update
+			// TODO check percentage of outgoing traffic paid
+			//bytesOut := atomic.LoadUint64(&te.bytesOut)2
+			time.Sleep(claimInterval)
+		}
+	}()
 
 	te.listenTCP(te.config.ListenTCP)
 	te.listenUDP(te.config.ListenUDP)
@@ -280,8 +324,14 @@ func (te *TunaExit) StartReverse(serviceName string) {
 	reverseMetadata.ServiceTCP = service.TCP
 	reverseMetadata.ServiceUDP = service.UDP
 
+	maxPrice, err := common.StringToFixed64(te.config.ReverseMaxPrice)
+	if err != nil {
+		log.Panicln(err)
+	}
+
 	te.common = &tuna.Common{
 		ServiceName:        "reverse",
+		MaxPrice:           maxPrice,
 		Wallet:             te.wallet,
 		DialTimeout:        te.config.DialTimeout,
 		ReverseMetadata:    reverseMetadata,
@@ -312,6 +362,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				"",
 				-1,
 				udpPort,
+				"",
 			)
 
 			tcpConn, _ = te.common.GetServerTCPConn(false)
@@ -338,13 +389,14 @@ func main() {
 
 	Init()
 
-	privateKey, _ := hex.DecodeString(config.PrivateKey)
+	seed, _ := hex.DecodeString(config.Seed)
+	privateKey := crypto.GetPrivateKeyFromSeed(seed)
 	account, err := vault.NewAccountWithPrivatekey(privateKey)
 	if err != nil {
 		log.Panicln("Couldn't load account:", err)
 	}
 
-	wallet := NewWalletSDK(account)
+	wallet := NewWalletSDK(account, WalletConfig{SeedRPCServerAddr: "http://35.227.54.110:30003"})
 
 	if config.Reverse {
 		for serviceName := range config.Services {

@@ -11,28 +11,36 @@ Edit `config.json` with your data:
 {
   "DialTimeout": 30,
   "UDPTimeout": 60,
-  "PrivateKey": "",
-  "Services": ["httpproxy", "moonlight"],
-
+  "Seed": "",
+  "Services": {
+    "httpproxy": {
+      "maxPrice": "0.001"
+    },
+    "moonlight": {
+      "maxPrice": "0.001"
+    }
+  },
   "Reverse": false,
   "ReverseTCP": 40004,
   "ReverseUDP": 40005,
-  "SubscriptionPrefix": "tuna%1.",
-  "SubscriptionDuration": 60,
-  "SubscriptionInterval": 20
+  "ReversePrice": "0.001",
+  "ReverseClaimInterval": 60,
+  "SubscriptionPrefix": "tuna+1.",
+  "SubscriptionDuration": 60
 }
 ```
 `DialTimeout` timeout for NKN node connection  
 `UDPTimeout`  timeout for UDP *connections*  
-`PrivateKey` your private key  
+`Seed` your seed  
 `Services` services you want to use  
 
 `Reverse` should be used to provide reverse tunnel for those who don't have public IP  
 `ReverseTCP` TCP port to listen for connections  
 `ReverseUDP` UDP port to listen for connections  
+`ReversePrice` price for reverse connections  
+`ReverseClaimInterval` payment claim interval for reverse connections  
 `SubscriptionPrefix` prefix appended to topics for subscription  
 `SubscriptionDuration` duration for subscription in blocks  
-`SubscriptionInterval` interval for subscription in seconds  
 
 Run like this:
 ```shell

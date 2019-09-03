@@ -7,10 +7,13 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
 	. "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna"
 	"github.com/patrickmn/go-cache"
@@ -18,18 +21,23 @@ import (
 	"github.com/trueinsider/smux"
 )
 
+type ServiceInfo struct {
+	MaxPrice string `json:"maxPrice"`
+}
+
 type Configuration struct {
-	DialTimeout uint16   `json:"DialTimeout"`
-	UDPTimeout  uint16   `json:"UDPTimeout"`
-	PrivateKey  string   `json:"PrivateKey"`
-	Services    []string `json:"Services"`
+	DialTimeout uint16                 `json:"DialTimeout"`
+	UDPTimeout  uint16                 `json:"UDPTimeout"`
+	Seed        string                 `json:"Seed"`
+	Services    map[string]ServiceInfo `json:"Services"`
 
 	Reverse              bool   `json:"Reverse"`
 	ReverseTCP           int    `json:"ReverseTCP"`
 	ReverseUDP           int    `json:"ReverseUDP"`
+	ReversePrice         string `json:"ReversePrice"`
+	ReverseClaimInterval uint32 `json:"ReverseClaimInterval"`
 	SubscriptionPrefix   string `json:"SubscriptionPrefix"`
 	SubscriptionDuration uint32 `json:"SubscriptionDuration"`
-	SubscriptionInterval uint32 `json:"SubscriptionInterval"`
 }
 
 type TunaEntry struct {
@@ -40,12 +48,15 @@ type TunaEntry struct {
 	clientAddr   *cache.Cache
 	session      *smux.Session
 	closeChan    chan struct{}
+	bytesIn      uint64
+	bytesPaid    uint64
 }
 
-func NewTunaEntry(serviceName string, reverse bool, config Configuration, wallet *WalletSDK) *TunaEntry {
+func NewTunaEntry(serviceName string, maxPrice common.Fixed64, reverse bool, config Configuration, wallet *WalletSDK) *TunaEntry {
 	te := &TunaEntry{
 		Common: &tuna.Common{
 			ServiceName:        serviceName,
+			MaxPrice:           maxPrice,
 			Wallet:             wallet,
 			DialTimeout:        config.DialTimeout,
 			SubscriptionPrefix: config.SubscriptionPrefix,
@@ -70,6 +81,43 @@ func (te *TunaEntry) Start() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
+
+		go func() {
+			var np *NanoPay
+			for {
+				time.Sleep(time.Second)
+				bytesIn := atomic.LoadUint64(&te.bytesIn)
+				if bytesIn == te.bytesPaid {
+					continue
+				}
+				if np == nil || np.Address() != te.PaymentReceiver {
+					var err error
+					np, err = te.Wallet.NewNanoPay(te.PaymentReceiver)
+					if err != nil {
+						continue
+					}
+				}
+				delta := te.Price * common.Fixed64(bytesIn/1048576)
+				tx, err := np.IncrementAmount(delta.String())
+				if err != nil {
+					continue
+				}
+				txData := tx.ToArray()
+				session, err := te.getSession(false)
+				if err != nil {
+					continue
+				}
+				stream, err := session.OpenStream()
+				if err != nil {
+					continue
+				}
+				n, err := stream.Write(txData)
+				if n == len(txData) && err == nil {
+					te.bytesPaid = bytesIn
+				}
+				stream.Close()
+			}
+		}()
 
 		if !te.listenTCP(te.Metadata.ServiceTCP) {
 			te.close()
@@ -156,8 +204,8 @@ func (te *TunaEntry) listenTCP(ports []int) bool {
 					continue
 				}
 
-				go tuna.Pipe(stream, conn)
-				go tuna.Pipe(conn, stream)
+				go tuna.Pipe(stream, conn, nil)
+				go tuna.Pipe(conn, stream, &te.bytesIn)
 			}
 		}()
 	}
@@ -253,13 +301,14 @@ func main() {
 	config := Configuration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	tuna.ReadJson("config.json", &config)
 
-	privateKey, _ := hex.DecodeString(config.PrivateKey)
+	seed, _ := hex.DecodeString(config.Seed)
+	privateKey := crypto.GetPrivateKeyFromSeed(seed)
 	account, err := vault.NewAccountWithPrivatekey(privateKey)
 	if err != nil {
 		log.Panicln("Couldn't load account:", err)
 	}
 
-	wallet := NewWalletSDK(account)
+	wallet := NewWalletSDK(account, WalletConfig{SeedRPCServerAddr: "http://35.227.54.110:30003"})
 
 	if config.Reverse {
 		ip, err := ipify.GetIp()
@@ -321,7 +370,7 @@ func main() {
 				metadataRaw := make([]byte, n)
 				copy(metadataRaw, buf)
 
-				te := NewTunaEntry("", true, config, wallet)
+				te := NewTunaEntry("", 0, true, config, wallet)
 				te.SetMetadata(string(metadataRaw))
 
 				te.SetServerTCPConn(tcpConn)
@@ -368,14 +417,18 @@ func main() {
 			ip,
 			config.ReverseTCP,
 			config.ReverseUDP,
+			config.ReversePrice,
 			config.SubscriptionPrefix,
 			config.SubscriptionDuration,
-			config.SubscriptionInterval,
 			wallet,
 		)
 	} else {
-		for _, serviceName := range config.Services {
-			go NewTunaEntry(serviceName, false, config, wallet).Start()
+		for serviceName, serviceInfo := range config.Services {
+			maxPrice, err := common.StringToFixed64(serviceInfo.MaxPrice)
+			if err != nil {
+				log.Panicln(err)
+			}
+			go NewTunaEntry(serviceName, maxPrice, false, config, wallet).Start()
 		}
 	}
 

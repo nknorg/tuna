@@ -2,10 +2,20 @@
   "ListenTCP": 30004,
   "ListenUDP": 30005,
   "Reverse": false,
+  "ReverseMaxPrice": "0.001",
   "DialTimeout": 30,
   "UDPTimeout": 60,
-  "PrivateKey": "",
+  "Seed": "",
   "SubscriptionDuration": 60,
-  "SubscriptionInterval": 20,
-  "Services": {"httpproxy": "127.0.0.1", "moonlight":  "127.0.0.1"}
+  "ClaimInterval": 60,
+  "Services": {
+    "httpproxy": {
+      "address": "127.0.0.1",
+      "price": "0.001"
+    },
+    "moonlight": {
+      "address": "127.0.0.1",
+      "price": "0.001"
+    }
+  }
 }
