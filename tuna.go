@@ -2,6 +2,7 @@ package tuna
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -29,13 +30,13 @@ const UDP Protocol = "udp"
 const DefaultSubscriptionPrefix string = "tuna+1."
 
 type Metadata struct {
-	IP              string `json:"ip"`
-	TCPPort         int    `json:"tcpPort"`
-	UDPPort         int    `json:"udpPort"`
-	ServiceId       byte   `json:"serviceId"`
-	ServiceTCP      []int  `json:"serviceTcp"`
-	ServiceUDP      []int  `json:"serviceUdp"`
-	Price           string `json:"price"`
+	IP         string `json:"ip"`
+	TCPPort    int    `json:"tcpPort"`
+	UDPPort    int    `json:"udpPort"`
+	ServiceId  byte   `json:"serviceId"`
+	ServiceTCP []int  `json:"serviceTcp"`
+	ServiceUDP []int  `json:"serviceUdp"`
+	Price      string `json:"price"`
 }
 
 type Common struct {
@@ -223,6 +224,9 @@ func (c *Common) CreateServerConn(force bool) error {
 				if err != nil {
 					return err
 				}
+				if subscribersCount == 0 {
+					return errors.New("there is no service providers for " + c.ServiceName)
+				}
 				offset := uint32(rand.Intn(int(subscribersCount)))
 				subscribers, _, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
 				if err != nil {
@@ -304,13 +308,13 @@ func CreateRawMetadata(
 	price string,
 ) []byte {
 	metadata := Metadata{
-		IP:              ip,
-		TCPPort:         tcpPort,
-		UDPPort:         udpPort,
-		ServiceId:       serviceId,
-		ServiceTCP:      serviceTCP,
-		ServiceUDP:      serviceUDP,
-		Price:           price,
+		IP:         ip,
+		TCPPort:    tcpPort,
+		UDPPort:    udpPort,
+		ServiceId:  serviceId,
+		ServiceTCP: serviceTCP,
+		ServiceUDP: serviceUDP,
+		Price:      price,
 	}
 	metadataRaw, err := json.Marshal(metadata)
 	if err != nil {
