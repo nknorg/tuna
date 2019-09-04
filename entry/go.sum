@@ -69,6 +69,8 @@ github.com/mattn/go-isatty v0.0.7/go.mod h1:Iq45c/XA43vh69/j3iqttzPXn0bhXyGjM0Hd
 github.com/memcachier/mc v2.0.1+incompatible/go.mod h1:7bkvFE61leUBvXz+yxsOnGBQSZpBSPIMUQSmmSHvuXc=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
+github.com/nknorg/consequential v0.0.0-20190823093205-a45aff4a218a h1:DXTCQnVV2EsTWEVk/YhVGb2QxdgW8JzB2GEsNntDlaU=
+github.com/nknorg/consequential v0.0.0-20190823093205-a45aff4a218a/go.mod h1:H7XeI/XOPpWVmqM+ScT75RLMn7jWnlZDwHRahSxNxo0=
 github.com/nknorg/go-nat v1.0.1 h1:4dFK0oDyqkIE0it03Y4pMgBQpl1Y0mrYHEp+j/nZ910=
 github.com/nknorg/go-nat v1.0.1/go.mod h1:dblX1Ac2j08rTUGs5CKCAfjHGN5eDFhbeqt2rccSP3Y=
 github.com/nknorg/go-portscanner v0.0.0-20181002101859-8493ef01db79 h1:AT5YRim0696HFnGSvFg0uOmSuo1X11roGBQhKB25PHE=
@@ -76,10 +78,14 @@ github.com/nknorg/go-portscanner v0.0.0-20181002101859-8493ef01db79/go.mod h1:lT
 github.com/nknorg/nkn v1.0.2-beta/go.mod h1:u1C8I7afoHzLgRyUakAZFUtdLW75JLqO3E3bTHcY+S4=
 github.com/nknorg/nkn v1.0.8-beta h1:3JCUcJbmSBH79p4XOcEMZYMvE4TE0DQHptJ3YdoEBDY=
 github.com/nknorg/nkn v1.0.8-beta/go.mod h1:qSfspOyg5pXlKjrTi+8iwU1olBuRQonSVTWBXS6KPzM=
+github.com/nknorg/nkn v1.1.0-beta h1:2tl3z8Gx2dsB144TWnFC5C7vSnO2Df+D4JVLzLbI1Ic=
+github.com/nknorg/nkn v1.1.0-beta/go.mod h1:/kn2SrJ1cyPFtNaU4W5BTBSPP8ahN6/W1efBOXnULfQ=
 github.com/nknorg/nkn-sdk-go v0.0.0-20190902194304-2c8ccee2e076 h1:aKz7haQgCFS4b3pI9yBj1FKqgZJZnIvXTeXhWa3IA4Y=
 github.com/nknorg/nkn-sdk-go v0.0.0-20190902194304-2c8ccee2e076/go.mod h1:ohipsi74Pxp0U/eVvPNZNocCmGP4WbkKZLf6krnPhL8=
 github.com/nknorg/nkn-sdk-go v0.0.0-20190903001628-f18dce2fd449 h1:E6TtUoKWKfjD10tKSz6sy6duqOMv2U/LK2Sfq+A2SH8=
 github.com/nknorg/nkn-sdk-go v0.0.0-20190903001628-f18dce2fd449/go.mod h1:ohipsi74Pxp0U/eVvPNZNocCmGP4WbkKZLf6krnPhL8=
+github.com/nknorg/nkn-sdk-go v1.1.0-beta h1:exExURExDbg6uIWyHgAc3v1hXgO5t0dajWl0gVlhabc=
+github.com/nknorg/nkn-sdk-go v1.1.0-beta/go.mod h1:VaaUBs8PxHmysGn6Ab16TmyKaAJcSAU1Xqq/PdaDIss=
 github.com/nknorg/nnet v0.0.0-20190709083911-807cabe3daf5/go.mod h1:XG+yLiMrl01iwez333VO2c/I0w5cy851c4STmR2/V1w=
 github.com/nknorg/nnet v0.0.0-20190719191630-3f4cc6c218fb/go.mod h1:XG+yLiMrl01iwez333VO2c/I0w5cy851c4STmR2/V1w=
 github.com/nknorg/nnet v0.0.0-20190815010835-03d8e5d1105c h1:KGoVE3vEN7CRxwHXfBfDDPmjqM6/Nc8ZEAnW1iGes6A=
@@ -99,6 +105,7 @@ github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTK
 github.com/pbnjay/memory v0.0.0-20190104145345-974d429e7ae4 h1:MfIUBZ1bz7TgvQLVa/yPJZOGeKEgs6eTKUjz3zB4B+U=
 github.com/pbnjay/memory v0.0.0-20190104145345-974d429e7ae4/go.mod h1:RMU2gJXhratVxBDTFeOdNhd540tG57lt9FIUV0YLvIQ=
 github.com/pborman/uuid v1.2.0/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtPdI/k=
+github.com/pkg/errors v0.0.0-20190227000051-27936f6d90f9 h1:dIsTcVF0w9viTLHXUEkDI7cXITMe+M/MRRM2MwisVow=
 github.com/pkg/errors v0.0.0-20190227000051-27936f6d90f9/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
@@ -122,6 +129,8 @@ github.com/trueinsider/smux v1.0.9-0.20190902023410-0a6805b18476 h1:bXWZomUASLke
 github.com/trueinsider/smux v1.0.9-0.20190902023410-0a6805b18476/go.mod h1:mL7/XFztFsqWyRBJDQqgKrpdECDnp/y/utBdIgFMeFk=
 github.com/trueinsider/smux v1.1.1 h1:OZQfbNhDytpPbqPD5AMfmeetB61G8OsLFaffWF0C860=
 github.com/trueinsider/smux v1.1.1/go.mod h1:mL7/XFztFsqWyRBJDQqgKrpdECDnp/y/utBdIgFMeFk=
+github.com/trueinsider/smux v1.3.5-metadata h1:+5g+oFutqA7aAVEuSJZYehFWOYCPsXljDPJzyB7o3uo=
+github.com/trueinsider/smux v1.3.5-metadata/go.mod h1:mL7/XFztFsqWyRBJDQqgKrpdECDnp/y/utBdIgFMeFk=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
 github.com/urfave/cli v1.20.0/go.mod h1:70zkFmudgCuE/ngEzBv17Jvp/497gISqfk5gWijbERA=
 github.com/urfave/cli v1.21.0/go.mod h1:lxDj6qX9Q6lWQxIrbrT0nwecwUtRnhVZAJjJZrVUZZQ=

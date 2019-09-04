@@ -308,7 +308,7 @@ func main() {
 		log.Panicln("Couldn't load account:", err)
 	}
 
-	wallet := NewWalletSDK(account, WalletConfig{SeedRPCServerAddr: "http://35.227.54.110:30003"})
+	wallet := NewWalletSDK(account)
 
 	if config.Reverse {
 		ip, err := ipify.GetIp()

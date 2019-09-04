@@ -20,6 +20,7 @@ import (
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/program"
 	"github.com/nknorg/nkn/util/address"
+	"github.com/nknorg/nkn/util/config"
 )
 
 type Protocol string
@@ -359,7 +360,7 @@ func UpdateMetadata(
 				waitTime = time.Second
 				log.Println("Couldn't subscribe to topic", topic, "because:", err)
 			} else {
-				waitTime = time.Duration(subscriptionDuration) * 20 * time.Second
+				waitTime = time.Duration(subscriptionDuration) * config.ConsensusDuration
 				log.Println("Subscribed to topic", topic, "successfully:", txid)
 			}
 

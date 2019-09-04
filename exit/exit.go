@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/hex"
+	"errors"
 	"log"
 	"net"
 	"strconv"
@@ -14,7 +15,6 @@ import (
 	"github.com/nknorg/nkn/transaction"
 	"github.com/nknorg/nkn/vault"
 	"github.com/patrickmn/go-cache"
-	"github.com/pkg/errors"
 	"github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 
@@ -396,7 +396,7 @@ func main() {
 		log.Panicln("Couldn't load account:", err)
 	}
 
-	wallet := NewWalletSDK(account, WalletConfig{SeedRPCServerAddr: "http://35.227.54.110:30003"})
+	wallet := NewWalletSDK(account)
 
 	if config.Reverse {
 		for serviceName := range config.Services {
