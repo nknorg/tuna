@@ -104,6 +104,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 			}
 			_, err = te.npc.Claim(tx)
 			if err != nil {
+				log.Println("Couldn't accept nano pay update:", err)
 				continue
 			}
 
@@ -294,6 +295,17 @@ func (te *TunaExit) Start() {
 
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
 	errChan := make(chan error)
+	go func() {
+		for {
+			err := <-errChan
+			if err != nil {
+				log.Println("Couldn't claim nano pay", err)
+				if te.npc != nil && te.npc.IsClosed() {
+					break
+				}
+			}
+		}
+	}()
 	te.npc = te.wallet.NewNanoPayClaimer(claimInterval, errChan)
 	go func() {
 		for {
