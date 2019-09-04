@@ -386,8 +386,11 @@ func copyBuffer(dest io.Writer, src io.Reader, written *uint64) error {
 				return io.ErrShortWrite
 			}
 		}
-		if err != nil && err != io.EOF {
-			return err
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			return nil
 		}
 	}
 }
