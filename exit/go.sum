@@ -72,12 +72,17 @@ github.com/nknorg/go-portscanner v0.0.0-20181002101859-8493ef01db79 h1:AT5YRim06
 github.com/nknorg/go-portscanner v0.0.0-20181002101859-8493ef01db79/go.mod h1:lTev9/EZpc4U3w/sp95T8UPeaav/0Hk+JjykVDuPaQs=
 github.com/nknorg/nkn v1.1.0-beta h1:2tl3z8Gx2dsB144TWnFC5C7vSnO2Df+D4JVLzLbI1Ic=
 github.com/nknorg/nkn v1.1.0-beta/go.mod h1:/kn2SrJ1cyPFtNaU4W5BTBSPP8ahN6/W1efBOXnULfQ=
+github.com/nknorg/nkn v1.1.0-beta.0.20190905085347-1f804d998848 h1:migUnbkvQKuKV8QAAGopcjF8u2lMQ+0AQThsr6Y6JC0=
+github.com/nknorg/nkn v1.1.0-beta.0.20190905085347-1f804d998848/go.mod h1:/kn2SrJ1cyPFtNaU4W5BTBSPP8ahN6/W1efBOXnULfQ=
 github.com/nknorg/nkn-sdk-go v0.0.0-20190902194304-2c8ccee2e076 h1:aKz7haQgCFS4b3pI9yBj1FKqgZJZnIvXTeXhWa3IA4Y=
 github.com/nknorg/nkn-sdk-go v0.0.0-20190902194304-2c8ccee2e076/go.mod h1:ohipsi74Pxp0U/eVvPNZNocCmGP4WbkKZLf6krnPhL8=
 github.com/nknorg/nkn-sdk-go v0.0.0-20190903001628-f18dce2fd449/go.mod h1:ohipsi74Pxp0U/eVvPNZNocCmGP4WbkKZLf6krnPhL8=
 github.com/nknorg/nkn-sdk-go v1.1.0-beta h1:exExURExDbg6uIWyHgAc3v1hXgO5t0dajWl0gVlhabc=
 github.com/nknorg/nkn-sdk-go v1.1.0-beta/go.mod h1:VaaUBs8PxHmysGn6Ab16TmyKaAJcSAU1Xqq/PdaDIss=
 github.com/nknorg/nkn-sdk-go v1.1.0-beta.1/go.mod h1:VaaUBs8PxHmysGn6Ab16TmyKaAJcSAU1Xqq/PdaDIss=
+github.com/nknorg/nkn-sdk-go v1.1.0-beta.2/go.mod h1:/QTe5FMFS4vtMMRwpLqxYGYzg4Wl64nZgib0CwzTHx8=
+github.com/nknorg/nkn-sdk-go v1.1.0-beta.3 h1:lKEyUlh4KgQRwZ3J/g/lFzVZLfDwiBFZ5erXl1tlzpM=
+github.com/nknorg/nkn-sdk-go v1.1.0-beta.3/go.mod h1:/QTe5FMFS4vtMMRwpLqxYGYzg4Wl64nZgib0CwzTHx8=
 github.com/nknorg/nnet v0.0.0-20190815010835-03d8e5d1105c h1:KGoVE3vEN7CRxwHXfBfDDPmjqM6/Nc8ZEAnW1iGes6A=
 github.com/nknorg/nnet v0.0.0-20190815010835-03d8e5d1105c/go.mod h1:XG+yLiMrl01iwez333VO2c/I0w5cy851c4STmR2/V1w=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
