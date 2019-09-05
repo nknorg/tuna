@@ -335,6 +335,7 @@ func UpdateMetadata(
 	price string,
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
+	subscriptionFee string,
 	wallet *WalletSDK,
 ) {
 	metadataRaw := CreateRawMetadata(
@@ -355,6 +356,7 @@ func UpdateMetadata(
 				topic,
 				subscriptionDuration,
 				string(metadataRaw),
+				subscriptionFee,
 			)
 			if err != nil {
 				waitTime = time.Second

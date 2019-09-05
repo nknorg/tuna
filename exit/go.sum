@@ -83,6 +83,8 @@ github.com/nknorg/nkn-sdk-go v1.1.0-beta.1/go.mod h1:VaaUBs8PxHmysGn6Ab16TmyKaAJ
 github.com/nknorg/nkn-sdk-go v1.1.0-beta.2/go.mod h1:/QTe5FMFS4vtMMRwpLqxYGYzg4Wl64nZgib0CwzTHx8=
 github.com/nknorg/nkn-sdk-go v1.1.0-beta.3 h1:lKEyUlh4KgQRwZ3J/g/lFzVZLfDwiBFZ5erXl1tlzpM=
 github.com/nknorg/nkn-sdk-go v1.1.0-beta.3/go.mod h1:/QTe5FMFS4vtMMRwpLqxYGYzg4Wl64nZgib0CwzTHx8=
+github.com/nknorg/nkn-sdk-go v1.1.0-beta.4 h1:RqsTQS9gZYWAAtn7HJd8cetDqlGRMCtRP71XdNb9tPY=
+github.com/nknorg/nkn-sdk-go v1.1.0-beta.4/go.mod h1:/QTe5FMFS4vtMMRwpLqxYGYzg4Wl64nZgib0CwzTHx8=
 github.com/nknorg/nnet v0.0.0-20190815010835-03d8e5d1105c h1:KGoVE3vEN7CRxwHXfBfDDPmjqM6/Nc8ZEAnW1iGes6A=
 github.com/nknorg/nnet v0.0.0-20190815010835-03d8e5d1105c/go.mod h1:XG+yLiMrl01iwez333VO2c/I0w5cy851c4STmR2/V1w=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=

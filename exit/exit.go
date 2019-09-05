@@ -36,6 +36,7 @@ type Configuration struct {
 	Seed                 string                 `json:"Seed"`
 	SubscriptionPrefix   string                 `json:"SubscriptionPrefix"`
 	SubscriptionDuration uint32                 `json:"SubscriptionDuration"`
+	SubscriptionFee      string                 `json:"SubscriptionFee"`
 	ClaimInterval        uint32                 `json:"ClaimInterval"`
 	Services             map[string]ServiceInfo `json:"Services"`
 }
@@ -282,6 +283,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 			serviceInfo.Price,
 			te.config.SubscriptionPrefix,
 			te.config.SubscriptionDuration,
+			te.config.SubscriptionFee,
 			te.wallet,
 		)
 	}

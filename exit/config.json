@@ -7,6 +7,7 @@
   "UDPTimeout": 60,
   "Seed": "",
   "SubscriptionDuration": 60,
+  "SubscriptionFee": "0",
   "ClaimInterval": 60,
   "Services": {
     "httpproxy": {

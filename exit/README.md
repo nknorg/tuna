@@ -17,6 +17,7 @@ Edit `config.json` with your data:
   "Seed": "",
   "SubscriptionPrefix": "tuna+1.",
   "SubscriptionDuration": 60,
+  "SubscriptionFee": "0",
   "ClaimInterval": 60,
   "Services": {
     "httpproxy": {
@@ -38,6 +39,7 @@ Edit `config.json` with your data:
 `Seed` your seed  
 `SubscriptionPrefix` prefix appended to topics for subscription  
 `SubscriptionDuration` duration for subscription in blocks  
+`SubscriptionFee` fee used for subscription  
 `ClaimInterval` payment claim interval for connections  
 `Services` services you want to provide  
 

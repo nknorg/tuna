@@ -30,6 +30,7 @@ type Configuration struct {
 	UDPTimeout  uint16                 `json:"UDPTimeout"`
 	Seed        string                 `json:"Seed"`
 	Services    map[string]ServiceInfo `json:"Services"`
+	NanoPayFee  string                 `json:"NanoPayFee"`
 
 	Reverse              bool   `json:"Reverse"`
 	ReverseTCP           int    `json:"ReverseTCP"`
@@ -38,6 +39,7 @@ type Configuration struct {
 	ReverseClaimInterval uint32 `json:"ReverseClaimInterval"`
 	SubscriptionPrefix   string `json:"SubscriptionPrefix"`
 	SubscriptionDuration uint32 `json:"SubscriptionDuration"`
+	SubscriptionFee      string `json:"SubscriptionFee"`
 }
 
 type TunaEntry struct {
@@ -92,7 +94,7 @@ func (te *TunaEntry) Start() {
 				}
 				if np == nil || np.Address() != te.PaymentReceiver {
 					var err error
-					np, err = te.Wallet.NewNanoPay(te.PaymentReceiver)
+					np, err = te.Wallet.NewNanoPay(te.PaymentReceiver, te.config.NanoPayFee)
 					if err != nil {
 						continue
 					}
@@ -420,6 +422,7 @@ func main() {
 			config.ReversePrice,
 			config.SubscriptionPrefix,
 			config.SubscriptionDuration,
+			config.SubscriptionFee,
 			wallet,
 		)
 	} else {

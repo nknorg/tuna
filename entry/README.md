@@ -20,19 +20,22 @@ Edit `config.json` with your data:
       "maxPrice": "0.001"
     }
   },
+  "NanoPayFee": "0",
   "Reverse": false,
   "ReverseTCP": 40004,
   "ReverseUDP": 40005,
   "ReversePrice": "0.001",
   "ReverseClaimInterval": 60,
   "SubscriptionPrefix": "tuna+1.",
-  "SubscriptionDuration": 60
+  "SubscriptionDuration": 60,
+  "SubscriptionFee": "0"
 }
 ```
 `DialTimeout` timeout for NKN node connection  
 `UDPTimeout`  timeout for UDP *connections*  
 `Seed` your seed  
 `Services` services you want to use  
+`NanoPayFee` fee used for nano pay transaction  
 
 `Reverse` should be used to provide reverse tunnel for those who don't have public IP  
 `ReverseTCP` TCP port to listen for connections  
@@ -41,6 +44,7 @@ Edit `config.json` with your data:
 `ReverseClaimInterval` payment claim interval for reverse connections  
 `SubscriptionPrefix` prefix appended to topics for subscription  
 `SubscriptionDuration` duration for subscription in blocks  
+`SubscriptionFee` fee used for subscription  
 
 Run like this:
 ```shell
