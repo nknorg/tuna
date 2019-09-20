@@ -99,7 +99,7 @@ func (te *TunaEntry) Start() {
 						continue
 					}
 				}
-				delta := te.Price * common.Fixed64(bytesIn/1048576)
+				delta := te.Price * common.Fixed64(bytesIn-te.bytesPaid) / 1048576
 				tx, err := np.IncrementAmount(delta.String())
 				if err != nil {
 					continue
