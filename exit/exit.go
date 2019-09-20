@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/hex"
 	"errors"
+	"io/ioutil"
 	"log"
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	. "github.com/nknorg/nkn-sdk-go"
@@ -54,8 +56,6 @@ type TunaExit struct {
 	serviceConn *cache.Cache
 	common      *tuna.Common
 	clientConn  *net.UDPConn
-	bytesOut    uint64
-	npc         *NanoPayClaimer
 }
 
 func NewTunaExit(config Configuration, wallet *WalletSDK) *TunaExit {
@@ -83,6 +83,61 @@ func (te *TunaExit) getServiceId(serviceName string) (byte, error) {
 func (te *TunaExit) handleSession(conn net.Conn) {
 	session, _ := smux.Server(conn, nil)
 
+	bytesOut := make([]uint64, 256)
+
+	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
+	errChan := make(chan error)
+	npc := te.wallet.NewNanoPayClaimer(claimInterval, errChan)
+	lastClaimed := common.Fixed64(0)
+	lastUpdate := time.Now()
+	go func() {
+		for {
+			err := <-errChan
+			if err != nil {
+				log.Println("Couldn't claim nano pay:", err)
+				if npc.IsClosed() {
+					tuna.Close(session)
+					tuna.Close(conn)
+					break
+				}
+			}
+		}
+	}()
+	go func() {
+		for {
+			time.Sleep(claimInterval)
+
+			if time.Now().Sub(lastUpdate) > claimInterval {
+				log.Println("Didn't update nano pay for more than", claimInterval.String())
+				tuna.Close(session)
+				tuna.Close(conn)
+			}
+
+			totalCost := common.Fixed64(0)
+			for i := range bytesOut {
+				bytes := atomic.LoadUint64(&bytesOut[i])
+				if bytes == 0 {
+					continue
+				}
+				service, err := te.getService(byte(i))
+				if err != nil {
+					continue
+				}
+				serviceInfo := te.config.Services[service.Name]
+				price, err := common.StringToFixed64(serviceInfo.Price)
+				if err != nil {
+					continue
+				}
+				totalCost += price * common.Fixed64(bytes) / 1048576
+			}
+			if common.Fixed64(float64(totalCost) * 0.9) < lastClaimed {
+				log.Println("Nano pay amount covers less than 90% of total cost")
+				tuna.Close(session)
+				tuna.Close(conn)
+			}
+		}
+	}()
+
 	for {
 		stream, err := session.AcceptStream()
 		if err != nil {
@@ -92,24 +147,26 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 
 		metadata := stream.Metadata()
 		if len(metadata) == 0 { // payment stream
-			buf := make([]byte, 2048)
-			n, err := stream.Read(buf)
-			if err != nil {
-				continue
-			}
-			txData := make([]byte, n)
-			copy(txData, buf)
-			tx := new(transaction.Transaction)
-			if err := tx.Unmarshal(txData); err != nil {
-				continue
-			}
-			_, err = te.npc.Claim(tx)
-			if err != nil {
-				log.Println("Couldn't accept nano pay update:", err)
-				continue
-			}
+			go func() {
+				txData, err := ioutil.ReadAll(stream)
+				if err != nil {
+					log.Println("Couldn't read payment stream:", err)
+					return
+				}
+				tx := new(transaction.Transaction)
+				if err := tx.Unmarshal(txData); err != nil {
+					log.Println("Couldn't unmarshal payment stream data:", err)
+					return
+				}
+				amount, err := npc.Claim(tx)
+				if err != nil {
+					log.Println("Couldn't accept nano pay update:", err)
+					return
+				}
 
-			// TODO mark successful nano pay update
+				lastClaimed = amount
+				lastUpdate = time.Now()
+			}()
 			continue
 		}
 		serviceId := metadata[0]
@@ -149,7 +206,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 		}
 
 		go tuna.Pipe(conn, stream, nil)
-		go tuna.Pipe(stream, conn, &te.bytesOut)
+		go tuna.Pipe(stream, conn, &bytesOut[serviceId])
 	}
 
 	tuna.Close(session)
@@ -293,30 +350,6 @@ func (te *TunaExit) Start() {
 	ip, err := ipify.GetIp()
 	if err != nil {
 		log.Panicln("Couldn't get IP:", err)
-	}
-
-	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
-	errChan := make(chan error)
-	go func() {
-		for {
-			err := <-errChan
-			if err != nil {
-				log.Println("Couldn't claim nano pay", err)
-				if te.npc != nil && te.npc.IsClosed() {
-					break
-				}
-			}
-		}
-	}()
-	te.npc = te.wallet.NewNanoPayClaimer(claimInterval, errChan)
-	go func() {
-		for {
-			// TODO check time of last successful nano pay update
-			// TODO check percentage of outgoing traffic paid
-			//bytesOut := atomic.LoadUint64(&te.bytesOut)2
-			time.Sleep(claimInterval)
-		}
-	}()
 
 	te.listenTCP(te.config.ListenTCP)
 	te.listenUDP(te.config.ListenUDP)
