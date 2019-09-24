@@ -16,10 +16,12 @@ import (
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna"
-	"github.com/patrickmn/go-cache"
-	"github.com/rdegges/go-ipify"
+	cache "github.com/patrickmn/go-cache"
+	ipify "github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 )
+
+const nanoPayUpdateInterval = time.Minute
 
 type ServiceInfo struct {
 	MaxPrice string `json:"maxPrice"`
@@ -87,7 +89,7 @@ func (te *TunaEntry) Start() {
 		go func() {
 			var np *NanoPay
 			for {
-				time.Sleep(time.Second)
+				time.Sleep(nanoPayUpdateInterval)
 				bytesIn := atomic.LoadUint64(&te.bytesIn)
 				if bytesIn == te.bytesPaid {
 					continue

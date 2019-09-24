@@ -16,8 +16,8 @@ import (
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/transaction"
 	"github.com/nknorg/nkn/vault"
-	"github.com/patrickmn/go-cache"
-	"github.com/rdegges/go-ipify"
+	cache "github.com/patrickmn/go-cache"
+	ipify "github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 
 	"github.com/nknorg/tuna"
@@ -130,7 +130,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 				}
 				totalCost += price * common.Fixed64(bytes) / 1048576
 			}
-			if common.Fixed64(float64(totalCost) * 0.9) < lastClaimed {
+			if common.Fixed64(float64(totalCost)*0.9) < lastClaimed {
 				log.Println("Nano pay amount covers less than 90% of total cost")
 				tuna.Close(session)
 				tuna.Close(conn)
@@ -350,7 +350,7 @@ func (te *TunaExit) Start() {
 	ip, err := ipify.GetIp()
 	if err != nil {
 		log.Panicln("Couldn't get IP:", err)
-
+	}
 	te.listenTCP(te.config.ListenTCP)
 	te.listenUDP(te.config.ListenUDP)
 
