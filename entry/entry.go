@@ -127,7 +127,7 @@ func (te *TunaEntry) Start() {
 			te.close()
 			return
 		}
-		if !te.listenUDP(len(te.Metadata.ServiceTCP), te.Metadata.ServiceUDP) {
+		if !te.listenUDP(len(te.Metadata.ServiceUDP), te.Metadata.ServiceUDP) {
 			te.close()
 			return
 		}
