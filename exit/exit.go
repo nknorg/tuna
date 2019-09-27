@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -90,6 +91,8 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 	npc := te.wallet.NewNanoPayClaimer(claimInterval, errChan)
 	lastClaimed := common.Fixed64(0)
 	lastUpdate := time.Now()
+	isClosed := false
+
 	go func() {
 		for {
 			err := <-errChan
@@ -98,19 +101,27 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 				if npc.IsClosed() {
 					tuna.Close(session)
 					tuna.Close(conn)
+					isClosed = true
 					break
 				}
 			}
 		}
 	}()
+
 	go func() {
 		for {
 			time.Sleep(claimInterval)
 
-			if time.Now().Sub(lastUpdate) > claimInterval {
+			if isClosed {
+				break
+			}
+
+			if time.Since(lastUpdate) > claimInterval {
 				log.Println("Didn't update nano pay for more than", claimInterval.String())
 				tuna.Close(session)
 				tuna.Close(conn)
+				isClosed = true
+				break
 			}
 
 			totalCost := common.Fixed64(0)
@@ -134,6 +145,8 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 				log.Println("Nano pay amount covers less than 90% of total cost")
 				tuna.Close(session)
 				tuna.Close(conn)
+				isClosed = true
+				break
 			}
 		}
 	}()
@@ -147,9 +160,9 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 
 		metadata := stream.Metadata()
 		if len(metadata) == 0 { // payment stream
-			go func() {
+			go func(stream *smux.Stream) {
 				txData, err := ioutil.ReadAll(stream)
-				if err != nil {
+				if err != nil && err.Error() != io.EOF.Error() {
 					log.Println("Couldn't read payment stream:", err)
 					return
 				}
@@ -166,7 +179,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 
 				lastClaimed = amount
 				lastUpdate = time.Now()
-			}()
+			}(stream)
 			continue
 		}
 		serviceId := metadata[0]
@@ -211,6 +224,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 
 	tuna.Close(session)
 	tuna.Close(conn)
+	isClosed = true
 }
 
 func (te *TunaExit) listenTCP(port int) {
