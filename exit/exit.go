@@ -141,7 +141,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 				}
 				totalCost += price * common.Fixed64(bytes) / 1048576
 			}
-			if common.Fixed64(float64(totalCost)*0.9) < lastClaimed {
+			if common.Fixed64(float64(totalCost)*0.9) > lastClaimed {
 				log.Println("Nano pay amount covers less than 90% of total cost")
 				tuna.Close(session)
 				tuna.Close(conn)
