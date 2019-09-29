@@ -89,6 +89,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
 	errChan := make(chan error)
 	npc := te.wallet.NewNanoPayClaimer(claimInterval, errChan)
+	lastComputed := common.Fixed64(0)
 	lastClaimed := common.Fixed64(0)
 	lastUpdate := time.Now()
 	isClosed := false
@@ -124,24 +125,7 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 				break
 			}
 
-			totalCost := common.Fixed64(0)
-			for i := range bytesOut {
-				bytes := atomic.LoadUint64(&bytesOut[i])
-				if bytes == 0 {
-					continue
-				}
-				service, err := te.getService(byte(i))
-				if err != nil {
-					continue
-				}
-				serviceInfo := te.config.Services[service.Name]
-				price, err := common.StringToFixed64(serviceInfo.Price)
-				if err != nil {
-					continue
-				}
-				totalCost += price * common.Fixed64(bytes) / 1048576
-			}
-			if common.Fixed64(float64(totalCost)*0.9) > lastClaimed {
+			if common.Fixed64(float64(lastComputed)*0.9) > lastClaimed {
 				log.Println("Nano pay amount covers less than 90% of total cost")
 				tuna.Close(session)
 				tuna.Close(conn)
@@ -177,6 +161,25 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 					return
 				}
 
+				totalCost := common.Fixed64(0)
+				for i := range bytesOut {
+					bytes := atomic.LoadUint64(&bytesOut[i])
+					if bytes == 0 {
+						continue
+					}
+					service, err := te.getService(byte(i))
+					if err != nil {
+						continue
+					}
+					serviceInfo := te.config.Services[service.Name]
+					price, err := common.StringToFixed64(serviceInfo.Price)
+					if err != nil {
+						continue
+					}
+					totalCost += price * common.Fixed64(bytes) / 1048576
+				}
+
+				lastComputed = totalCost
 				lastClaimed = amount
 				lastUpdate = time.Now()
 			}(stream)
