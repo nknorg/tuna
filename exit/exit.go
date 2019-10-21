@@ -94,46 +94,48 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 	lastUpdate := time.Now()
 	isClosed := false
 
-	go func() {
-		for {
-			err := <-errChan
-			if err != nil {
-				log.Println("Couldn't claim nano pay:", err)
-				if npc.IsClosed() {
+	if !te.config.Reverse {
+		go func() {
+			for {
+				err := <-errChan
+				if err != nil {
+					log.Println("Couldn't claim nano pay:", err)
+					if npc.IsClosed() {
+						tuna.Close(session)
+						tuna.Close(conn)
+						isClosed = true
+						break
+					}
+				}
+			}
+		}()
+
+		go func() {
+			for {
+				time.Sleep(claimInterval)
+
+				if isClosed {
+					break
+				}
+
+				if time.Since(lastUpdate) > claimInterval {
+					log.Println("Didn't update nano pay for more than", claimInterval.String())
+					tuna.Close(session)
+					tuna.Close(conn)
+					isClosed = true
+					break
+				}
+
+				if common.Fixed64(float64(lastComputed)*0.9) > lastClaimed {
+					log.Println("Nano pay amount covers less than 90% of total cost")
 					tuna.Close(session)
 					tuna.Close(conn)
 					isClosed = true
 					break
 				}
 			}
-		}
-	}()
-
-	go func() {
-		for {
-			time.Sleep(claimInterval)
-
-			if isClosed {
-				break
-			}
-
-			if time.Since(lastUpdate) > claimInterval {
-				log.Println("Didn't update nano pay for more than", claimInterval.String())
-				tuna.Close(session)
-				tuna.Close(conn)
-				isClosed = true
-				break
-			}
-
-			if common.Fixed64(float64(lastComputed)*0.9) > lastClaimed {
-				log.Println("Nano pay amount covers less than 90% of total cost")
-				tuna.Close(session)
-				tuna.Close(conn)
-				isClosed = true
-				break
-			}
-		}
-	}()
+		}()
+	}
 
 	for {
 		stream, err := session.AcceptStream()
