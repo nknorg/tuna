@@ -146,6 +146,9 @@ func (te *TunaExit) handleSession(conn net.Conn) {
 
 		metadata := stream.Metadata()
 		if len(metadata) == 0 { // payment stream
+			if te.config.Reverse {
+				continue
+			}
 			go func(stream *smux.Stream) {
 				txData, err := ioutil.ReadAll(stream)
 				if err != nil && err.Error() != io.EOF.Error() {

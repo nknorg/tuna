@@ -87,6 +87,18 @@ func (te *TunaEntry) Start() {
 		}
 
 		go func() {
+			session, err := te.getSession(false)
+			if err != nil {
+				return
+			}
+			stream, err := session.OpenStream()
+			if err != nil {
+				return
+			}
+			stream.Close()
+		}()
+
+		go func() {
 			var np *NanoPay
 			for {
 				time.Sleep(nanoPayUpdateInterval)
