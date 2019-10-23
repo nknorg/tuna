@@ -96,6 +96,14 @@ func (te *TunaEntry) Start() {
 				return
 			}
 			stream.Close()
+			for {
+				_, err = session.AcceptStream()
+				if err != nil {
+					log.Println("Close connection:", err)
+					te.close()
+					return
+				}
+			}
 		}()
 
 		go func() {
