@@ -49,3 +49,34 @@ Run like this:
 ```
 
 Then users can connect to your services over NKN through their *tuna* client
+
+## Specifying service ports programmatically
+In case you're running services with dynamic ports it may be inconvenient to specify port in the `services.json` before each launch.  
+Instead you can run TUNA's exit programmatically, launch your service and then provide it's port to TUNA.
+
+```go
+...
+// read/prepare config
+// init wallet sdk
+// launch your service
+port := ... // port of the newly launched service
+...
+serviceName := "proxy"
+services := []Service{{
+    Name: serviceName,
+    TCP:  []int{port},
+}}
+exit := NewTunaExit(config, services, wallet) // can be used only once-per-service
+exit.StartReverse(serviceName)
+
+select {} // prevent TUNA from exiting
+```
+
+## Getting dynamic ports
+When some of the ports of the service is specified as 0, then entry will use random ports for them, here's how you can check which ports it's actually using:
+```go
+tcpPorts := exit.GetReverseTCPPorts()
+udpPorts := exit.GetReverseUDPPorts()
+```
+Returned ports will correspond to local ports specified in the same order.  
+This information will only be available after connection with the reverse entry has been made.

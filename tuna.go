@@ -52,9 +52,6 @@ type Common struct {
 	Price           common.Fixed64
 	PaymentReceiver string
 	Metadata        *Metadata
-	TCPPortIds      map[int]byte
-	UDPPortIds      map[int]byte
-	UDPPorts        map[byte]int
 
 	connected    bool
 	tcpConn      net.Conn
@@ -159,53 +156,36 @@ func (c *Common) UpdateServerConn() bool {
 
 	var err error
 	if hasTCP || c.ReverseMetadata != nil {
-		if !c.Reverse {
-			Close(c.tcpConn)
+		Close(c.tcpConn)
 
-			address := c.Metadata.IP + ":" + strconv.Itoa(c.Metadata.TCPPort)
-			c.tcpConn, err = net.DialTimeout(
-				string(TCP),
-				address,
-				time.Duration(c.DialTimeout)*time.Second,
-			)
-			if err != nil {
-				log.Println("Couldn't connect to TCP address", address, "because:", err)
-				return false
-			}
-			log.Println("Connected to TCP at", address)
+		address := c.Metadata.IP + ":" + strconv.Itoa(c.Metadata.TCPPort)
+		c.tcpConn, err = net.DialTimeout(
+			string(TCP),
+			address,
+			time.Duration(c.DialTimeout)*time.Second,
+		)
+		if err != nil {
+			log.Println("Couldn't connect to TCP address", address, "because:", err)
+			return false
 		}
-
-		c.TCPPortIds = make(map[int]byte)
-		for i, port := range c.Metadata.ServiceTCP {
-			c.TCPPortIds[port] = byte(i)
-		}
+		log.Println("Connected to TCP at", address)
 	}
 	if hasUDP || c.ReverseMetadata != nil {
-		if !c.Reverse {
-			Close(c.udpConn)
+		Close(c.udpConn)
 
-			address := net.UDPAddr{IP: net.ParseIP(c.Metadata.IP), Port: c.Metadata.UDPPort}
-			c.udpConn, err = net.DialUDP(
-				string(UDP),
-				nil,
-				&address,
-			)
-			if err != nil {
-				log.Println("Couldn't connect to UDP address", address, "because:", err)
-				return false
-			}
-			log.Println("Connected to UDP at", address)
-
-			c.StartUDPReaderWriter(c.udpConn)
+		address := net.UDPAddr{IP: net.ParseIP(c.Metadata.IP), Port: c.Metadata.UDPPort}
+		c.udpConn, err = net.DialUDP(
+			string(UDP),
+			nil,
+			&address,
+		)
+		if err != nil {
+			log.Println("Couldn't connect to UDP address", address, "because:", err)
+			return false
 		}
+		log.Println("Connected to UDP at", address)
 
-		c.UDPPortIds = make(map[int]byte)
-		c.UDPPorts = make(map[byte]int)
-		for i, port := range c.Metadata.ServiceUDP {
-			portId := byte(i)
-			c.UDPPortIds[port] = portId
-			c.UDPPorts[portId] = port
-		}
+		c.StartUDPReaderWriter(c.udpConn)
 	}
 	c.connected = true
 
@@ -213,79 +193,75 @@ func (c *Common) UpdateServerConn() bool {
 }
 
 func (c *Common) CreateServerConn(force bool) error {
-	if c.connected == false || force {
-		if c.Reverse {
-			c.UpdateServerConn()
-		} else {
-			topic := c.SubscriptionPrefix + c.ServiceName
-		RandomSubscriber:
-			for {
-				c.PaymentReceiver = ""
-				subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
+	if !c.Reverse && (c.connected == false || force) {
+		topic := c.SubscriptionPrefix + c.ServiceName
+	RandomSubscriber:
+		for {
+			c.PaymentReceiver = ""
+			subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
+			if err != nil {
+				return err
+			}
+			if subscribersCount == 0 {
+				return errors.New("there is no service providers for " + c.ServiceName)
+			}
+			offset := uint32(rand.Intn(int(subscribersCount)))
+			subscribers, _, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
+			if err != nil {
+				return err
+			}
+
+			for subscriber, metadataString := range subscribers {
+				_, publicKey, _, err := address.ParseClientAddress(subscriber)
 				if err != nil {
-					return err
+					log.Println(err)
+					continue RandomSubscriber
 				}
-				if subscribersCount == 0 {
-					return errors.New("there is no service providers for " + c.ServiceName)
-				}
-				offset := uint32(rand.Intn(int(subscribersCount)))
-				subscribers, _, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
+
+				pubKey, err := crypto.NewPubKeyFromBytes(publicKey)
 				if err != nil {
-					return err
+					log.Println(err)
+					continue RandomSubscriber
 				}
 
-				for subscriber, metadataString := range subscribers {
-					_, publicKey, _, err := address.ParseClientAddress(subscriber)
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-
-					pubKey, err := crypto.NewPubKeyFromBytes(publicKey)
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-
-					programHash, err := program.CreateProgramHash(pubKey)
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-
-					paymentReceiver, err := programHash.ToAddress()
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-
-					c.PaymentReceiver = paymentReceiver
-					if !c.SetMetadata(metadataString) {
-						continue RandomSubscriber
-					}
-
-					price, err := common.StringToFixed64(c.Metadata.Price)
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-					if price > c.MaxPrice {
-						log.Printf("Price %s is bigger than max allowed price %s\n", price.String(), c.MaxPrice.String())
-						continue RandomSubscriber
-					}
-					c.Price = price
-
-					if c.ReverseMetadata != nil {
-						c.Metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
-						c.Metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
-					}
-
-					if !c.UpdateServerConn() {
-						continue RandomSubscriber
-					}
-
-					break RandomSubscriber
+				programHash, err := program.CreateProgramHash(pubKey)
+				if err != nil {
+					log.Println(err)
+					continue RandomSubscriber
 				}
+
+				paymentReceiver, err := programHash.ToAddress()
+				if err != nil {
+					log.Println(err)
+					continue RandomSubscriber
+				}
+
+				c.PaymentReceiver = paymentReceiver
+				if !c.SetMetadata(metadataString) {
+					continue RandomSubscriber
+				}
+
+				price, err := common.StringToFixed64(c.Metadata.Price)
+				if err != nil {
+					log.Println(err)
+					continue RandomSubscriber
+				}
+				if price > c.MaxPrice {
+					log.Printf("Price %s is bigger than max allowed price %s\n", price.String(), c.MaxPrice.String())
+					continue RandomSubscriber
+				}
+				c.Price = price
+
+				if c.ReverseMetadata != nil {
+					c.Metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
+					c.Metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
+				}
+
+				if !c.UpdateServerConn() {
+					continue RandomSubscriber
+				}
+
+				break RandomSubscriber
 			}
 		}
 	}

@@ -57,12 +57,11 @@ type TunaExit struct {
 	serviceConn *cache.Cache
 	common      *tuna.Common
 	clientConn  *net.UDPConn
+	reverseTcp  []int
+	reverseUdp  []int
 }
 
-func NewTunaExit(config Configuration, wallet *WalletSDK) *TunaExit {
-	var services []Service
-	tuna.ReadJson("services.json", &services)
-
+func NewTunaExit(config Configuration, services []Service, wallet *WalletSDK) *TunaExit {
 	return &TunaExit{
 		config:      config,
 		wallet:      wallet,
@@ -442,6 +441,24 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				continue
 			}
 
+			buf := make([]byte, 2048)
+			n, err := tcpConn.Read(buf)
+			if err != nil {
+				log.Println("Couldn't read reverse metadata:", err)
+				tuna.Close(tcpConn)
+				break
+			}
+			reverseMetadataRaw := make([]byte, n)
+			copy(reverseMetadataRaw, buf)
+			reverseMetadata, err := tuna.ReadMetadata(string(reverseMetadataRaw))
+			if err != nil {
+				log.Println("Couldn't unmarshal metadata:", err)
+				tuna.Close(tcpConn)
+				break
+			}
+			te.reverseTcp = reverseMetadata.ServiceTCP
+			te.reverseUdp = reverseMetadata.ServiceUDP
+
 			te.handleSession(tcpConn)
 
 			if udpConn != nil {
@@ -450,6 +467,14 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			}
 		}
 	}()
+}
+
+func (te *TunaExit) GetReverseTCPPorts() []int {
+	return te.reverseTcp
+}
+
+func (te *TunaExit) GetReverseUDPPorts() []int {
+	return te.reverseUdp
 }
 
 func main() {
@@ -467,12 +492,15 @@ func main() {
 
 	wallet := NewWalletSDK(account)
 
+	var services []Service
+	tuna.ReadJson("services.json", &services)
+
 	if config.Reverse {
 		for serviceName := range config.Services {
-			NewTunaExit(config, wallet).StartReverse(serviceName)
+			NewTunaExit(config, services, wallet).StartReverse(serviceName)
 		}
 	} else {
-		NewTunaExit(config, wallet).Start()
+		NewTunaExit(config, services, wallet).Start()
 	}
 
 	select {}
