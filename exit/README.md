@@ -1,8 +1,7 @@
 ## Build
 Simply run:
 ```shell
-glide install
-go build exit.go
+go build bin/main.go
 ```
 
 ## How to use
@@ -47,7 +46,7 @@ Edit `config.json` with your data:
 
 Run like this:
 ```shell
-./exit
+./bin/main
 ```
 
 Then users can connect to your services over NKN through their *tuna* client

@@ -1,8 +1,7 @@
 ## Build
 Simply run:
 ```shell
-glide install
-go build entry.go
+go build bin/main.go
 ```
 
 ## How to use
@@ -48,7 +47,7 @@ Edit `config.json` with your data:
 
 Run like this:
 ```shell
-./entry
+./bin/main
 ```
 
 Then you can start using configured services as if they're on your local machine (e.g. `127.0.0.1:8888` for HTTP proxy)

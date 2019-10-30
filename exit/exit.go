@@ -1,7 +1,6 @@
-package main
+package exit
 
 import (
-	"encoding/hex"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -14,11 +13,9 @@ import (
 
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
-	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/transaction"
-	"github.com/nknorg/nkn/vault"
-	cache "github.com/patrickmn/go-cache"
-	ipify "github.com/rdegges/go-ipify"
+	"github.com/patrickmn/go-cache"
+	"github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 
 	"github.com/nknorg/tuna"
@@ -492,33 +489,4 @@ func (te *TunaExit) GetReverseTCPPorts() []int {
 
 func (te *TunaExit) GetReverseUDPPorts() []int {
 	return te.reverseUdp
-}
-
-func main() {
-	config := Configuration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
-	tuna.ReadJson("config.json", &config)
-
-	Init()
-
-	seed, _ := hex.DecodeString(config.Seed)
-	privateKey := crypto.GetPrivateKeyFromSeed(seed)
-	account, err := vault.NewAccountWithPrivatekey(privateKey)
-	if err != nil {
-		log.Panicln("Couldn't load account:", err)
-	}
-
-	wallet := NewWalletSDK(account)
-
-	var services []Service
-	tuna.ReadJson("services.json", &services)
-
-	if config.Reverse {
-		for serviceName := range config.Services {
-			NewTunaExit(config, services, wallet).StartReverse(serviceName)
-		}
-	} else {
-		NewTunaExit(config, services, wallet).Start()
-	}
-
-	select {}
 }
