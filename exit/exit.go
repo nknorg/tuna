@@ -469,7 +469,9 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			te.reverseIp = tcpConn.RemoteAddr().(*net.TCPAddr).IP
 			te.reverseTcp = reverseMetadata.ServiceTCP
 			te.reverseUdp = reverseMetadata.ServiceUDP
-			te.onEntryConnected()
+			if te.onEntryConnected != nil {
+				te.onEntryConnected()
+			}
 
 			te.handleSession(tcpConn)
 
