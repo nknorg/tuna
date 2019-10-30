@@ -33,6 +33,7 @@ type Configuration struct {
 	ListenTCP            int                    `json:"ListenTCP"`
 	ListenUDP            int                    `json:"ListenUDP"`
 	Reverse              bool                   `json:"Reverse"`
+	ReverseRandomPorts   bool                   `json:"ReverseRandomPorts"`
 	ReverseMaxPrice      string                 `json:"ReverseMaxPrice"`
 	DialTimeout          uint16                 `json:"DialTimeout"`
 	UDPTimeout           uint16                 `json:"UDPTimeout"`
@@ -51,14 +52,15 @@ type Service struct {
 }
 
 type TunaExit struct {
-	config      Configuration
-	wallet      *WalletSDK
-	services    []Service
-	serviceConn *cache.Cache
-	common      *tuna.Common
-	clientConn  *net.UDPConn
-	reverseTcp  []int
-	reverseUdp  []int
+	config           Configuration
+	wallet           *WalletSDK
+	services         []Service
+	serviceConn      *cache.Cache
+	common           *tuna.Common
+	clientConn       *net.UDPConn
+	reverseTcp       []int
+	reverseUdp       []int
+	onEntryConnected func()
 }
 
 func NewTunaExit(config Configuration, services []Service, wallet *WalletSDK) *TunaExit {
@@ -423,10 +425,20 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				udpPort, _ = strconv.Atoi(udpPortString)
 			}
 
+			var tcpPorts []int
+			var udpPorts []int
+			if te.config.ReverseRandomPorts {
+				tcpPorts = make([]int, len(service.TCP))
+				udpPorts = make([]int, len(service.UDP))
+			} else {
+				tcpPorts = service.TCP
+				udpPorts = service.UDP
+			}
+
 			serviceMetadata := tuna.CreateRawMetadata(
 				serviceId,
-				service.TCP,
-				service.UDP,
+				tcpPorts,
+				udpPorts,
 				"",
 				-1,
 				udpPort,
@@ -458,6 +470,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			}
 			te.reverseTcp = reverseMetadata.ServiceTCP
 			te.reverseUdp = reverseMetadata.ServiceUDP
+			te.onEntryConnected()
 
 			te.handleSession(tcpConn)
 
@@ -467,6 +480,10 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			}
 		}
 	}()
+}
+
+func (te *TunaExit) OnEntryConnected(callback func()) {
+	te.onEntryConnected = callback
 }
 
 func (te *TunaExit) GetReverseTCPPorts() []int {

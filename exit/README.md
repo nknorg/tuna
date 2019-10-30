@@ -12,6 +12,7 @@ Edit `config.json` with your data:
   "ListenTCP": 30004,
   "ListenUDP": 30005,
   "Reverse": false,
+  "ReverseRandomPorts": false,
   "DialTimeout": 30,
   "UDPTimeout": 60,
   "Seed": "",
@@ -34,6 +35,7 @@ Edit `config.json` with your data:
 `ListenTCP` TCP port to listen for connections  
 `ListenUDP` UDP port to listen for connections  
 `Reverse` should be used if you don't have public IP and want to use another `server` for accepting clients  
+`ReverseRandomPorts` meaning reverse entry can use random ports instead of specified ones (useful when service has dynamic ports)  
 `DialTimeout` timeout for connections to services  
 `UDPTimeout`  timeout for UDP *connections*  
 `Seed` your seed  
@@ -75,8 +77,10 @@ select {} // prevent TUNA from exiting
 ## Getting dynamic ports
 When some of the ports of the service is specified as 0, then entry will use random ports for them, here's how you can check which ports it's actually using:
 ```go
-tcpPorts := exit.GetReverseTCPPorts()
-udpPorts := exit.GetReverseUDPPorts()
+exit.OnEntryConnected(func() {
+    tcpPorts := exit.GetReverseTCPPorts()
+    udpPorts := exit.GetReverseUDPPorts()
+})
 ```
 Returned ports will correspond to local ports specified in the same order.  
 This information will only be available after connection with the reverse entry has been made.

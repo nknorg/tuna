@@ -173,7 +173,7 @@ func (te *TunaEntry) StartReverse() {
 
 	tcpConn, _ := te.GetServerTCPConn(false)
 	serviceMetadata := tuna.CreateRawMetadata(
-		-1,
+		0,
 		tcpPorts,
 		udpPorts,
 		"",

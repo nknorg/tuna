@@ -2,6 +2,7 @@
   "ListenTCP": 30004,
   "ListenUDP": 30005,
   "Reverse": false,
+  "ReverseRandomPorts": false,
   "ReverseMaxPrice": "0.001",
   "DialTimeout": 30,
   "UDPTimeout": 60,
