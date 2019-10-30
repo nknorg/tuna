@@ -55,6 +55,7 @@ type TunaExit struct {
 	serviceConn      *cache.Cache
 	common           *tuna.Common
 	clientConn       *net.UDPConn
+	reverseIp        net.IP
 	reverseTcp       []int
 	reverseUdp       []int
 	onEntryConnected func()
@@ -465,6 +466,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				tuna.Close(tcpConn)
 				break
 			}
+			te.reverseIp = tcpConn.RemoteAddr().(*net.TCPAddr).IP
 			te.reverseTcp = reverseMetadata.ServiceTCP
 			te.reverseUdp = reverseMetadata.ServiceUDP
 			te.onEntryConnected()
@@ -481,6 +483,10 @@ func (te *TunaExit) StartReverse(serviceName string) {
 
 func (te *TunaExit) OnEntryConnected(callback func()) {
 	te.onEntryConnected = callback
+}
+
+func (te *TunaExit) GetReverseIP() net.IP {
+	return te.reverseIp
 }
 
 func (te *TunaExit) GetReverseTCPPorts() []int {

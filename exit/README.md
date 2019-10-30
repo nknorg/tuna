@@ -77,6 +77,7 @@ select {} // prevent TUNA from exiting
 When some of the ports of the service is specified as 0, then entry will use random ports for them, here's how you can check which ports it's actually using:
 ```go
 exit.OnEntryConnected(func() {
+    ip := exit.GetReverseIP()
     tcpPorts := exit.GetReverseTCPPorts()
     udpPorts := exit.GetReverseUDPPorts()
 })
