@@ -11,7 +11,7 @@ import (
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna"
-	"github.com/rdegges/go-ipify"
+	ipify "github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 
 	. "github.com/nknorg/tuna/entry"
@@ -96,7 +96,7 @@ func main() {
 				if err != nil {
 					log.Println("Couldn't read service metadata:", err)
 					tuna.Close(tcpConn)
-					break
+					continue
 				}
 				metadataRaw := make([]byte, n)
 				copy(metadataRaw, buf)

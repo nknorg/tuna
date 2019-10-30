@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log"
 
 	. "github.com/nknorg/nkn-sdk-go"
@@ -32,7 +33,11 @@ func main() {
 
 	if config.Reverse {
 		for serviceName := range config.Services {
-			NewTunaExit(config, services, wallet).StartReverse(serviceName)
+			e := NewTunaExit(config, services, wallet)
+			e.OnEntryConnected(func() {
+				fmt.Printf("Service: %s, Address: %v:%v\n", serviceName, e.GetReverseIP(), e.GetReverseTCPPorts())
+			})
+			e.StartReverse(serviceName)
 		}
 	} else {
 		NewTunaExit(config, services, wallet).Start()
