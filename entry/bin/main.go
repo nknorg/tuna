@@ -12,6 +12,7 @@ import (
 	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna"
 	"github.com/rdegges/go-ipify"
+	"github.com/trueinsider/smux"
 
 	. "github.com/nknorg/tuna/entry"
 )
@@ -81,8 +82,17 @@ func main() {
 					continue
 				}
 
+				te := NewTunaEntry("", 0, true, config, wallet)
+				te.Session, _ = smux.Client(tcpConn, nil)
+				stream, err := te.Session.OpenStream()
+				if err != nil {
+					log.Println("Couldn't open stream:", err)
+					tuna.Close(tcpConn)
+					continue
+				}
+
 				buf := make([]byte, 2048)
-				n, err := tcpConn.Read(buf)
+				n, err := stream.Read(buf)
 				if err != nil {
 					log.Println("Couldn't read service metadata:", err)
 					tuna.Close(tcpConn)
@@ -91,7 +101,6 @@ func main() {
 				metadataRaw := make([]byte, n)
 				copy(metadataRaw, buf)
 
-				te := NewTunaEntry("", 0, true, config, wallet)
 				te.SetMetadata(string(metadataRaw))
 
 				te.SetServerTCPConn(tcpConn)
@@ -123,7 +132,7 @@ func main() {
 					te.SetServerUDPWriteChan(udpWriteChan)
 				}
 				go func() {
-					te.StartReverse()
+					te.StartReverse(stream)
 					tuna.Close(tcpConn)
 					te = nil
 				}()

@@ -46,7 +46,7 @@ type TunaEntry struct {
 	tcpListeners map[byte]*net.TCPListener
 	serviceConn  map[byte]*net.UDPConn
 	clientAddr   *cache.Cache
-	session      *smux.Session
+	Session      *smux.Session
 	closeChan    chan struct{}
 	bytesIn      uint64
 	bytesPaid    uint64
@@ -155,7 +155,7 @@ func (te *TunaEntry) Start() {
 	<-te.closeChan
 }
 
-func (te *TunaEntry) StartReverse() {
+func (te *TunaEntry) StartReverse(stream *smux.Stream) {
 	tcpPorts, err := te.listenTCP(te.Metadata.ServiceTCP)
 	if err != nil {
 		te.close()
@@ -167,7 +167,6 @@ func (te *TunaEntry) StartReverse() {
 		return
 	}
 
-	tcpConn, _ := te.GetServerTCPConn(false)
 	serviceMetadata := tuna.CreateRawMetadata(
 		0,
 		tcpPorts,
@@ -177,7 +176,7 @@ func (te *TunaEntry) StartReverse() {
 		-1,
 		"",
 	)
-	_, err = tcpConn.Write(serviceMetadata)
+	_, err = stream.Write(serviceMetadata)
 	if err != nil {
 		log.Println("Couldn't send metadata to reverse exit:", err)
 		te.close()
@@ -222,15 +221,15 @@ func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
 		te.close()
 		return nil, errors.New("reverse connection to service is dead")
 	}
-	if te.session == nil || te.session.IsClosed() || force {
+	if te.Session == nil || te.Session.IsClosed() || force {
 		conn, err := te.GetServerTCPConn(force)
 		if err != nil {
 			return nil, err
 		}
-		te.session, _ = smux.Client(conn, nil)
+		te.Session, _ = smux.Client(conn, nil)
 	}
 
-	return te.session, nil
+	return te.Session, nil
 }
 
 func (te *TunaEntry) openStream(portId byte, force bool) (*smux.Stream, error) {

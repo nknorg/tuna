@@ -80,9 +80,7 @@ func (te *TunaExit) getServiceId(serviceName string) (byte, error) {
 	return 0, errors.New("Service " + serviceName + " not found")
 }
 
-func (te *TunaExit) handleSession(conn net.Conn) {
-	session, _ := smux.Server(conn, nil)
-
+func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 	bytesOut := make([]uint64, 256)
 
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
@@ -249,7 +247,8 @@ func (te *TunaExit) listenTCP(port int) {
 				continue
 			}
 
-			go te.handleSession(conn)
+			session, _ := smux.Server(conn, nil)
+			go te.handleSession(session, conn)
 		}
 	}()
 }
@@ -444,7 +443,14 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			)
 
 			tcpConn, _ = te.common.GetServerTCPConn(false)
-			_, err = tcpConn.Write(serviceMetadata)
+			session, _ := smux.Server(tcpConn, nil)
+			stream, err := session.AcceptStream()
+			if err != nil {
+				log.Println("Couldn't open stream to reverse entry:", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			_, err = stream.Write(serviceMetadata)
 			if err != nil {
 				log.Println("Couldn't send metadata to reverse entry:", err)
 				time.Sleep(1 * time.Second)
@@ -452,7 +458,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			}
 
 			buf := make([]byte, 2048)
-			n, err := tcpConn.Read(buf)
+			n, err := stream.Read(buf)
 			if err != nil {
 				log.Println("Couldn't read reverse metadata:", err)
 				tuna.Close(tcpConn)
@@ -473,7 +479,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				te.onEntryConnected()
 			}
 
-			te.handleSession(tcpConn)
+			te.handleSession(session, tcpConn)
 
 			if udpConn != nil {
 				te.clientConn = udpConn
