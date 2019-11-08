@@ -152,6 +152,9 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 					log.Println("Couldn't read payment stream:", err)
 					return
 				}
+				if len(txData) == 0 {
+					return
+				}
 				tx := new(transaction.Transaction)
 				if err := tx.Unmarshal(txData); err != nil {
 					log.Println("Couldn't unmarshal payment stream data:", err)
