@@ -1,13 +1,17 @@
 package tuna
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,9 +22,11 @@ import (
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/crypto"
+	"github.com/nknorg/nkn/crypto/util"
 	"github.com/nknorg/nkn/program"
 	"github.com/nknorg/nkn/util/address"
 	"github.com/nknorg/nkn/util/config"
+	"github.com/nknorg/nkn/vault"
 )
 
 type Protocol string
@@ -406,4 +412,41 @@ func ReadJson(fileName string, value interface{}) {
 
 func GetConnIdString(data []byte) string {
 	return strconv.Itoa(int(*(*uint16)(unsafe.Pointer(&data[0]))))
+}
+
+func LoadPassword(path string) (string, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	// Remove the UTF-8 Byte Order Mark
+	content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
+	return strings.Trim(string(content), "\r\n"), nil
+}
+
+func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error) {
+	var wallet *vault.WalletImpl
+	pswd, _ := LoadPassword(passwordFile)
+	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
+		if len(pswd) == 0 {
+			pswd = base64.StdEncoding.EncodeToString(util.RandomBytes(15))
+			err = ioutil.WriteFile(passwordFile, []byte(pswd), 0644)
+			if err != nil {
+				return nil, fmt.Errorf("save password to file error: %v", err)
+			}
+		}
+		wallet, err = vault.NewWallet(walletFile, []byte(pswd), true)
+		if err != nil {
+			return nil, fmt.Errorf("create wallet error: %v", err)
+		}
+	} else {
+		if len(pswd) == 0 {
+			return nil, fmt.Errorf("cannot load password from %s", passwordFile)
+		}
+		wallet, err = vault.OpenWallet(walletFile, []byte(pswd))
+		if err != nil {
+			return nil, fmt.Errorf("open wallet error: %v", err)
+		}
+	}
+	return wallet.GetDefaultAccount()
 }
