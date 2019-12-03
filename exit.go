@@ -1,4 +1,4 @@
-package exit
+package tuna
 
 import (
 	"errors"
@@ -14,30 +14,29 @@ import (
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/transaction"
-	"github.com/nknorg/tuna"
 	cache "github.com/patrickmn/go-cache"
 	ipify "github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 )
 
-type ServiceInfo struct {
+type ExitServiceInfo struct {
 	Address string `json:"address"`
 	Price   string `json:"price"`
 }
 
-type Configuration struct {
-	ListenTCP            int                    `json:"ListenTCP"`
-	ListenUDP            int                    `json:"ListenUDP"`
-	Reverse              bool                   `json:"Reverse"`
-	ReverseRandomPorts   bool                   `json:"ReverseRandomPorts"`
-	ReverseMaxPrice      string                 `json:"ReverseMaxPrice"`
-	DialTimeout          uint16                 `json:"DialTimeout"`
-	UDPTimeout           uint16                 `json:"UDPTimeout"`
-	SubscriptionPrefix   string                 `json:"SubscriptionPrefix"`
-	SubscriptionDuration uint32                 `json:"SubscriptionDuration"`
-	SubscriptionFee      string                 `json:"SubscriptionFee"`
-	ClaimInterval        uint32                 `json:"ClaimInterval"`
-	Services             map[string]ServiceInfo `json:"Services"`
+type ExitConfiguration struct {
+	ListenTCP            int                        `json:"ListenTCP"`
+	ListenUDP            int                        `json:"ListenUDP"`
+	Reverse              bool                       `json:"Reverse"`
+	ReverseRandomPorts   bool                       `json:"ReverseRandomPorts"`
+	ReverseMaxPrice      string                     `json:"ReverseMaxPrice"`
+	DialTimeout          uint16                     `json:"DialTimeout"`
+	UDPTimeout           uint16                     `json:"UDPTimeout"`
+	SubscriptionPrefix   string                     `json:"SubscriptionPrefix"`
+	SubscriptionDuration uint32                     `json:"SubscriptionDuration"`
+	SubscriptionFee      string                     `json:"SubscriptionFee"`
+	ClaimInterval        uint32                     `json:"ClaimInterval"`
+	Services             map[string]ExitServiceInfo `json:"Services"`
 }
 
 type Service struct {
@@ -47,11 +46,11 @@ type Service struct {
 }
 
 type TunaExit struct {
-	config           Configuration
+	config           ExitConfiguration
 	wallet           *WalletSDK
 	services         []Service
 	serviceConn      *cache.Cache
-	common           *tuna.Common
+	common           *Common
 	clientConn       *net.UDPConn
 	reverseIp        net.IP
 	reverseTcp       []int
@@ -59,7 +58,7 @@ type TunaExit struct {
 	onEntryConnected func()
 }
 
-func NewTunaExit(config Configuration, services []Service, wallet *WalletSDK) *TunaExit {
+func NewTunaExit(config ExitConfiguration, services []Service, wallet *WalletSDK) *TunaExit {
 	return &TunaExit{
 		config:      config,
 		wallet:      wallet,
@@ -99,8 +98,8 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 				if err != nil {
 					log.Println("Couldn't claim nano pay:", err)
 					if npc.IsClosed() {
-						tuna.Close(session)
-						tuna.Close(conn)
+						Close(session)
+						Close(conn)
 						isClosed = true
 						break
 					}
@@ -118,16 +117,16 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 
 				if time.Since(lastUpdate) > claimInterval {
 					log.Println("Didn't update nano pay for more than", claimInterval.String())
-					tuna.Close(session)
-					tuna.Close(conn)
+					Close(session)
+					Close(conn)
 					isClosed = true
 					break
 				}
 
 				if common.Fixed64(float64(lastComputed)*0.9) > lastClaimed {
 					log.Println("Nano pay amount covers less than 90% of total cost")
-					tuna.Close(session)
-					tuna.Close(conn)
+					Close(session)
+					Close(conn)
 					isClosed = true
 					break
 				}
@@ -197,23 +196,23 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 		service, err := te.getService(serviceId)
 		if err != nil {
 			log.Println(err)
-			tuna.Close(stream)
+			Close(stream)
 			continue
 		}
 		tcpPortsCount := len(service.TCP)
 		udpPortsCount := len(service.UDP)
-		var protocol tuna.Protocol
+		var protocol Protocol
 		var port int
 		if portId < tcpPortsCount {
-			protocol = tuna.TCP
+			protocol = TCP
 			port = service.TCP[portId]
 		} else if portId-tcpPortsCount < udpPortsCount {
-			protocol = tuna.UDP
+			protocol = UDP
 			portId -= tcpPortsCount
 			port = service.UDP[portId]
 		} else {
 			log.Println("Wrong portId received:", portId)
-			tuna.Close(stream)
+			Close(stream)
 			continue
 		}
 
@@ -223,16 +222,16 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 		conn, err := net.DialTimeout(string(protocol), host, time.Duration(te.config.DialTimeout)*time.Second)
 		if err != nil {
 			log.Println("Couldn't connect to host", host, "with error:", err)
-			tuna.Close(stream)
+			Close(stream)
 			continue
 		}
 
-		go tuna.Pipe(conn, stream, nil)
-		go tuna.Pipe(stream, conn, &bytesOut[serviceId])
+		go Pipe(conn, stream, nil)
+		go Pipe(stream, conn, &bytesOut[serviceId])
 	}
 
-	tuna.Close(session)
-	tuna.Close(conn)
+	Close(session)
+	Close(conn)
 	isClosed = true
 }
 
@@ -247,7 +246,7 @@ func (te *TunaExit) listenTCP(port int) {
 			conn, err := listener.Accept()
 			if err != nil {
 				log.Println("Couldn't accept client connection:", err)
-				tuna.Close(conn)
+				Close(conn)
 				continue
 			}
 
@@ -265,7 +264,7 @@ func (te *TunaExit) getService(serviceId byte) (*Service, error) {
 }
 
 func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId byte, portId byte) (*net.UDPConn, error) {
-	connKey := addr.String() + ":" + tuna.GetConnIdString(connId)
+	connKey := addr.String() + ":" + GetConnIdString(connId)
 	var conn *net.UDPConn
 	var x interface{}
 	var ok bool
@@ -279,7 +278,7 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId b
 		conn, err = net.DialUDP("udp", nil, &net.UDPAddr{Port: port})
 		if err != nil {
 			log.Println("Couldn't connect to local UDP port", port, "with error:", err)
-			tuna.Close(conn)
+			Close(conn)
 			return conn, err
 		}
 
@@ -292,13 +291,13 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId b
 				n, err := conn.Read(serviceBuffer)
 				if err != nil {
 					log.Println("Couldn't receive data from service:", err)
-					tuna.Close(conn)
+					Close(conn)
 					break
 				}
 				_, err = te.clientConn.WriteToUDP(append(prefix, serviceBuffer[:n]...), addr)
 				if err != nil {
 					log.Println("Couldn't send data to client:", err)
-					tuna.Close(conn)
+					Close(conn)
 					break
 				}
 			}
@@ -353,7 +352,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 		if err != nil {
 			log.Panicln(err)
 		}
-		tuna.UpdateMetadata(
+		UpdateMetadata(
 			serviceName,
 			serviceId,
 			service.TCP,
@@ -391,7 +390,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 		log.Panicln(err)
 	}
 
-	reverseMetadata := &tuna.Metadata{}
+	reverseMetadata := &Metadata{}
 	reverseMetadata.ServiceTCP = service.TCP
 	reverseMetadata.ServiceUDP = service.UDP
 
@@ -400,7 +399,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 		log.Panicln(err)
 	}
 
-	te.common = &tuna.Common{
+	te.common = &Common{
 		ServiceName:        "reverse",
 		MaxPrice:           maxPrice,
 		Wallet:             te.wallet,
@@ -436,7 +435,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				udpPorts = service.UDP
 			}
 
-			serviceMetadata := tuna.CreateRawMetadata(
+			serviceMetadata := CreateRawMetadata(
 				serviceId,
 				tcpPorts,
 				udpPorts,
@@ -465,15 +464,15 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			n, err := stream.Read(buf)
 			if err != nil {
 				log.Println("Couldn't read reverse metadata:", err)
-				tuna.Close(tcpConn)
+				Close(tcpConn)
 				break
 			}
 			reverseMetadataRaw := make([]byte, n)
 			copy(reverseMetadataRaw, buf)
-			reverseMetadata, err := tuna.ReadMetadata(string(reverseMetadataRaw))
+			reverseMetadata, err := ReadMetadata(string(reverseMetadataRaw))
 			if err != nil {
 				log.Println("Couldn't unmarshal metadata:", err)
-				tuna.Close(tcpConn)
+				Close(tcpConn)
 				break
 			}
 			te.reverseIp = tcpConn.RemoteAddr().(*net.TCPAddr).IP

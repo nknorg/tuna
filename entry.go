@@ -1,4 +1,4 @@
-package entry
+package tuna
 
 import (
 	"errors"
@@ -12,35 +12,34 @@ import (
 
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
-	"github.com/nknorg/tuna"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/trueinsider/smux"
 )
 
 const nanoPayUpdateInterval = time.Minute
 
-type ServiceInfo struct {
+type EntryServiceInfo struct {
 	MaxPrice string `json:"maxPrice"`
 }
 
-type Configuration struct {
-	DialTimeout          uint16                 `json:"DialTimeout"`
-	UDPTimeout           uint16                 `json:"UDPTimeout"`
-	Services             map[string]ServiceInfo `json:"Services"`
-	NanoPayFee           string                 `json:"NanoPayFee"`
-	Reverse              bool                   `json:"Reverse"`
-	ReverseTCP           int                    `json:"ReverseTCP"`
-	ReverseUDP           int                    `json:"ReverseUDP"`
-	ReversePrice         string                 `json:"ReversePrice"`
-	ReverseClaimInterval uint32                 `json:"ReverseClaimInterval"`
-	SubscriptionPrefix   string                 `json:"SubscriptionPrefix"`
-	SubscriptionDuration uint32                 `json:"SubscriptionDuration"`
-	SubscriptionFee      string                 `json:"SubscriptionFee"`
+type EntryConfiguration struct {
+	DialTimeout                 uint16                      `json:"DialTimeout"`
+	UDPTimeout                  uint16                      `json:"UDPTimeout"`
+	Services                    map[string]EntryServiceInfo `json:"Services"`
+	NanoPayFee                  string                      `json:"NanoPayFee"`
+	Reverse                     bool                        `json:"Reverse"`
+	ReverseTCP                  int                         `json:"ReverseTCP"`
+	ReverseUDP                  int                         `json:"ReverseUDP"`
+	ReversePrice                string                      `json:"ReversePrice"`
+	ReverseClaimInterval        uint32                      `json:"ReverseClaimInterval"`
+	ReverseSubscriptionPrefix   string                      `json:"ReverseSubscriptionPrefix"`
+	ReverseSubscriptionDuration uint32                      `json:"ReverseSubscriptionDuration"`
+	ReverseSubscriptionFee      string                      `json:"ReverseSubscriptionFee"`
 }
 
 type TunaEntry struct {
-	*tuna.Common
-	config       Configuration
+	*Common
+	config       EntryConfiguration
 	tcpListeners map[byte]*net.TCPListener
 	serviceConn  map[byte]*net.UDPConn
 	clientAddr   *cache.Cache
@@ -50,14 +49,14 @@ type TunaEntry struct {
 	bytesPaid    uint64
 }
 
-func NewTunaEntry(serviceName string, maxPrice common.Fixed64, reverse bool, config Configuration, wallet *WalletSDK) *TunaEntry {
+func NewTunaEntry(serviceName string, maxPrice common.Fixed64, reverse bool, config EntryConfiguration, wallet *WalletSDK) *TunaEntry {
 	te := &TunaEntry{
-		Common: &tuna.Common{
+		Common: &Common{
 			ServiceName:        serviceName,
 			MaxPrice:           maxPrice,
 			Wallet:             wallet,
 			DialTimeout:        config.DialTimeout,
-			SubscriptionPrefix: config.SubscriptionPrefix,
+			SubscriptionPrefix: config.ReverseSubscriptionPrefix,
 			Reverse:            reverse,
 		},
 		config:       config,
@@ -165,7 +164,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) {
 		return
 	}
 
-	serviceMetadata := tuna.CreateRawMetadata(
+	serviceMetadata := CreateRawMetadata(
 		0,
 		tcpPorts,
 		udpPorts,
@@ -206,10 +205,10 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) {
 
 func (te *TunaEntry) close() {
 	for _, listener := range te.tcpListeners {
-		tuna.Close(listener)
+		Close(listener)
 	}
 	for _, conn := range te.serviceConn {
-		tuna.Close(conn)
+		Close(conn)
 	}
 	te.closeChan <- struct{}{}
 }
@@ -246,7 +245,7 @@ func (te *TunaEntry) openStream(portId byte, force bool) (*smux.Stream, error) {
 func (te *TunaEntry) listenTCP(ports []int) ([]int, error) {
 	assignedPorts := make([]int, 0)
 	for i, _port := range ports {
-		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: _port})
+		listener, err := net.ListenTCP(string(TCP), &net.TCPAddr{Port: _port})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
@@ -262,7 +261,7 @@ func (te *TunaEntry) listenTCP(ports []int) ([]int, error) {
 				conn, err := listener.Accept()
 				if err != nil {
 					log.Println("Couldn't accept connection:", err)
-					tuna.Close(conn)
+					Close(conn)
 					if strings.Contains(err.Error(), "use of closed network connection") {
 						te.close()
 						return
@@ -273,12 +272,12 @@ func (te *TunaEntry) listenTCP(ports []int) ([]int, error) {
 				stream, err := te.openStream(portId, false)
 				if err != nil {
 					log.Println("Couldn't open stream:", err)
-					tuna.Close(conn)
+					Close(conn)
 					continue
 				}
 
-				go tuna.Pipe(stream, conn, nil)
-				go tuna.Pipe(conn, stream, &te.bytesIn)
+				go Pipe(stream, conn, nil)
+				go Pipe(conn, stream, &te.bytesIn)
 			}
 		}()
 	}
@@ -303,7 +302,7 @@ func (te *TunaEntry) listenUDP(ports []int) ([]int, error) {
 			data := <-serverReadChan
 
 			portId := data[3]
-			connId := tuna.GetConnIdString(data)
+			connId := GetConnIdString(data)
 
 			var serviceConn *net.UDPConn
 			var ok bool
@@ -327,7 +326,7 @@ func (te *TunaEntry) listenUDP(ports []int) ([]int, error) {
 	}()
 
 	for i, _port := range ports {
-		localConn, err := net.ListenUDP(string(tuna.UDP), &net.UDPAddr{Port: _port})
+		localConn, err := net.ListenUDP(string(UDP), &net.UDPAddr{Port: _port})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err

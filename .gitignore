@@ -2,3 +2,8 @@
 vendor
 *~
 .DS_Store
+entry
+exit
+wallet.json
+wallet.pswd
+config.json

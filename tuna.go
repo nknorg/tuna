@@ -398,16 +398,18 @@ func Close(conn io.Closer) {
 	}
 }
 
-func ReadJson(fileName string, value interface{}) {
+func ReadJson(fileName string, value interface{}) error {
 	file, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		log.Panicln("Couldn't read file:", err)
+		return fmt.Errorf("read file error: %v", err)
 	}
 
 	err = json.Unmarshal(file, value)
 	if err != nil {
-		log.Panicln("Couldn't unmarshal json:", err)
+		return fmt.Errorf("parse json error: %v", err)
 	}
+
+	return nil
 }
 
 func GetConnIdString(data []byte) string {
@@ -429,12 +431,14 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 	pswd, _ := LoadPassword(passwordFile)
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		if len(pswd) == 0 {
-			pswd = base64.StdEncoding.EncodeToString(util.RandomBytes(15))
+			pswd = base64.StdEncoding.EncodeToString(util.RandomBytes(24))
+			log.Println("Creating wallet.pswd")
 			err = ioutil.WriteFile(passwordFile, []byte(pswd), 0644)
 			if err != nil {
 				return nil, fmt.Errorf("save password to file error: %v", err)
 			}
 		}
+		log.Println("Creating wallet.json")
 		wallet, err = vault.NewWallet(walletFile, []byte(pswd), true)
 		if err != nil {
 			return nil, fmt.Errorf("create wallet error: %v", err)

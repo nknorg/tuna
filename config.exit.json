@@ -1,0 +1,18 @@
+{
+  "ListenTCP": 30010,
+  "ListenUDP": 30011,
+  "Reverse": true,
+  "ReverseRandomPorts": true,
+  "ReverseMaxPrice": "0",
+  "DialTimeout": 30,
+  "UDPTimeout": 60,
+  "ClaimInterval": 3600,
+  "SubscriptionDuration": 180,
+  "SubscriptionFee": "0",
+  "Services": {
+    "httpproxy": {
+      "address": "127.0.0.1",
+      "price": "0.001"
+    }
+  }
+}

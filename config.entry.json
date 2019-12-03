@@ -1,0 +1,17 @@
+{
+  "DialTimeout": 30,
+  "UDPTimeout": 60,
+  "Services": {
+    "httpproxy": {
+      "maxPrice": "0.001"
+    }
+  },
+  "NanoPayFee": "0",
+  "Reverse": false,
+  "ReverseTCP": 30020,
+  "ReverseUDP": 30021,
+  "ReversePrice": "0.001",
+  "ReverseClaimInterval": 3600,
+  "ReverseSubscriptionDuration": 180,
+  "ReverseSubscriptionFee": "0"
+}
