@@ -14,11 +14,10 @@ import (
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/transaction"
-	"github.com/patrickmn/go-cache"
-	"github.com/rdegges/go-ipify"
-	"github.com/trueinsider/smux"
-
 	"github.com/nknorg/tuna"
+	cache "github.com/patrickmn/go-cache"
+	ipify "github.com/rdegges/go-ipify"
+	"github.com/trueinsider/smux"
 )
 
 type ServiceInfo struct {
@@ -34,7 +33,6 @@ type Configuration struct {
 	ReverseMaxPrice      string                 `json:"ReverseMaxPrice"`
 	DialTimeout          uint16                 `json:"DialTimeout"`
 	UDPTimeout           uint16                 `json:"UDPTimeout"`
-	Seed                 string                 `json:"Seed"`
 	SubscriptionPrefix   string                 `json:"SubscriptionPrefix"`
 	SubscriptionDuration uint32                 `json:"SubscriptionDuration"`
 	SubscriptionFee      string                 `json:"SubscriptionFee"`
@@ -85,7 +83,10 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
 	errChan := make(chan error)
-	npc := te.wallet.NewNanoPayClaimer(claimInterval, errChan)
+	npc, err := te.wallet.NewNanoPayClaimer(claimInterval, errChan)
+	if err != nil {
+		log.Panicln(err)
+	}
 	lastComputed := common.Fixed64(0)
 	lastClaimed := common.Fixed64(0)
 	lastUpdate := time.Now()

@@ -1,15 +1,11 @@
 package main
 
 import (
-	"encoding/hex"
 	"fmt"
 	"log"
 
 	. "github.com/nknorg/nkn-sdk-go"
-	"github.com/nknorg/nkn/crypto"
-	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna"
-
 	. "github.com/nknorg/tuna/exit"
 )
 
@@ -19,11 +15,9 @@ func main() {
 
 	Init()
 
-	seed, _ := hex.DecodeString(config.Seed)
-	privateKey := crypto.GetPrivateKeyFromSeed(seed)
-	account, err := vault.NewAccountWithPrivatekey(privateKey)
+	account, err := tuna.LoadOrCreateAccount("wallet.json", "wallet.pswd")
 	if err != nil {
-		log.Panicln("Couldn't load account:", err)
+		log.Panicln("Load or create account error:", err)
 	}
 
 	wallet := NewWalletSDK(account)

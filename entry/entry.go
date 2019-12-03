@@ -13,7 +13,7 @@ import (
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
-	"github.com/patrickmn/go-cache"
+	cache "github.com/patrickmn/go-cache"
 	"github.com/trueinsider/smux"
 )
 
@@ -24,20 +24,18 @@ type ServiceInfo struct {
 }
 
 type Configuration struct {
-	DialTimeout uint16                 `json:"DialTimeout"`
-	UDPTimeout  uint16                 `json:"UDPTimeout"`
-	Seed        string                 `json:"Seed"`
-	Services    map[string]ServiceInfo `json:"Services"`
-	NanoPayFee  string                 `json:"NanoPayFee"`
-
-	Reverse              bool   `json:"Reverse"`
-	ReverseTCP           int    `json:"ReverseTCP"`
-	ReverseUDP           int    `json:"ReverseUDP"`
-	ReversePrice         string `json:"ReversePrice"`
-	ReverseClaimInterval uint32 `json:"ReverseClaimInterval"`
-	SubscriptionPrefix   string `json:"SubscriptionPrefix"`
-	SubscriptionDuration uint32 `json:"SubscriptionDuration"`
-	SubscriptionFee      string `json:"SubscriptionFee"`
+	DialTimeout          uint16                 `json:"DialTimeout"`
+	UDPTimeout           uint16                 `json:"UDPTimeout"`
+	Services             map[string]ServiceInfo `json:"Services"`
+	NanoPayFee           string                 `json:"NanoPayFee"`
+	Reverse              bool                   `json:"Reverse"`
+	ReverseTCP           int                    `json:"ReverseTCP"`
+	ReverseUDP           int                    `json:"ReverseUDP"`
+	ReversePrice         string                 `json:"ReversePrice"`
+	ReverseClaimInterval uint32                 `json:"ReverseClaimInterval"`
+	SubscriptionPrefix   string                 `json:"SubscriptionPrefix"`
+	SubscriptionDuration uint32                 `json:"SubscriptionDuration"`
+	SubscriptionFee      string                 `json:"SubscriptionFee"`
 }
 
 type TunaEntry struct {

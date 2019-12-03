@@ -1,20 +1,16 @@
 package main
 
 import (
-	"encoding/hex"
 	"log"
 	"net"
 	"strings"
 
 	. "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
-	"github.com/nknorg/nkn/crypto"
-	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna"
+	. "github.com/nknorg/tuna/entry"
 	ipify "github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
-
-	. "github.com/nknorg/tuna/entry"
 )
 
 func main() {
@@ -23,11 +19,9 @@ func main() {
 	config := Configuration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	tuna.ReadJson("config.json", &config)
 
-	seed, _ := hex.DecodeString(config.Seed)
-	privateKey := crypto.GetPrivateKeyFromSeed(seed)
-	account, err := vault.NewAccountWithPrivatekey(privateKey)
+	account, err := tuna.LoadOrCreateAccount("wallet.json", "wallet.pswd")
 	if err != nil {
-		log.Panicln("Couldn't load account:", err)
+		log.Panicln("Load or create account error:", err)
 	}
 
 	wallet := NewWalletSDK(account)
