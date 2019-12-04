@@ -475,7 +475,7 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 		}
 	} else {
 		if len(pswd) == 0 {
-			return nil, fmt.Errorf("cannot load password from %s", passwordFile)
+			return nil, fmt.Errorf("cannot load password from file %s", passwordFile)
 		}
 		wallet, err = vault.OpenWallet(walletFile, []byte(pswd))
 		if err != nil {
