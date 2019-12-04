@@ -25,6 +25,7 @@ type ExitServiceInfo struct {
 }
 
 type ExitConfiguration struct {
+	BeneficiaryAddr      string                     `json:"BeneficiaryAddr"`
 	ListenTCP            int                        `json:"ListenTCP"`
 	ListenUDP            int                        `json:"ListenUDP"`
 	Reverse              bool                       `json:"Reverse"`
@@ -39,14 +40,8 @@ type ExitConfiguration struct {
 	Services             map[string]ExitServiceInfo `json:"Services"`
 }
 
-type Service struct {
-	Name string `json:"name"`
-	TCP  []int  `json:"tcp"`
-	UDP  []int  `json:"udp"`
-}
-
 type TunaExit struct {
-	config           ExitConfiguration
+	config           *ExitConfiguration
 	wallet           *WalletSDK
 	services         []Service
 	serviceConn      *cache.Cache
@@ -58,7 +53,7 @@ type TunaExit struct {
 	onEntryConnected func()
 }
 
-func NewTunaExit(config ExitConfiguration, services []Service, wallet *WalletSDK) *TunaExit {
+func NewTunaExit(config *ExitConfiguration, services []Service, wallet *WalletSDK) *TunaExit {
 	return &TunaExit{
 		config:      config,
 		wallet:      wallet,
@@ -82,7 +77,7 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
 	errChan := make(chan error)
-	npc, err := te.wallet.NewNanoPayClaimer(claimInterval, errChan)
+	npc, err := te.wallet.NewNanoPayClaimer(claimInterval, errChan, te.config.BeneficiaryAddr)
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -348,19 +343,16 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 		if err != nil {
 			log.Panicln(err)
 		}
-		service, err := te.getService(serviceId)
-		if err != nil {
-			log.Panicln(err)
-		}
 		UpdateMetadata(
 			serviceName,
 			serviceId,
-			service.TCP,
-			service.UDP,
+			nil,
+			nil,
 			ip,
 			tcpPort,
 			udpPort,
 			serviceInfo.Price,
+			te.config.BeneficiaryAddr,
 			te.config.SubscriptionPrefix,
 			te.config.SubscriptionDuration,
 			te.config.SubscriptionFee,
@@ -400,7 +392,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 	}
 
 	te.common = &Common{
-		ServiceName:        "reverse",
+		Service:            &Service{Name: "reverse"},
 		MaxPrice:           maxPrice,
 		Wallet:             te.wallet,
 		DialTimeout:        te.config.DialTimeout,
@@ -443,6 +435,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				-1,
 				udpPort,
 				"",
+				te.config.BeneficiaryAddr,
 			)
 
 			tcpConn, _ = te.common.GetServerTCPConn(false)

@@ -1,7 +1,8 @@
 {
+  "BeneficiaryAddr": "",
   "ListenTCP": 30010,
   "ListenUDP": 30011,
-  "Reverse": true,
+  "Reverse": false,
   "ReverseRandomPorts": true,
   "ReverseMaxPrice": "0",
   "DialTimeout": 30,

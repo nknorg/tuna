@@ -36,18 +36,25 @@ const UDP Protocol = "udp"
 
 const DefaultSubscriptionPrefix string = "tuna+1."
 
+type Service struct {
+	Name string `json:"name"`
+	TCP  []int  `json:"tcp"`
+	UDP  []int  `json:"udp"`
+}
+
 type Metadata struct {
-	IP         string `json:"ip"`
-	TCPPort    int    `json:"tcpPort"`
-	UDPPort    int    `json:"udpPort"`
-	ServiceId  byte   `json:"serviceId"`
-	ServiceTCP []int  `json:"serviceTcp"`
-	ServiceUDP []int  `json:"serviceUdp"`
-	Price      string `json:"price"`
+	IP              string `json:"ip"`
+	TCPPort         int    `json:"tcpPort"`
+	UDPPort         int    `json:"udpPort"`
+	ServiceId       byte   `json:"serviceId"`
+	ServiceTCP      []int  `json:"serviceTcp,omitempty"`
+	ServiceUDP      []int  `json:"serviceUdp,omitempty"`
+	Price           string `json:"price,omitempty"`
+	BeneficiaryAddr string `json:"beneficiaryAddr,omitempty"`
 }
 
 type Common struct {
-	ServiceName        string
+	Service            *Service
 	MaxPrice           common.Fixed64
 	Wallet             *WalletSDK
 	DialTimeout        uint16
@@ -157,8 +164,8 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 }
 
 func (c *Common) UpdateServerConn() bool {
-	hasTCP := len(c.Metadata.ServiceTCP) > 0
-	hasUDP := len(c.Metadata.ServiceUDP) > 0
+	hasTCP := len(c.Service.TCP) > 0
+	hasUDP := len(c.Service.UDP) > 0
 
 	var err error
 	if hasTCP || c.ReverseMetadata != nil {
@@ -200,7 +207,7 @@ func (c *Common) UpdateServerConn() bool {
 
 func (c *Common) CreateServerConn(force bool) error {
 	if !c.Reverse && (c.connected == false || force) {
-		topic := c.SubscriptionPrefix + c.ServiceName
+		topic := c.SubscriptionPrefix + c.Service.Name
 	RandomSubscriber:
 		for {
 			c.PaymentReceiver = ""
@@ -209,7 +216,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				return err
 			}
 			if subscribersCount == 0 {
-				return errors.New("there is no service providers for " + c.ServiceName)
+				return errors.New("there is no service providers for " + c.Service.Name)
 			}
 			offset := uint32(rand.Intn(int(subscribersCount)))
 			subscribers, _, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
@@ -218,33 +225,38 @@ func (c *Common) CreateServerConn(force bool) error {
 			}
 
 			for subscriber, metadataString := range subscribers {
-				_, publicKey, _, err := address.ParseClientAddress(subscriber)
-				if err != nil {
-					log.Println(err)
-					continue RandomSubscriber
-				}
-
-				pubKey, err := crypto.NewPubKeyFromBytes(publicKey)
-				if err != nil {
-					log.Println(err)
-					continue RandomSubscriber
-				}
-
-				programHash, err := program.CreateProgramHash(pubKey)
-				if err != nil {
-					log.Println(err)
-					continue RandomSubscriber
-				}
-
-				paymentReceiver, err := programHash.ToAddress()
-				if err != nil {
-					log.Println(err)
-					continue RandomSubscriber
-				}
-
-				c.PaymentReceiver = paymentReceiver
 				if !c.SetMetadata(metadataString) {
 					continue RandomSubscriber
+				}
+
+				if len(c.Metadata.BeneficiaryAddr) > 0 {
+					c.PaymentReceiver = c.Metadata.BeneficiaryAddr
+				} else {
+					_, publicKey, _, err := address.ParseClientAddress(subscriber)
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
+					}
+
+					pubKey, err := crypto.NewPubKeyFromBytes(publicKey)
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
+					}
+
+					programHash, err := program.CreateProgramHash(pubKey)
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
+					}
+
+					address, err := programHash.ToAddress()
+					if err != nil {
+						log.Println(err)
+						continue RandomSubscriber
+					}
+
+					c.PaymentReceiver = address
 				}
 
 				price, err := common.StringToFixed64(c.Metadata.Price)
@@ -289,15 +301,17 @@ func CreateRawMetadata(
 	tcpPort int,
 	udpPort int,
 	price string,
+	beneficiaryAddr string,
 ) []byte {
 	metadata := Metadata{
-		IP:         ip,
-		TCPPort:    tcpPort,
-		UDPPort:    udpPort,
-		ServiceId:  serviceId,
-		ServiceTCP: serviceTCP,
-		ServiceUDP: serviceUDP,
-		Price:      price,
+		IP:              ip,
+		TCPPort:         tcpPort,
+		UDPPort:         udpPort,
+		ServiceId:       serviceId,
+		ServiceTCP:      serviceTCP,
+		ServiceUDP:      serviceUDP,
+		Price:           price,
+		BeneficiaryAddr: beneficiaryAddr,
 	}
 	metadataRaw, err := json.Marshal(metadata)
 	if err != nil {
@@ -315,6 +329,7 @@ func UpdateMetadata(
 	tcpPort int,
 	udpPort int,
 	price string,
+	beneficiaryAddr string,
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
 	subscriptionFee string,
@@ -328,6 +343,7 @@ func UpdateMetadata(
 		tcpPort,
 		udpPort,
 		price,
+		beneficiaryAddr,
 	)
 	topic := subscriptionPrefix + serviceName
 	go func() {
@@ -344,7 +360,11 @@ func UpdateMetadata(
 				waitTime = time.Second
 				log.Println("Couldn't subscribe to topic", topic, "because:", err)
 			} else {
-				waitTime = time.Duration(subscriptionDuration) * config.ConsensusDuration
+				if subscriptionDuration > 3 {
+					waitTime = time.Duration(subscriptionDuration-3) * config.ConsensusDuration
+				} else {
+					waitTime = config.ConsensusDuration
+				}
 				log.Println("Subscribed to topic", topic, "successfully:", txid)
 			}
 

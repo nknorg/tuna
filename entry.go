@@ -28,6 +28,7 @@ type EntryConfiguration struct {
 	Services                    map[string]EntryServiceInfo `json:"Services"`
 	NanoPayFee                  string                      `json:"NanoPayFee"`
 	Reverse                     bool                        `json:"Reverse"`
+	ReverseBeneficiaryAddr      string                      `json:"ReverseBeneficiaryAddr"`
 	ReverseTCP                  int                         `json:"ReverseTCP"`
 	ReverseUDP                  int                         `json:"ReverseUDP"`
 	ReversePrice                string                      `json:"ReversePrice"`
@@ -39,20 +40,21 @@ type EntryConfiguration struct {
 
 type TunaEntry struct {
 	*Common
-	config       EntryConfiguration
-	tcpListeners map[byte]*net.TCPListener
-	serviceConn  map[byte]*net.UDPConn
-	clientAddr   *cache.Cache
-	Session      *smux.Session
-	closeChan    chan struct{}
-	bytesIn      uint64
-	bytesPaid    uint64
+	config             *EntryConfiguration
+	tcpListeners       map[byte]*net.TCPListener
+	serviceConn        map[byte]*net.UDPConn
+	clientAddr         *cache.Cache
+	Session            *smux.Session
+	closeChan          chan struct{}
+	bytesIn            uint64
+	bytesPaid          uint64
+	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(serviceName string, maxPrice common.Fixed64, reverse bool, config EntryConfiguration, wallet *WalletSDK) *TunaEntry {
+func NewTunaEntry(service *Service, maxPrice common.Fixed64, reverse bool, config *EntryConfiguration, wallet *WalletSDK) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
-			ServiceName:        serviceName,
+			Service:            service,
 			MaxPrice:           maxPrice,
 			Wallet:             wallet,
 			DialTimeout:        config.DialTimeout,
@@ -78,12 +80,12 @@ func (te *TunaEntry) Start() {
 			continue
 		}
 
-		_, err := te.listenTCP(te.Metadata.ServiceTCP)
+		_, err := te.listenTCP(te.Service.TCP)
 		if err != nil {
 			te.close()
 			return
 		}
-		_, err = te.listenUDP(te.Metadata.ServiceUDP)
+		_, err = te.listenUDP(te.Service.UDP)
 		if err != nil {
 			te.close()
 			return
@@ -172,6 +174,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) {
 		-1,
 		-1,
 		"",
+		te.config.ReverseBeneficiaryAddr,
 	)
 	_, err = stream.Write(serviceMetadata)
 	if err != nil {
