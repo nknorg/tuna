@@ -73,6 +73,7 @@ func (te *TunaExit) getServiceId(serviceName string) (byte, error) {
 }
 
 func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
+	bytesIn := make([]uint64, 256)
 	bytesOut := make([]uint64, 256)
 
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
@@ -162,9 +163,10 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 				}
 
 				totalCost := common.Fixed64(0)
-				for i := range bytesOut {
-					bytes := atomic.LoadUint64(&bytesOut[i])
-					if bytes == 0 {
+				for i := range bytesIn {
+					in := atomic.LoadUint64(&bytesIn[i])
+					out := atomic.LoadUint64(&bytesOut[i])
+					if in == 0 && out == 0 {
 						continue
 					}
 					service, err := te.getService(byte(i))
@@ -172,11 +174,11 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 						continue
 					}
 					serviceInfo := te.config.Services[service.Name]
-					price, err := common.StringToFixed64(serviceInfo.Price)
+					entryToExitPrice, exitToEntryPrice, err := ParsePrice(serviceInfo.Price)
 					if err != nil {
 						continue
 					}
-					totalCost += price * common.Fixed64(bytes) / 1048576
+					totalCost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
 				}
 
 				lastComputed = totalCost
@@ -185,6 +187,7 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 			}(stream)
 			continue
 		}
+
 		serviceId := metadata[0]
 		portId := int(metadata[1])
 
@@ -221,7 +224,7 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 			continue
 		}
 
-		go Pipe(conn, stream, nil)
+		go Pipe(conn, stream, &bytesIn[serviceId])
 		go Pipe(stream, conn, &bytesOut[serviceId])
 	}
 
@@ -392,12 +395,13 @@ func (te *TunaExit) StartReverse(serviceName string) {
 	}
 
 	te.common = &Common{
-		Service:            &Service{Name: "reverse"},
-		MaxPrice:           maxPrice,
-		Wallet:             te.wallet,
-		DialTimeout:        te.config.DialTimeout,
-		ReverseMetadata:    reverseMetadata,
-		SubscriptionPrefix: te.config.SubscriptionPrefix,
+		Service:             &Service{Name: DefaultReverseServiceName},
+		EntryToExitMaxPrice: maxPrice,
+		ExitToEntryMaxPrice: maxPrice,
+		Wallet:              te.wallet,
+		DialTimeout:         te.config.DialTimeout,
+		ReverseMetadata:     reverseMetadata,
+		SubscriptionPrefix:  te.config.SubscriptionPrefix,
 	}
 
 	go func() {

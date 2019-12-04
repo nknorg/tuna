@@ -16,8 +16,6 @@ import (
 	"github.com/trueinsider/smux"
 )
 
-const nanoPayUpdateInterval = time.Minute
-
 type EntryServiceInfo struct {
 	MaxPrice string `json:"maxPrice"`
 }
@@ -47,19 +45,22 @@ type TunaEntry struct {
 	Session            *smux.Session
 	closeChan          chan struct{}
 	bytesIn            uint64
-	bytesPaid          uint64
+	bytesInPaid        uint64
+	bytesOut           uint64
+	bytesOutPaid       uint64
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, maxPrice common.Fixed64, reverse bool, config *EntryConfiguration, wallet *WalletSDK) *TunaEntry {
+func NewTunaEntry(service *Service, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *WalletSDK) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
-			Service:            service,
-			MaxPrice:           maxPrice,
-			Wallet:             wallet,
-			DialTimeout:        config.DialTimeout,
-			SubscriptionPrefix: config.ReverseSubscriptionPrefix,
-			Reverse:            reverse,
+			Service:             service,
+			EntryToExitMaxPrice: entryToExitMaxPrice,
+			ExitToEntryMaxPrice: exitToEntryMaxPrice,
+			Wallet:              wallet,
+			DialTimeout:         config.DialTimeout,
+			SubscriptionPrefix:  config.ReverseSubscriptionPrefix,
+			Reverse:             config.Reverse,
 		},
 		config:       config,
 		tcpListeners: make(map[byte]*net.TCPListener),
@@ -114,9 +115,11 @@ func (te *TunaEntry) Start() {
 		go func() {
 			var np *NanoPay
 			for {
-				time.Sleep(nanoPayUpdateInterval)
+				time.Sleep(DefaultNanoPayUpdateInterval)
 				bytesIn := atomic.LoadUint64(&te.bytesIn)
-				if bytesIn == te.bytesPaid {
+				bytesOut := atomic.LoadUint64(&te.bytesOut)
+				delta := te.ExitToEntryPrice*common.Fixed64(bytesIn-te.bytesInPaid)/TrafficUnit + te.EntryToExitPrice*common.Fixed64(bytesOut-te.bytesOutPaid)/TrafficUnit
+				if delta == 0 {
 					continue
 				}
 				if np == nil || np.Address() != te.PaymentReceiver {
@@ -126,7 +129,6 @@ func (te *TunaEntry) Start() {
 						continue
 					}
 				}
-				delta := te.Price * common.Fixed64(bytesIn-te.bytesPaid) / 1048576
 				tx, err := np.IncrementAmount(delta.String())
 				if err != nil {
 					continue
@@ -142,7 +144,8 @@ func (te *TunaEntry) Start() {
 				}
 				n, err := stream.Write(txData)
 				if n == len(txData) && err == nil {
-					te.bytesPaid = bytesIn
+					te.bytesInPaid = bytesIn
+					te.bytesOutPaid = bytesOut
 				}
 				stream.Close()
 			}
@@ -279,7 +282,7 @@ func (te *TunaEntry) listenTCP(ports []int) ([]int, error) {
 					continue
 				}
 
-				go Pipe(stream, conn, nil)
+				go Pipe(stream, conn, &te.bytesOut)
 				go Pipe(conn, stream, &te.bytesIn)
 			}
 		}()

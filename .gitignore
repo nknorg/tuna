@@ -4,6 +4,8 @@ vendor
 .DS_Store
 entry
 exit
+!bin/entry
+!bin/exit
 wallet.json
 wallet.pswd
 config.json

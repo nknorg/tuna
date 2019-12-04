@@ -31,10 +31,14 @@ import (
 
 type Protocol string
 
-const TCP Protocol = "tcp"
-const UDP Protocol = "udp"
-
-const DefaultSubscriptionPrefix string = "tuna+1."
+const (
+	TCP                          Protocol = "tcp"
+	UDP                          Protocol = "udp"
+	DefaultNanoPayUpdateInterval          = time.Minute
+	DefaultSubscriptionPrefix             = "tuna+1."
+	DefaultReverseServiceName             = "reverse"
+	TrafficUnit                           = 1024 * 1024
+)
 
 type Service struct {
 	Name string `json:"name"`
@@ -54,17 +58,18 @@ type Metadata struct {
 }
 
 type Common struct {
-	Service            *Service
-	MaxPrice           common.Fixed64
-	Wallet             *WalletSDK
-	DialTimeout        uint16
-	SubscriptionPrefix string
-	Reverse            bool
-	ReverseMetadata    *Metadata
-
-	Price           common.Fixed64
-	PaymentReceiver string
-	Metadata        *Metadata
+	Service             *Service
+	EntryToExitMaxPrice common.Fixed64
+	ExitToEntryMaxPrice common.Fixed64
+	Wallet              *WalletSDK
+	DialTimeout         uint16
+	SubscriptionPrefix  string
+	Reverse             bool
+	ReverseMetadata     *Metadata
+	EntryToExitPrice    common.Fixed64
+	ExitToEntryPrice    common.Fixed64
+	PaymentReceiver     string
+	Metadata            *Metadata
 
 	connected    bool
 	tcpConn      net.Conn
@@ -259,16 +264,23 @@ func (c *Common) CreateServerConn(force bool) error {
 					c.PaymentReceiver = address
 				}
 
-				price, err := common.StringToFixed64(c.Metadata.Price)
+				entryToExitPrice, exitToEntryPrice, err := ParsePrice(c.Metadata.Price)
 				if err != nil {
 					log.Println(err)
 					continue RandomSubscriber
 				}
-				if price > c.MaxPrice {
-					log.Printf("Price %s is bigger than max allowed price %s\n", price.String(), c.MaxPrice.String())
+
+				if entryToExitPrice > c.EntryToExitMaxPrice {
+					log.Printf("Entry to exit price %s is bigger than max allowed price %s\n", entryToExitPrice.String(), c.EntryToExitMaxPrice.String())
 					continue RandomSubscriber
 				}
-				c.Price = price
+				if exitToEntryPrice > c.ExitToEntryMaxPrice {
+					log.Printf("Exit to entry price %s is bigger than max allowed price %s\n", exitToEntryPrice.String(), c.ExitToEntryMaxPrice.String())
+					continue RandomSubscriber
+				}
+
+				c.EntryToExitPrice = entryToExitPrice
+				c.ExitToEntryPrice = exitToEntryPrice
 
 				if c.ReverseMetadata != nil {
 					c.Metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
@@ -403,9 +415,7 @@ func copyBuffer(dest io.Writer, src io.Reader, written *uint64) error {
 func Pipe(dest io.WriteCloser, src io.ReadCloser, written *uint64) {
 	defer dest.Close()
 	defer src.Close()
-	if err := copyBuffer(dest, src, written); err != nil {
-		//log.Println("Pipe closed with error:", err)
-	}
+	copyBuffer(dest, src, written)
 }
 
 func Close(conn io.Closer) {
