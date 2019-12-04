@@ -81,15 +81,22 @@ func (te *TunaEntry) Start() {
 			continue
 		}
 
-		_, err := te.listenTCP(te.Service.TCP)
+		tcpPorts, err := te.listenTCP(te.Service.TCP)
 		if err != nil {
 			te.close()
 			return
 		}
-		_, err = te.listenUDP(te.Service.UDP)
+		if len(tcpPorts) > 0 {
+			log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
+		}
+
+		udpPorts, err := te.listenUDP(te.Service.UDP)
 		if err != nil {
 			te.close()
 			return
+		}
+		if len(udpPorts) > 0 {
+			log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
 		}
 
 		go func() {
@@ -106,7 +113,6 @@ func (te *TunaEntry) Start() {
 				_, err = session.AcceptStream()
 				if err != nil {
 					log.Println("Close connection:", err)
-					te.close()
 					return
 				}
 			}
