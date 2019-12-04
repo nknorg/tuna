@@ -7,6 +7,7 @@ import (
 
 	flags "github.com/jessevdk/go-flags"
 	nknSdk "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 )
 
@@ -36,6 +37,13 @@ func main() {
 	}
 	if len(opts.BeneficiaryAddr) > 0 {
 		config.BeneficiaryAddr = opts.BeneficiaryAddr
+	}
+
+	if len(config.BeneficiaryAddr) > 0 {
+		_, err = common.ToScriptHash(config.BeneficiaryAddr)
+		if err != nil {
+			log.Panicln("Invalid beneficiary address:", err)
+		}
 	}
 
 	account, err := tuna.LoadOrCreateAccount(opts.WalletFile, opts.PasswordFile)
