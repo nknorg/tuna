@@ -80,7 +80,7 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 	errChan := make(chan error)
 	npc, err := te.wallet.NewNanoPayClaimer(claimInterval, errChan, te.config.BeneficiaryAddr)
 	if err != nil {
-		log.Panicln(err)
+		log.Fatalln(err)
 	}
 	lastComputed := common.Fixed64(0)
 	lastClaimed := common.Fixed64(0)
@@ -344,7 +344,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 	for serviceName, serviceInfo := range te.config.Services {
 		serviceId, err := te.getServiceId(serviceName)
 		if err != nil {
-			log.Panicln(err)
+			log.Fatalln(err)
 		}
 		UpdateMetadata(
 			serviceName,
@@ -367,7 +367,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 func (te *TunaExit) Start() {
 	ip, err := ipify.GetIp()
 	if err != nil {
-		log.Panicln("Couldn't get IP:", err)
+		log.Fatalln("Couldn't get IP:", err)
 	}
 	te.listenTCP(te.config.ListenTCP)
 	te.listenUDP(te.config.ListenUDP)
@@ -378,11 +378,11 @@ func (te *TunaExit) Start() {
 func (te *TunaExit) StartReverse(serviceName string) {
 	serviceId, err := te.getServiceId(serviceName)
 	if err != nil {
-		log.Panicln(err)
+		log.Fatalln(err)
 	}
 	service, err := te.getService(serviceId)
 	if err != nil {
-		log.Panicln(err)
+		log.Fatalln(err)
 	}
 
 	reverseMetadata := &Metadata{}
@@ -391,7 +391,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 
 	maxPrice, err := common.StringToFixed64(te.config.ReverseMaxPrice)
 	if err != nil {
-		log.Panicln(err)
+		log.Fatalln(err)
 	}
 
 	te.common = &Common{

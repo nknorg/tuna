@@ -327,7 +327,7 @@ func CreateRawMetadata(
 	}
 	metadataRaw, err := json.Marshal(metadata)
 	if err != nil {
-		log.Panicln(err)
+		log.Fatalln(err)
 	}
 	return metadataRaw
 }

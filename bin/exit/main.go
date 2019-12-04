@@ -25,7 +25,7 @@ func main() {
 		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		}
-		log.Panicln(err)
+		log.Fatalln(err)
 	}
 
 	nknSdk.Init()
@@ -33,7 +33,7 @@ func main() {
 	config := &tuna.ExitConfiguration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	err = tuna.ReadJson(opts.ConfigFile, config)
 	if err != nil {
-		log.Panicln("Load config file error:", err)
+		log.Fatalln("Load config file error:", err)
 	}
 	if len(opts.BeneficiaryAddr) > 0 {
 		config.BeneficiaryAddr = opts.BeneficiaryAddr
@@ -42,13 +42,13 @@ func main() {
 	if len(config.BeneficiaryAddr) > 0 {
 		_, err = common.ToScriptHash(config.BeneficiaryAddr)
 		if err != nil {
-			log.Panicln("Invalid beneficiary address:", err)
+			log.Fatalln("Invalid beneficiary address:", err)
 		}
 	}
 
 	account, err := tuna.LoadOrCreateAccount(opts.WalletFile, opts.PasswordFile)
 	if err != nil {
-		log.Panicln("Load or create account error:", err)
+		log.Fatalln("Load or create account error:", err)
 	}
 
 	wallet := nknSdk.NewWalletSDK(account)
@@ -56,7 +56,7 @@ func main() {
 	var services []tuna.Service
 	err = tuna.ReadJson(opts.ServicesFile, &services)
 	if err != nil {
-		log.Panicln("Load service file error:", err)
+		log.Fatalln("Load service file error:", err)
 	}
 
 	if config.Reverse {

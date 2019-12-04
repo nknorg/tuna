@@ -28,7 +28,7 @@ func main() {
 		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		}
-		log.Panicln(err)
+		log.Fatalln(err)
 	}
 
 	nknSdk.Init()
@@ -36,7 +36,7 @@ func main() {
 	config := &tuna.EntryConfiguration{ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	err = tuna.ReadJson(opts.ConfigFile, config)
 	if err != nil {
-		log.Panicln("Load config error:", err)
+		log.Fatalln("Load config error:", err)
 	}
 	if len(opts.BeneficiaryAddr) > 0 {
 		config.ReverseBeneficiaryAddr = opts.BeneficiaryAddr
@@ -45,13 +45,13 @@ func main() {
 	if len(config.ReverseBeneficiaryAddr) > 0 {
 		_, err = common.ToScriptHash(config.ReverseBeneficiaryAddr)
 		if err != nil {
-			log.Panicln("Invalid beneficiary address:", err)
+			log.Fatalln("Invalid beneficiary address:", err)
 		}
 	}
 
 	account, err := tuna.LoadOrCreateAccount(opts.WalletFile, opts.PasswordFile)
 	if err != nil {
-		log.Panicln("Load or create account error:", err)
+		log.Fatalln("Load or create account error:", err)
 	}
 
 	wallet := nknSdk.NewWalletSDK(account)
@@ -59,17 +59,17 @@ func main() {
 	if config.Reverse {
 		ip, err := ipify.GetIp()
 		if err != nil {
-			log.Panicln("Couldn't get IP:", err)
+			log.Fatalln("Couldn't get IP:", err)
 		}
 
 		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: config.ReverseTCP})
 		if err != nil {
-			log.Panicln("Couldn't bind listener:", err)
+			log.Fatalln("Couldn't bind listener:", err)
 		}
 
 		udpConn, err := net.ListenUDP(string(tuna.UDP), &net.UDPAddr{Port: config.ReverseUDP})
 		if err != nil {
-			log.Panicln("Couldn't bind listener:", err)
+			log.Fatalln("Couldn't bind listener:", err)
 		}
 
 		udpReadChans := make(map[string]chan []byte)
@@ -182,14 +182,14 @@ func main() {
 		var services []tuna.Service
 		err = tuna.ReadJson(opts.ServicesFile, &services)
 		if err != nil {
-			log.Panicln("Load service file error:", err)
+			log.Fatalln("Load service file error:", err)
 		}
 
 	service:
 		for serviceName, serviceInfo := range config.Services {
 			entryToExitMaxPrice, exitToEntryMaxPrice, err := tuna.ParsePrice(serviceInfo.MaxPrice)
 			if err != nil {
-				log.Panicln(err)
+				log.Fatalln(err)
 			}
 			for _, service := range services {
 				if service.Name == serviceName {
@@ -197,7 +197,7 @@ func main() {
 					continue service
 				}
 			}
-			log.Panicln("Service", serviceName, "not found in service file")
+			log.Fatalln("Service", serviceName, "not found in service file")
 		}
 	}
 

@@ -22,6 +22,7 @@ Edit `config.entry.json` with your data:
 * `Services` services you want to use  
 * `NanoPayFee` fee used for nano pay transaction  
 * `Reverse` should be used to provide reverse tunnel for those who don't have public IP  
+* `ReverseBeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
 * `ReverseTCP` TCP port to listen for connections  
 * `ReverseUDP` UDP port to listen for connections  
 * `ReversePrice` price for reverse connections  
@@ -35,7 +36,7 @@ Start tuna entry:
 ./entry
 ```
 
-Then you can start using configured services as if they're on your local machine (e.g. `127.0.0.1:8888` for HTTP proxy)
+Then you can start using configured services as if they're on your local machine (e.g. `127.0.0.1:30080` for HTTP proxy)
 
 ## Tuna Exit
 
@@ -50,6 +51,7 @@ go build -o exit bin/exit/main.go
 
 Edit `config.exit.json` with your data:
 
+* `BeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
 * `ListenTCP` TCP port to listen for connections  
 * `ListenUDP` UDP port to listen for connections  
 * `Reverse` should be used if you don't have public IP and want to use another `server` for accepting clients  
