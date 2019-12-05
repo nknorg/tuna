@@ -1,27 +1,49 @@
-.DEFAULT_GOAL:=all_or_with_proxy
+.DEFAULT_GOAL:=local_or_with_proxy
 
 USE_PROXY=GOPROXY=https://goproxy.io
-BUILD_ENTRY=go build -ldflags "-s -w" -o entry bin/entry/main.go
-BUILD_EXIT=go build -ldflags "-s -w" -o exit bin/exit/main.go
+BUILD=go build -ldflags "-s -w"
+BUILD_DIR=build/$(GOOS)-$(GOARCH)
 
 .PHONY: entry
 entry:
-	$(BUILD_ENTRY)
+	$(BUILD) $(BUILD_PARAMS) bin/entry/main.go
 
 .PHONY: exit
 exit:
-	$(BUILD_EXIT)
+	$(BUILD) $(BUILD_PARAMS) bin/exit/main.go
+
+.PHONY: local
+local:
+	${MAKE} entry BUILD_PARAMS="-o entry"
+	${MAKE} exit BUILD_PARAMS="-o exit"
+
+.PHONY: local_with_proxy
+local_with_proxy:
+	$(USE_PROXY) ${MAKE} entry BUILD_PARAMS="-o entry"
+	$(USE_PROXY) ${MAKE} exit BUILD_PARAMS="-o exit"
+
+.PHONY: local_or_with_proxy
+local_or_with_proxy:
+	${MAKE} local || ${MAKE} local_with_proxy
+
+.PHONY: build
+build:
+	mkdir -p $(BUILD_DIR)
+	${MAKE} entry BUILD_PARAMS="-o $(BUILD_DIR)/entry$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
+	${MAKE} exit BUILD_PARAMS="-o $(BUILD_DIR)/exit$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
+	cp config.entry.json config.exit.json services.json $(BUILD_DIR)/
+	${MAKE} zip
+
+.PHONY: tar
+tar:
+	rm -f $(BUILD_DIR).tar.gz && tar --exclude ".DS_Store" --exclude "__MACOSX" -czvf $(BUILD_DIR).tar.gz $(BUILD_DIR)
+
+.PHONY: zip
+zip:
+	rm -f $(BUILD_DIR).zip && zip --exclude "*.DS_Store*" --exclude "*__MACOSX*" -r $(BUILD_DIR).zip $(BUILD_DIR)
 
 .PHONY: all
 all:
-	$(BUILD_ENTRY)
-	$(BUILD_EXIT)
-
-.PHONY: all_with_proxy
-all_with_proxy:
-	$(USE_PROXY) $(BUILD_ENTRY)
-	$(USE_PROXY) $(BUILD_EXIT)
-
-.PHONY: all_or_with_proxy
-all_or_with_proxy:
-	${MAKE} all || ${MAKE} all_with_proxy
+	${MAKE} build GOOS=darwin GOARCH=amd64
+	${MAKE} build GOOS=linux GOARCH=amd64
+	${MAKE} build GOOS=windows GOARCH=amd64 EXT=.exe
