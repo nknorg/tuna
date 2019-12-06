@@ -2,7 +2,8 @@
 
 USE_PROXY=GOPROXY=https://goproxy.io
 BUILD=go build -ldflags "-s -w"
-BUILD_DIR=build/$(GOOS)-$(GOARCH)
+BUILD_DIR=build
+BIN_DIR=$(GOOS)-$(GOARCH)
 
 .PHONY: entry
 entry:
@@ -28,19 +29,19 @@ local_or_with_proxy:
 
 .PHONY: build
 build:
-	mkdir -p $(BUILD_DIR)
-	${MAKE} entry BUILD_PARAMS="-o $(BUILD_DIR)/entry$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
-	${MAKE} exit BUILD_PARAMS="-o $(BUILD_DIR)/exit$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
-	cp config.entry.json config.exit.json services.json $(BUILD_DIR)/
+	mkdir -p $(BUILD_DIR)/$(BIN_DIR)
+	${MAKE} entry BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/entry$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
+	${MAKE} exit BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/exit$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
+	cp config.entry.json config.exit.json services.json $(BUILD_DIR)/$(BIN_DIR)/
 	${MAKE} zip
 
 .PHONY: tar
 tar:
-	rm -f $(BUILD_DIR).tar.gz && tar --exclude ".DS_Store" --exclude "__MACOSX" -czvf $(BUILD_DIR).tar.gz $(BUILD_DIR)
+	cd $(BUILD_DIR) && rm -f $(BIN_DIR).tar.gz && tar --exclude ".DS_Store" --exclude "__MACOSX" -czvf $(BIN_DIR).tar.gz $(BIN_DIR)
 
 .PHONY: zip
 zip:
-	rm -f $(BUILD_DIR).zip && zip --exclude "*.DS_Store*" --exclude "*__MACOSX*" -r $(BUILD_DIR).zip $(BUILD_DIR)
+	cd $(BUILD_DIR) && rm -f $(BIN_DIR).zip && zip --exclude "*.DS_Store*" --exclude "*__MACOSX*" -r $(BIN_DIR).zip $(BIN_DIR)
 
 .PHONY: all
 all:
