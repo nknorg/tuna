@@ -5,7 +5,7 @@
   "Reverse": false,
   "ReverseRandomPorts": true,
   "ReverseMaxPrice": "0",
-  "DialTimeout": 30,
+  "DialTimeout": 10,
   "UDPTimeout": 60,
   "ClaimInterval": 3600,
   "SubscriptionDuration": 180,

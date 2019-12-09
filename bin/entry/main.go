@@ -57,6 +57,11 @@ func main() {
 	wallet := nknSdk.NewWalletSDK(account)
 
 	if config.Reverse {
+		serviceListenIP := net.ParseIP(config.ReverseServiceListenIP)
+		if serviceListenIP == nil {
+			serviceListenIP = net.ParseIP(tuna.DefaultReverseServiceListenIP)
+		}
+
 		ip, err := ipify.GetIp()
 		if err != nil {
 			log.Fatalln("Couldn't get IP:", err)
@@ -106,7 +111,7 @@ func main() {
 					continue
 				}
 
-				te := tuna.NewTunaEntry(&tuna.Service{}, 0, 0, config, wallet)
+				te := tuna.NewTunaEntry(&tuna.Service{}, serviceListenIP, 0, 0, config, wallet)
 				te.Session, _ = smux.Client(tcpConn, nil)
 				stream, err := te.Session.OpenStream()
 				if err != nil {
@@ -188,13 +193,19 @@ func main() {
 
 	service:
 		for serviceName, serviceInfo := range config.Services {
+			serviceListenIP := net.ParseIP(serviceInfo.ListenIP)
+			if serviceListenIP == nil {
+				serviceListenIP = net.ParseIP(tuna.DefaultServiceListenIP)
+			}
+
 			entryToExitMaxPrice, exitToEntryMaxPrice, err := tuna.ParsePrice(serviceInfo.MaxPrice)
 			if err != nil {
-				log.Fatalln(err)
+				log.Fatalf("Parse price of service %s error: %v", serviceName, err)
 			}
+
 			for _, service := range services {
 				if service.Name == serviceName {
-					go tuna.NewTunaEntry(&service, entryToExitMaxPrice, exitToEntryMaxPrice, config, wallet).Start()
+					go tuna.NewTunaEntry(&service, serviceListenIP, entryToExitMaxPrice, exitToEntryMaxPrice, config, wallet).Start()
 					continue service
 				}
 			}

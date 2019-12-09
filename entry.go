@@ -18,17 +18,19 @@ import (
 
 type EntryServiceInfo struct {
 	MaxPrice string `json:"maxPrice"`
+	ListenIP string `json:"ListenIP"`
 }
 
 type EntryConfiguration struct {
+	Services                    map[string]EntryServiceInfo `json:"Services"`
 	DialTimeout                 uint16                      `json:"DialTimeout"`
 	UDPTimeout                  uint16                      `json:"UDPTimeout"`
-	Services                    map[string]EntryServiceInfo `json:"Services"`
 	NanoPayFee                  string                      `json:"NanoPayFee"`
 	Reverse                     bool                        `json:"Reverse"`
 	ReverseBeneficiaryAddr      string                      `json:"ReverseBeneficiaryAddr"`
 	ReverseTCP                  int                         `json:"ReverseTCP"`
 	ReverseUDP                  int                         `json:"ReverseUDP"`
+	ReverseServiceListenIP      string                      `json:"ReverseServiceListenIP"`
 	ReversePrice                string                      `json:"ReversePrice"`
 	ReverseClaimInterval        uint32                      `json:"ReverseClaimInterval"`
 	ReverseSubscriptionPrefix   string                      `json:"ReverseSubscriptionPrefix"`
@@ -51,10 +53,11 @@ type TunaEntry struct {
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *WalletSDK) *TunaEntry {
+func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *WalletSDK) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
 			Service:             service,
+			ListenIP:            listenIP,
 			EntryToExitMaxPrice: entryToExitMaxPrice,
 			ExitToEntryMaxPrice: exitToEntryMaxPrice,
 			Wallet:              wallet,
@@ -81,7 +84,7 @@ func (te *TunaEntry) Start() {
 			continue
 		}
 
-		tcpPorts, err := te.listenTCP(te.Service.TCP)
+		tcpPorts, err := te.listenTCP(te.ListenIP, te.Service.TCP)
 		if err != nil {
 			te.close()
 			return
@@ -90,7 +93,7 @@ func (te *TunaEntry) Start() {
 			log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
 		}
 
-		udpPorts, err := te.listenUDP(te.Service.UDP)
+		udpPorts, err := te.listenUDP(te.ListenIP, te.Service.UDP)
 		if err != nil {
 			te.close()
 			return
@@ -167,12 +170,12 @@ func (te *TunaEntry) Start() {
 
 func (te *TunaEntry) StartReverse(stream *smux.Stream) {
 	metadata := te.GetMetadata()
-	tcpPorts, err := te.listenTCP(metadata.ServiceTCP)
+	tcpPorts, err := te.listenTCP(te.ListenIP, metadata.ServiceTCP)
 	if err != nil {
 		te.close()
 		return
 	}
-	udpPorts, err := te.listenUDP(metadata.ServiceUDP)
+	udpPorts, err := te.listenUDP(te.ListenIP, metadata.ServiceUDP)
 	if err != nil {
 		te.close()
 		return
@@ -257,10 +260,10 @@ func (te *TunaEntry) openStream(portId byte, force bool) (*smux.Stream, error) {
 	return stream, err
 }
 
-func (te *TunaEntry) listenTCP(ports []int) ([]int, error) {
+func (te *TunaEntry) listenTCP(ip net.IP, ports []int) ([]int, error) {
 	assignedPorts := make([]int, 0)
 	for i, _port := range ports {
-		listener, err := net.ListenTCP(string(TCP), &net.TCPAddr{Port: _port})
+		listener, err := net.ListenTCP(string(TCP), &net.TCPAddr{IP: ip, Port: _port})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
@@ -300,7 +303,7 @@ func (te *TunaEntry) listenTCP(ports []int) ([]int, error) {
 	return assignedPorts, nil
 }
 
-func (te *TunaEntry) listenUDP(ports []int) ([]int, error) {
+func (te *TunaEntry) listenUDP(ip net.IP, ports []int) ([]int, error) {
 	assignedPorts := make([]int, 0)
 	if len(ports) == 0 {
 		return assignedPorts, nil
@@ -341,7 +344,7 @@ func (te *TunaEntry) listenUDP(ports []int) ([]int, error) {
 	}()
 
 	for i, _port := range ports {
-		localConn, err := net.ListenUDP(string(UDP), &net.UDPAddr{Port: _port})
+		localConn, err := net.ListenUDP(string(UDP), &net.UDPAddr{IP: ip, Port: _port})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err

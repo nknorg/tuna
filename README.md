@@ -17,19 +17,20 @@ go build -o entry bin/entry/main.go
 
 Edit `config.entry.json` with your data:
 
-* `DialTimeout` timeout for NKN node connection  
-* `UDPTimeout`  timeout for UDP *connections*  
-* `Services` services you want to use  
-* `NanoPayFee` fee used for nano pay transaction  
-* `Reverse` should be used to provide reverse tunnel for those who don't have public IP  
+* `Services` services you want to use
+* `DialTimeout` timeout for NKN node connection
+* `UDPTimeout` timeout for UDP connections
+* `NanoPayFee` fee used for nano pay transaction
+* `Reverse` should be used to provide reverse tunnel for those who don't have public IP
 * `ReverseBeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
-* `ReverseTCP` TCP port to listen for connections  
-* `ReverseUDP` UDP port to listen for connections  
-* `ReversePrice` price for reverse connections  
-* `ReverseSubscriptionPrefix` prefix appended to topics for subscription  
-* `ReverseSubscriptionDuration` duration for subscription in blocks  
-* `ReverseSubscriptionFee` fee used for subscription  
-* `ReverseClaimInterval` payment claim interval for reverse connections  
+* `ReverseTCP` TCP port to listen for connections
+* `ReverseUDP` UDP port to listen for connections
+* `ReverseServiceListenIP` Reverse service listen IP
+* `ReversePrice` price for reverse connections
+* `ReverseSubscriptionPrefix` prefix appended to topics for subscription
+* `ReverseSubscriptionDuration` duration for subscription in blocks
+* `ReverseSubscriptionFee` fee used for subscription
+* `ReverseClaimInterval` payment claim interval for reverse connections
 
 Start tuna entry:
 ```shell
@@ -52,17 +53,17 @@ go build -o exit bin/exit/main.go
 Edit `config.exit.json` with your data:
 
 * `BeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
-* `ListenTCP` TCP port to listen for connections  
-* `ListenUDP` UDP port to listen for connections  
-* `Reverse` should be used if you don't have public IP and want to use another `server` for accepting clients  
-* `ReverseRandomPorts` meaning reverse entry can use random ports instead of specified ones (useful when service has dynamic ports)  
-* `DialTimeout` timeout for connections to services  
-* `UDPTimeout`  timeout for UDP *connections*  
-* `SubscriptionPrefix` prefix appended to topics for subscription  
-* `SubscriptionDuration` duration for subscription in blocks  
-* `SubscriptionFee` fee used for subscription  
-* `ClaimInterval` payment claim interval for connections  
-* `Services` services you want to provide  
+* `ListenTCP` TCP port to listen for connections
+* `ListenUDP` UDP port to listen for connections
+* `Reverse` should be used if you don't have public IP and want to use another `server` for accepting clients
+* `ReverseRandomPorts` meaning reverse entry can use random ports instead of specified ones (useful when service has dynamic ports)
+* `DialTimeout` timeout for connections to services
+* `UDPTimeout`  timeout for UDP connections
+* `SubscriptionPrefix` prefix appended to topics for subscription
+* `SubscriptionDuration` duration for subscription in blocks
+* `SubscriptionFee` fee used for subscription
+* `ClaimInterval` payment claim interval for connections
+* `Services` services you want to provide
 
 Start tuna exit:
 ```shell

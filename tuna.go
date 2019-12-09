@@ -33,12 +33,14 @@ import (
 type Protocol string
 
 const (
-	TCP                          Protocol = "tcp"
-	UDP                          Protocol = "udp"
-	DefaultNanoPayUpdateInterval          = time.Minute
-	DefaultSubscriptionPrefix             = "tuna+1."
-	DefaultReverseServiceName             = "reverse"
-	TrafficUnit                           = 1024 * 1024
+	TCP                           Protocol = "tcp"
+	UDP                           Protocol = "udp"
+	DefaultNanoPayUpdateInterval           = time.Minute
+	DefaultSubscriptionPrefix              = "tuna+1."
+	DefaultReverseServiceName              = "reverse"
+	DefaultServiceListenIP                 = "127.0.0.1"
+	DefaultReverseServiceListenIP          = "0.0.0.0"
+	TrafficUnit                            = 1024 * 1024
 )
 
 type Service struct {
@@ -60,6 +62,7 @@ type Metadata struct {
 
 type Common struct {
 	Service             *Service
+	ListenIP            net.IP
 	EntryToExitMaxPrice common.Fixed64
 	ExitToEntryMaxPrice common.Fixed64
 	Wallet              *WalletSDK

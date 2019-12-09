@@ -1,11 +1,11 @@
 {
-  "DialTimeout": 30,
-  "UDPTimeout": 60,
   "Services": {
     "httpproxy": {
       "maxPrice": "0.001"
     }
   },
+  "DialTimeout": 10,
+  "UDPTimeout": 60,
   "NanoPayFee": "0",
   "Reverse": false,
   "ReverseBeneficiaryAddr": "",
