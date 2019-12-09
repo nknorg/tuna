@@ -233,10 +233,11 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 	isClosed = true
 }
 
-func (te *TunaExit) listenTCP(port int) {
+func (te *TunaExit) listenTCP(port int) error {
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: port})
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
+		return err
 	}
 
 	go func() {
@@ -252,6 +253,8 @@ func (te *TunaExit) listenTCP(port int) {
 			go te.handleSession(session, conn)
 		}
 	}()
+
+	return nil
 }
 
 func (te *TunaExit) getService(serviceId byte) (*Service, error) {
@@ -307,13 +310,15 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId b
 	return conn, nil
 }
 
-func (te *TunaExit) listenUDP(port int) {
+func (te *TunaExit) listenUDP(port int) error {
 	var err error
 	te.clientConn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
+		return err
 	}
 	te.readUDP()
+	return nil
 }
 
 func (te *TunaExit) readUDP() {
@@ -369,8 +374,16 @@ func (te *TunaExit) Start() {
 	if err != nil {
 		log.Fatalln("Couldn't get IP:", err)
 	}
-	te.listenTCP(te.config.ListenTCP)
-	te.listenUDP(te.config.ListenUDP)
+
+	err = te.listenTCP(te.config.ListenTCP)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	err = te.listenUDP(te.config.ListenUDP)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	te.updateAllMetadata(ip, te.config.ListenTCP, te.config.ListenUDP)
 }
