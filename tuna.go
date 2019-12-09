@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -66,22 +67,56 @@ type Common struct {
 	SubscriptionPrefix  string
 	Reverse             bool
 	ReverseMetadata     *Metadata
-	EntryToExitPrice    common.Fixed64
-	ExitToEntryPrice    common.Fixed64
-	PaymentReceiver     string
-	Metadata            *Metadata
 
-	connected    bool
-	tcpConn      net.Conn
-	udpConn      *net.UDPConn
 	udpReadChan  chan []byte
 	udpWriteChan chan []byte
 	udpCloseChan chan struct{}
 	tcpListener  *net.TCPListener
+
+	sync.RWMutex
+	paymentReceiver  string
+	entryToExitPrice common.Fixed64
+	exitToEntryPrice common.Fixed64
+	metadata         *Metadata
+	connected        bool
+	tcpConn          net.Conn
+	udpConn          *net.UDPConn
+}
+
+func (c *Common) GetTCPConn() net.Conn {
+	c.RLock()
+	defer c.RUnlock()
+	return c.tcpConn
 }
 
 func (c *Common) SetServerTCPConn(conn net.Conn) {
+	c.Lock()
+	defer c.Unlock()
 	c.tcpConn = conn
+}
+
+func (c *Common) GetUDPConn() *net.UDPConn {
+	c.RLock()
+	defer c.RUnlock()
+	return c.udpConn
+}
+
+func (c *Common) SetServerUDPConn(conn *net.UDPConn) {
+	c.Lock()
+	defer c.Unlock()
+	c.udpConn = conn
+}
+
+func (c *Common) GetConnected() bool {
+	c.RLock()
+	defer c.RUnlock()
+	return c.connected
+}
+
+func (c *Common) SetConnected(connected bool) {
+	c.Lock()
+	defer c.Unlock()
+	c.connected = connected
 }
 
 func (c *Common) GetServerTCPConn(force bool) (net.Conn, error) {
@@ -89,7 +124,9 @@ func (c *Common) GetServerTCPConn(force bool) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.tcpConn, nil
+	c.RLock()
+	defer c.RUnlock()
+	return c.GetTCPConn(), nil
 }
 
 func (c *Common) GetServerUDPConn(force bool) (*net.UDPConn, error) {
@@ -97,7 +134,9 @@ func (c *Common) GetServerUDPConn(force bool) (*net.UDPConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.udpConn, nil
+	c.RLock()
+	defer c.RUnlock()
+	return c.GetUDPConn(), nil
 }
 
 func (c *Common) SetServerUDPReadChan(udpReadChan chan []byte) {
@@ -124,14 +163,40 @@ func (c *Common) GetServerUDPWriteChan(force bool) (chan []byte, error) {
 	return c.udpWriteChan, nil
 }
 
+func (c *Common) GetMetadata() *Metadata {
+	c.RLock()
+	defer c.RUnlock()
+	return c.metadata
+}
+
 func (c *Common) SetMetadata(metadataString string) bool {
 	var err error
-	c.Metadata, err = ReadMetadata(metadataString)
+	c.Lock()
+	c.metadata, err = ReadMetadata(metadataString)
+	c.Unlock()
 	if err != nil {
 		log.Println("Couldn't unmarshal metadata:", err)
 		return false
 	}
 	return true
+}
+
+func (c *Common) GetPaymentReceiver() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.paymentReceiver
+}
+
+func (c *Common) SetPaymentReceiver(paymentReceiver string) {
+	c.Lock()
+	defer c.Unlock()
+	c.paymentReceiver = paymentReceiver
+}
+
+func (c *Common) GetPrice() (common.Fixed64, common.Fixed64) {
+	c.Lock()
+	defer c.Unlock()
+	return c.entryToExitPrice, c.exitToEntryPrice
 }
 
 func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
@@ -171,13 +236,13 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 func (c *Common) UpdateServerConn() bool {
 	hasTCP := len(c.Service.TCP) > 0
 	hasUDP := len(c.Service.UDP) > 0
+	metadata := c.GetMetadata()
 
-	var err error
 	if hasTCP || c.ReverseMetadata != nil {
-		Close(c.tcpConn)
+		Close(c.GetTCPConn())
 
-		address := c.Metadata.IP + ":" + strconv.Itoa(c.Metadata.TCPPort)
-		c.tcpConn, err = net.DialTimeout(
+		address := metadata.IP + ":" + strconv.Itoa(metadata.TCPPort)
+		tcpConn, err := net.DialTimeout(
 			string(TCP),
 			address,
 			time.Duration(c.DialTimeout)*time.Second,
@@ -186,13 +251,15 @@ func (c *Common) UpdateServerConn() bool {
 			log.Println("Couldn't connect to TCP address", address, "because:", err)
 			return false
 		}
+		c.SetServerTCPConn(tcpConn)
 		log.Println("Connected to TCP at", address)
 	}
 	if hasUDP || c.ReverseMetadata != nil {
-		Close(c.udpConn)
+		udpConn := c.GetUDPConn()
+		Close(udpConn)
 
-		address := net.UDPAddr{IP: net.ParseIP(c.Metadata.IP), Port: c.Metadata.UDPPort}
-		c.udpConn, err = net.DialUDP(
+		address := net.UDPAddr{IP: net.ParseIP(metadata.IP), Port: metadata.UDPPort}
+		udpConn, err := net.DialUDP(
 			string(UDP),
 			nil,
 			&address,
@@ -201,21 +268,22 @@ func (c *Common) UpdateServerConn() bool {
 			log.Println("Couldn't connect to UDP address", address, "because:", err)
 			return false
 		}
+		c.SetServerUDPConn(udpConn)
 		log.Println("Connected to UDP at", address)
 
-		c.StartUDPReaderWriter(c.udpConn)
+		c.StartUDPReaderWriter(udpConn)
 	}
-	c.connected = true
+	c.SetConnected(true)
 
 	return true
 }
 
 func (c *Common) CreateServerConn(force bool) error {
-	if !c.Reverse && (c.connected == false || force) {
+	if !c.Reverse && (c.GetConnected() == false || force) {
 		topic := c.SubscriptionPrefix + c.Service.Name
 	RandomSubscriber:
 		for {
-			c.PaymentReceiver = ""
+			c.SetPaymentReceiver("")
 			subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
 			if err != nil {
 				return err
@@ -234,8 +302,10 @@ func (c *Common) CreateServerConn(force bool) error {
 					continue RandomSubscriber
 				}
 
-				if len(c.Metadata.BeneficiaryAddr) > 0 {
-					c.PaymentReceiver = c.Metadata.BeneficiaryAddr
+				metadata := c.GetMetadata()
+
+				if len(metadata.BeneficiaryAddr) > 0 {
+					c.SetPaymentReceiver(metadata.BeneficiaryAddr)
 				} else {
 					_, publicKey, _, err := address.ParseClientAddress(subscriber)
 					if err != nil {
@@ -261,10 +331,10 @@ func (c *Common) CreateServerConn(force bool) error {
 						continue RandomSubscriber
 					}
 
-					c.PaymentReceiver = address
+					c.SetPaymentReceiver(address)
 				}
 
-				entryToExitPrice, exitToEntryPrice, err := ParsePrice(c.Metadata.Price)
+				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
 				if err != nil {
 					log.Println(err)
 					continue RandomSubscriber
@@ -279,13 +349,14 @@ func (c *Common) CreateServerConn(force bool) error {
 					continue RandomSubscriber
 				}
 
-				c.EntryToExitPrice = entryToExitPrice
-				c.ExitToEntryPrice = exitToEntryPrice
-
+				c.Lock()
+				c.entryToExitPrice = entryToExitPrice
+				c.exitToEntryPrice = exitToEntryPrice
 				if c.ReverseMetadata != nil {
-					c.Metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
-					c.Metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
+					c.metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
+					c.metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
 				}
+				c.Unlock()
 
 				if !c.UpdateServerConn() {
 					continue RandomSubscriber

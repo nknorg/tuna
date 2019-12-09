@@ -124,13 +124,15 @@ func (te *TunaEntry) Start() {
 				time.Sleep(DefaultNanoPayUpdateInterval)
 				bytesIn := atomic.LoadUint64(&te.bytesIn)
 				bytesOut := atomic.LoadUint64(&te.bytesOut)
-				delta := te.ExitToEntryPrice*common.Fixed64(bytesIn-te.bytesInPaid)/TrafficUnit + te.EntryToExitPrice*common.Fixed64(bytesOut-te.bytesOutPaid)/TrafficUnit
+				entryToExitPrice, exitToEntryPrice := te.GetPrice()
+				delta := exitToEntryPrice*common.Fixed64(bytesIn-te.bytesInPaid)/TrafficUnit + entryToExitPrice*common.Fixed64(bytesOut-te.bytesOutPaid)/TrafficUnit
 				if delta == 0 {
 					continue
 				}
-				if np == nil || np.Address() != te.PaymentReceiver {
+				paymentReceiver := te.GetPaymentReceiver()
+				if np == nil || np.Address() != paymentReceiver {
 					var err error
-					np, err = te.Wallet.NewNanoPay(te.PaymentReceiver, te.config.NanoPayFee)
+					np, err = te.Wallet.NewNanoPay(paymentReceiver, te.config.NanoPayFee)
 					if err != nil {
 						continue
 					}
@@ -164,12 +166,13 @@ func (te *TunaEntry) Start() {
 }
 
 func (te *TunaEntry) StartReverse(stream *smux.Stream) {
-	tcpPorts, err := te.listenTCP(te.Metadata.ServiceTCP)
+	metadata := te.GetMetadata()
+	tcpPorts, err := te.listenTCP(metadata.ServiceTCP)
 	if err != nil {
 		te.close()
 		return
 	}
-	udpPorts, err := te.listenUDP(te.Metadata.ServiceUDP)
+	udpPorts, err := te.listenUDP(metadata.ServiceUDP)
 	if err != nil {
 		te.close()
 		return
@@ -246,7 +249,7 @@ func (te *TunaEntry) openStream(portId byte, force bool) (*smux.Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	serviceId := te.Metadata.ServiceId
+	serviceId := te.GetMetadata().ServiceId
 	stream, err := session.OpenStream(serviceId, portId)
 	if err != nil {
 		return te.openStream(portId, true)
@@ -367,7 +370,7 @@ func (te *TunaEntry) listenUDP(ports []int) ([]int, error) {
 					continue
 				}
 				connId := GetConnIdData(addr.Port)
-				serviceId := te.Metadata.ServiceId
+				serviceId := te.GetMetadata().ServiceId
 				serverWriteChan <- append([]byte{connId[0], connId[1], serviceId, portId}, localBuffer[:n]...)
 			}
 		}()

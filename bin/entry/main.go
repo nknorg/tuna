@@ -129,9 +129,10 @@ func main() {
 
 				te.SetServerTCPConn(tcpConn)
 
-				if te.Metadata.UDPPort > 0 {
+				metadata := te.GetMetadata()
+				if metadata.UDPPort > 0 {
 					ip, _, _ := net.SplitHostPort(tcpConn.RemoteAddr().String())
-					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: te.Metadata.UDPPort}
+					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: metadata.UDPPort}
 
 					udpReadChan := make(chan []byte)
 					udpWriteChan := make(chan []byte)
