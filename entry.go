@@ -26,6 +26,7 @@ type EntryConfiguration struct {
 	DialTimeout                 uint16                      `json:"DialTimeout"`
 	UDPTimeout                  uint16                      `json:"UDPTimeout"`
 	NanoPayFee                  string                      `json:"NanoPayFee"`
+	SubscriptionPrefix          string                      `json:"SubscriptionPrefix"`
 	Reverse                     bool                        `json:"Reverse"`
 	ReverseBeneficiaryAddr      string                      `json:"ReverseBeneficiaryAddr"`
 	ReverseTCP                  int                         `json:"ReverseTCP"`
@@ -62,7 +63,7 @@ func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitTo
 			ExitToEntryMaxPrice: exitToEntryMaxPrice,
 			Wallet:              wallet,
 			DialTimeout:         config.DialTimeout,
-			SubscriptionPrefix:  config.ReverseSubscriptionPrefix,
+			SubscriptionPrefix:  config.SubscriptionPrefix,
 			Reverse:             config.Reverse,
 		},
 		config:       config,
@@ -284,6 +285,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []int) ([]int, error) {
 						te.close()
 						return
 					}
+					time.Sleep(time.Second)
 					continue
 				}
 
@@ -291,6 +293,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []int) ([]int, error) {
 				if err != nil {
 					log.Println("Couldn't open stream:", err)
 					Close(conn)
+					time.Sleep(time.Second)
 					continue
 				}
 

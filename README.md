@@ -21,13 +21,14 @@ Edit `config.entry.json` with your data:
 * `DialTimeout` timeout for NKN node connection
 * `UDPTimeout` timeout for UDP connections
 * `NanoPayFee` fee used for nano pay transaction
+* `SubscriptionPrefix` prefix appended to topics for subscription
 * `Reverse` should be used to provide reverse tunnel for those who don't have public IP
 * `ReverseBeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
 * `ReverseTCP` TCP port to listen for connections
 * `ReverseUDP` UDP port to listen for connections
-* `ReverseServiceListenIP` Reverse service listen IP
+* `ReverseServiceListenIP` reverse service listen IP
 * `ReversePrice` price for reverse connections
-* `ReverseSubscriptionPrefix` prefix appended to topics for subscription
+* `ReverseSubscriptionPrefix` prefix appended to topics for reverse subscription
 * `ReverseSubscriptionDuration` duration for subscription in blocks
 * `ReverseSubscriptionFee` fee used for subscription
 * `ReverseClaimInterval` payment claim interval for reverse connections
