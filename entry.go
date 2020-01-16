@@ -54,7 +54,7 @@ type TunaEntry struct {
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *WalletSDK) *TunaEntry {
+func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *Wallet) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
 			Service:             service,

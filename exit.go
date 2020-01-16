@@ -12,6 +12,7 @@ import (
 	"time"
 
 	. "github.com/nknorg/nkn-sdk-go"
+	nknsdk "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/transaction"
 	cache "github.com/patrickmn/go-cache"
@@ -42,7 +43,7 @@ type ExitConfiguration struct {
 
 type TunaExit struct {
 	config           *ExitConfiguration
-	wallet           *WalletSDK
+	wallet           *nknsdk.Wallet
 	services         []Service
 	serviceConn      *cache.Cache
 	common           *Common
@@ -53,7 +54,7 @@ type TunaExit struct {
 	onEntryConnected func()
 }
 
-func NewTunaExit(config *ExitConfiguration, services []Service, wallet *WalletSDK) *TunaExit {
+func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nknsdk.Wallet) *TunaExit {
 	return &TunaExit{
 		config:      config,
 		wallet:      wallet,

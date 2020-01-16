@@ -31,8 +31,6 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	nknSdk.Init()
-
 	config := &tuna.EntryConfiguration{ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	err = tuna.ReadJson(opts.ConfigFile, config)
 	if err != nil {
@@ -54,7 +52,10 @@ func main() {
 		log.Fatalln("Load or create account error:", err)
 	}
 
-	wallet := nknSdk.NewWalletSDK(account)
+	wallet, err := nknSdk.NewWallet(account)
+	if err != nil {
+		log.Fatalln("Create wallet error:", err)
+	}
 
 	if config.Reverse {
 		serviceListenIP := net.ParseIP(config.ReverseServiceListenIP)

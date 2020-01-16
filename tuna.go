@@ -20,7 +20,7 @@ import (
 	"time"
 	"unsafe"
 
-	. "github.com/nknorg/nkn-sdk-go"
+	nknsdk "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/crypto/util"
@@ -65,7 +65,7 @@ type Common struct {
 	ListenIP            net.IP
 	EntryToExitMaxPrice common.Fixed64
 	ExitToEntryMaxPrice common.Fixed64
-	Wallet              *WalletSDK
+	Wallet              *nknsdk.Wallet
 	DialTimeout         uint16
 	SubscriptionPrefix  string
 	Reverse             bool
@@ -272,7 +272,7 @@ func (c *Common) UpdateServerConn() bool {
 			return false
 		}
 		c.SetServerUDPConn(udpConn)
-		log.Println("Connected to UDP at", address)
+		log.Println("Connected to UDP at", address.String())
 
 		c.StartUDPReaderWriter(udpConn)
 	}
@@ -419,7 +419,7 @@ func UpdateMetadata(
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
 	subscriptionFee string,
-	wallet *WalletSDK,
+	wallet *nknsdk.Wallet,
 ) {
 	metadataRaw := CreateRawMetadata(
 		serviceId,
