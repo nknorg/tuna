@@ -2,6 +2,7 @@ package tuna
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -47,11 +48,13 @@ type TunaExit struct {
 	services         []Service
 	serviceConn      *cache.Cache
 	common           *Common
-	clientConn       *net.UDPConn
+	tcpListener      net.Listener
+	udpConn          *net.UDPConn
 	reverseIp        net.IP
 	reverseTcp       []int
 	reverseUdp       []int
 	onEntryConnected func()
+	closeChan        chan struct{}
 }
 
 func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nknsdk.Wallet) *TunaExit {
@@ -60,6 +63,7 @@ func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nknsdk.W
 		wallet:      wallet,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
+		closeChan:   make(chan struct{}, 0),
 	}
 }
 
@@ -240,6 +244,7 @@ func (te *TunaExit) listenTCP(port int) error {
 		log.Println("Couldn't bind listener:", err)
 		return err
 	}
+	te.tcpListener = listener
 
 	go func() {
 		for {
@@ -250,7 +255,13 @@ func (te *TunaExit) listenTCP(port int) error {
 				continue
 			}
 
-			session, _ := smux.Server(conn, nil)
+			session, err := smux.Server(conn, nil)
+			if err != nil {
+				log.Println(err)
+				Close(conn)
+				continue
+			}
+
 			go te.handleSession(session, conn)
 		}
 	}()
@@ -296,7 +307,7 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId b
 					Close(conn)
 					break
 				}
-				_, err = te.clientConn.WriteToUDP(append(prefix, serviceBuffer[:n]...), addr)
+				_, err = te.udpConn.WriteToUDP(append(prefix, serviceBuffer[:n]...), addr)
 				if err != nil {
 					log.Println("Couldn't send data to client:", err)
 					Close(conn)
@@ -313,7 +324,7 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connId []byte, serviceId b
 
 func (te *TunaExit) listenUDP(port int) error {
 	var err error
-	te.clientConn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
+	te.udpConn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
 		return err
@@ -326,7 +337,7 @@ func (te *TunaExit) readUDP() {
 	go func() {
 		clientBuffer := make([]byte, 2048)
 		for {
-			n, addr, err := te.clientConn.ReadFromUDP(clientBuffer)
+			n, addr, err := te.udpConn.ReadFromUDP(clientBuffer)
 			if err != nil {
 				log.Println("Couldn't receive data from client:", err)
 				if strings.Contains(err.Error(), "use of closed network connection") {
@@ -346,11 +357,11 @@ func (te *TunaExit) readUDP() {
 	}()
 }
 
-func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
+func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) error {
 	for serviceName, serviceInfo := range te.config.Services {
 		serviceId, err := te.getServiceId(serviceName)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		UpdateMetadata(
 			serviceName,
@@ -368,35 +379,36 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) {
 			te.wallet,
 		)
 	}
+	return nil
 }
 
-func (te *TunaExit) Start() {
+func (te *TunaExit) Start() error {
 	ip, err := ipify.GetIp()
 	if err != nil {
-		log.Fatalln("Couldn't get IP:", err)
+		return fmt.Errorf("Couldn't get IP:", err)
 	}
 
 	err = te.listenTCP(te.config.ListenTCP)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	err = te.listenUDP(te.config.ListenUDP)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
-	te.updateAllMetadata(ip, te.config.ListenTCP, te.config.ListenUDP)
+	return te.updateAllMetadata(ip, te.config.ListenTCP, te.config.ListenUDP)
 }
 
-func (te *TunaExit) StartReverse(serviceName string) {
+func (te *TunaExit) StartReverse(serviceName string) error {
 	serviceId, err := te.getServiceId(serviceName)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	service, err := te.getService(serviceId)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	reverseMetadata := &Metadata{}
@@ -405,7 +417,7 @@ func (te *TunaExit) StartReverse(serviceName string) {
 
 	maxPrice, err := common.StringToFixed64(te.config.ReverseMaxPrice)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	te.common = &Common{
@@ -429,10 +441,28 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			}
 
 			udpPort := -1
-			udpConn, _ := te.common.GetServerUDPConn(false)
-			if udpConn != nil {
-				_, udpPortString, _ := net.SplitHostPort(udpConn.LocalAddr().String())
-				udpPort, _ = strconv.Atoi(udpPortString)
+			var udpConn *net.UDPConn
+			if len(service.UDP) > 0 {
+				udpConn, err = te.common.GetServerUDPConn(false)
+				if err != nil {
+					log.Println(err)
+					time.Sleep(1 * time.Second)
+					continue
+				}
+				if udpConn != nil {
+					_, udpPortString, err := net.SplitHostPort(udpConn.LocalAddr().String())
+					if err != nil {
+						log.Println(err)
+						time.Sleep(1 * time.Second)
+						continue
+					}
+					udpPort, err = strconv.Atoi(udpPortString)
+					if err != nil {
+						log.Println(err)
+						time.Sleep(1 * time.Second)
+						continue
+					}
+				}
 			}
 
 			var tcpPorts []int
@@ -456,14 +486,27 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				te.config.BeneficiaryAddr,
 			)
 
-			tcpConn, _ = te.common.GetServerTCPConn(false)
-			session, _ := smux.Server(tcpConn, nil)
+			tcpConn, err = te.common.GetServerTCPConn(false)
+			if err != nil {
+				log.Println(err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			session, err := smux.Server(tcpConn, nil)
+			if err != nil {
+				log.Println(err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
 			stream, err := session.AcceptStream()
 			if err != nil {
 				log.Println("Couldn't open stream to reverse entry:", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
+
 			_, err = stream.Write(serviceMetadata)
 			if err != nil {
 				log.Println("Couldn't send metadata to reverse entry:", err)
@@ -475,17 +518,19 @@ func (te *TunaExit) StartReverse(serviceName string) {
 			n, err := stream.Read(buf)
 			if err != nil {
 				log.Println("Couldn't read reverse metadata:", err)
-				Close(tcpConn)
-				break
+				time.Sleep(1 * time.Second)
+				continue
 			}
+
 			reverseMetadataRaw := make([]byte, n)
 			copy(reverseMetadataRaw, buf)
 			reverseMetadata, err := ReadMetadata(string(reverseMetadataRaw))
 			if err != nil {
 				log.Println("Couldn't unmarshal metadata:", err)
-				Close(tcpConn)
-				break
+				time.Sleep(1 * time.Second)
+				continue
 			}
+
 			te.reverseIp = tcpConn.RemoteAddr().(*net.TCPAddr).IP
 			te.reverseTcp = reverseMetadata.ServiceTCP
 			te.reverseUdp = reverseMetadata.ServiceUDP
@@ -493,14 +538,20 @@ func (te *TunaExit) StartReverse(serviceName string) {
 				te.onEntryConnected()
 			}
 
+			if udpConn != nil {
+				te.udpConn = udpConn
+				te.readUDP()
+			}
+
 			te.handleSession(session, tcpConn)
 
-			if udpConn != nil {
-				te.clientConn = udpConn
-				te.readUDP()
+			if _, ok := <-te.closeChan; !ok {
+				return
 			}
 		}
 	}()
+
+	return nil
 }
 
 func (te *TunaExit) OnEntryConnected(callback func()) {
@@ -517,4 +568,12 @@ func (te *TunaExit) GetReverseTCPPorts() []int {
 
 func (te *TunaExit) GetReverseUDPPorts() []int {
 	return te.reverseUdp
+}
+
+func (te *TunaExit) Close() {
+	close(te.closeChan)
+	Close(te.tcpListener)
+	Close(te.udpConn)
+	Close(te.common.tcpConn)
+	Close(te.common.udpConn)
 }

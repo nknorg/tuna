@@ -237,11 +237,11 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 }
 
 func (c *Common) UpdateServerConn() bool {
-	hasTCP := len(c.Service.TCP) > 0
-	hasUDP := len(c.Service.UDP) > 0
+	hasTCP := len(c.Service.TCP) > 0 || len(c.ReverseMetadata.ServiceTCP) > 0
+	hasUDP := len(c.Service.UDP) > 0 || len(c.ReverseMetadata.ServiceUDP) > 0
 	metadata := c.GetMetadata()
 
-	if hasTCP || c.ReverseMetadata != nil {
+	if hasTCP {
 		Close(c.GetTCPConn())
 
 		address := metadata.IP + ":" + strconv.Itoa(metadata.TCPPort)
@@ -257,7 +257,7 @@ func (c *Common) UpdateServerConn() bool {
 		c.SetServerTCPConn(tcpConn)
 		log.Println("Connected to TCP at", address)
 	}
-	if hasUDP || c.ReverseMetadata != nil {
+	if hasUDP {
 		udpConn := c.GetUDPConn()
 		Close(udpConn)
 
@@ -532,7 +532,10 @@ func LoadPassword(path string) (string, error) {
 
 func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error) {
 	var wallet *vault.WalletImpl
-	pswd, _ := LoadPassword(passwordFile)
+	pswd, err := LoadPassword(passwordFile)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		if len(pswd) == 0 {
 			pswd = base64.StdEncoding.EncodeToString(util.RandomBytes(24))
