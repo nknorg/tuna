@@ -136,7 +136,7 @@ func (te *TunaEntry) Start() {
 				paymentReceiver := te.GetPaymentReceiver()
 				if np == nil || np.Address() != paymentReceiver {
 					var err error
-					np, err = te.Wallet.NewNanoPay(paymentReceiver, te.config.NanoPayFee)
+					np, err = te.Wallet.NewNanoPay(paymentReceiver, te.config.NanoPayFee, DefaultNanoPayDuration)
 					if err != nil {
 						continue
 					}

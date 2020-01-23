@@ -35,6 +35,7 @@ type Protocol string
 const (
 	TCP                           Protocol = "tcp"
 	UDP                           Protocol = "udp"
+	DefaultNanoPayDuration                 = 4320 * 30
 	DefaultNanoPayUpdateInterval           = time.Minute
 	DefaultSubscriptionPrefix              = "tuna+1."
 	DefaultReverseServiceName              = "reverse"
@@ -294,13 +295,13 @@ func (c *Common) CreateServerConn(force bool) error {
 			if subscribersCount == 0 {
 				return errors.New("there is no service providers for " + c.Service.Name)
 			}
-			offset := uint32(rand.Intn(int(subscribersCount)))
-			subscribers, _, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
+			offset := rand.Intn(int(subscribersCount))
+			subscribers, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
 			if err != nil {
 				return err
 			}
 
-			for subscriber, metadataString := range subscribers {
+			for subscriber, metadataString := range subscribers.Subscribers.Map {
 				if !c.SetMetadata(metadataString) {
 					continue RandomSubscriber
 				}
@@ -438,7 +439,7 @@ func UpdateMetadata(
 			txid, err := wallet.Subscribe(
 				"",
 				topic,
-				subscriptionDuration,
+				int(subscriptionDuration),
 				string(metadataRaw),
 				subscriptionFee,
 			)
