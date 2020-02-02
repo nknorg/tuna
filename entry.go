@@ -54,7 +54,7 @@ type TunaEntry struct {
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *WalletSDK) *TunaEntry {
+func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *Wallet) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
 			Service:             service,
@@ -136,7 +136,7 @@ func (te *TunaEntry) Start() {
 				paymentReceiver := te.GetPaymentReceiver()
 				if np == nil || np.Address() != paymentReceiver {
 					var err error
-					np, err = te.Wallet.NewNanoPay(paymentReceiver, te.config.NanoPayFee)
+					np, err = te.Wallet.NewNanoPay(paymentReceiver, te.config.NanoPayFee, DefaultNanoPayDuration)
 					if err != nil {
 						continue
 					}
@@ -169,17 +169,17 @@ func (te *TunaEntry) Start() {
 	<-te.closeChan
 }
 
-func (te *TunaEntry) StartReverse(stream *smux.Stream) {
+func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	metadata := te.GetMetadata()
 	tcpPorts, err := te.listenTCP(te.ListenIP, metadata.ServiceTCP)
 	if err != nil {
 		te.close()
-		return
+		return err
 	}
 	udpPorts, err := te.listenUDP(te.ListenIP, metadata.ServiceUDP)
 	if err != nil {
 		te.close()
-		return
+		return err
 	}
 
 	serviceMetadata := CreateRawMetadata(
@@ -194,9 +194,8 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) {
 	)
 	_, err = stream.Write(serviceMetadata)
 	if err != nil {
-		log.Println("Couldn't send metadata to reverse exit:", err)
 		te.close()
-		return
+		return err
 	}
 
 	go func() {
@@ -220,16 +219,18 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) {
 	}()
 
 	<-te.closeChan
+
+	return nil
 }
 
 func (te *TunaEntry) close() {
+	close(te.closeChan)
 	for _, listener := range te.tcpListeners {
 		Close(listener)
 	}
 	for _, conn := range te.serviceConn {
 		Close(conn)
 	}
-	te.closeChan <- struct{}{}
 }
 
 func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
@@ -242,7 +243,10 @@ func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
 		if err != nil {
 			return nil, err
 		}
-		te.Session, _ = smux.Client(conn, nil)
+		te.Session, err = smux.Client(conn, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return te.Session, nil

@@ -28,8 +28,6 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	nknSdk.Init()
-
 	config := &tuna.ExitConfiguration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
 	err = tuna.ReadJson(opts.ConfigFile, config)
 	if err != nil {
@@ -51,7 +49,10 @@ func main() {
 		log.Fatalln("Load or create account error:", err)
 	}
 
-	wallet := nknSdk.NewWalletSDK(account)
+	wallet, err := nknSdk.NewWallet(account)
+	if err != nil {
+		log.Fatalln("Create wallet error:", err)
+	}
 
 	var services []tuna.Service
 	err = tuna.ReadJson(opts.ServicesFile, &services)
@@ -65,10 +66,16 @@ func main() {
 			e.OnEntryConnected(func() {
 				fmt.Printf("Service: %s, Address: %v:%v\n", serviceName, e.GetReverseIP(), e.GetReverseTCPPorts())
 			})
-			e.StartReverse(serviceName)
+			err = e.StartReverse(serviceName)
+			if err != nil {
+				log.Fatalln(err)
+			}
 		}
 	} else {
-		tuna.NewTunaExit(config, services, wallet).Start()
+		err = tuna.NewTunaExit(config, services, wallet).Start()
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
 
 	select {}

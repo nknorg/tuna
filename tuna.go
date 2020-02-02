@@ -20,7 +20,7 @@ import (
 	"time"
 	"unsafe"
 
-	. "github.com/nknorg/nkn-sdk-go"
+	nknsdk "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/crypto/util"
@@ -35,6 +35,7 @@ type Protocol string
 const (
 	TCP                           Protocol = "tcp"
 	UDP                           Protocol = "udp"
+	DefaultNanoPayDuration                 = 4320 * 30
 	DefaultNanoPayUpdateInterval           = time.Minute
 	DefaultSubscriptionPrefix              = "tuna+1."
 	DefaultReverseServiceName              = "reverse"
@@ -65,7 +66,7 @@ type Common struct {
 	ListenIP            net.IP
 	EntryToExitMaxPrice common.Fixed64
 	ExitToEntryMaxPrice common.Fixed64
-	Wallet              *WalletSDK
+	Wallet              *nknsdk.Wallet
 	DialTimeout         uint16
 	SubscriptionPrefix  string
 	Reverse             bool
@@ -237,11 +238,11 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 }
 
 func (c *Common) UpdateServerConn() bool {
-	hasTCP := len(c.Service.TCP) > 0
-	hasUDP := len(c.Service.UDP) > 0
+	hasTCP := len(c.Service.TCP) > 0 || len(c.ReverseMetadata.ServiceTCP) > 0
+	hasUDP := len(c.Service.UDP) > 0 || len(c.ReverseMetadata.ServiceUDP) > 0
 	metadata := c.GetMetadata()
 
-	if hasTCP || c.ReverseMetadata != nil {
+	if hasTCP {
 		Close(c.GetTCPConn())
 
 		address := metadata.IP + ":" + strconv.Itoa(metadata.TCPPort)
@@ -257,7 +258,7 @@ func (c *Common) UpdateServerConn() bool {
 		c.SetServerTCPConn(tcpConn)
 		log.Println("Connected to TCP at", address)
 	}
-	if hasUDP || c.ReverseMetadata != nil {
+	if hasUDP {
 		udpConn := c.GetUDPConn()
 		Close(udpConn)
 
@@ -272,7 +273,7 @@ func (c *Common) UpdateServerConn() bool {
 			return false
 		}
 		c.SetServerUDPConn(udpConn)
-		log.Println("Connected to UDP at", address)
+		log.Println("Connected to UDP at", address.String())
 
 		c.StartUDPReaderWriter(udpConn)
 	}
@@ -294,13 +295,13 @@ func (c *Common) CreateServerConn(force bool) error {
 			if subscribersCount == 0 {
 				return errors.New("there is no service providers for " + c.Service.Name)
 			}
-			offset := uint32(rand.Intn(int(subscribersCount)))
-			subscribers, _, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
+			offset := rand.Intn(int(subscribersCount))
+			subscribers, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
 			if err != nil {
 				return err
 			}
 
-			for subscriber, metadataString := range subscribers {
+			for subscriber, metadataString := range subscribers.Subscribers.Map {
 				if !c.SetMetadata(metadataString) {
 					continue RandomSubscriber
 				}
@@ -419,7 +420,7 @@ func UpdateMetadata(
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
 	subscriptionFee string,
-	wallet *WalletSDK,
+	wallet *nknsdk.Wallet,
 ) {
 	metadataRaw := CreateRawMetadata(
 		serviceId,
@@ -438,7 +439,7 @@ func UpdateMetadata(
 			txid, err := wallet.Subscribe(
 				"",
 				topic,
-				subscriptionDuration,
+				int(subscriptionDuration),
 				string(metadataRaw),
 				subscriptionFee,
 			)
@@ -532,7 +533,10 @@ func LoadPassword(path string) (string, error) {
 
 func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error) {
 	var wallet *vault.WalletImpl
-	pswd, _ := LoadPassword(passwordFile)
+	pswd, err := LoadPassword(passwordFile)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		if len(pswd) == 0 {
 			pswd = base64.StdEncoding.EncodeToString(util.RandomBytes(24))
