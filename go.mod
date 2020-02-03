@@ -12,7 +12,7 @@ require (
 	github.com/klauspost/reedsolomon v1.9.3 // indirect
 	github.com/nknorg/consequential v0.0.0-20191113113929-5fd13b7f5984 // indirect
 	github.com/nknorg/nkn v1.1.3-beta
-	github.com/nknorg/nkn-sdk-go v1.1.0-beta.9.0.20200202230316-e6adb287f64b
+	github.com/nknorg/nkn-sdk-go v1.1.0-beta.9.0.20200203014347-9daecd0eda69
 	github.com/nknorg/nnet v0.0.0-20191227203626-cd40f91ceda2 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1 // indirect
