@@ -83,16 +83,19 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
 	onErr := nknsdk.NewOnError(1, nil)
-	npc, err := te.wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.BeneficiaryAddr)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	var npc *nknsdk.NanoPayClaimer
+	var err error
 	lastComputed := common.Fixed64(0)
 	lastClaimed := common.Fixed64(0)
 	lastUpdate := time.Now()
 	isClosed := false
 
 	if !te.config.Reverse {
+		npc, err = te.wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.BeneficiaryAddr)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
 		go func() {
 			for {
 				err := <-onErr.C
