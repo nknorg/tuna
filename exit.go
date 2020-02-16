@@ -548,8 +548,12 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 
 			te.handleSession(session, tcpConn)
 
-			if _, ok := <-te.closeChan; !ok {
-				return
+			select {
+			case _, ok := <-te.closeChan:
+				if !ok {
+					return
+				}
+			default:
 			}
 		}
 	}()
