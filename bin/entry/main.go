@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	flags "github.com/jessevdk/go-flags"
-	nknSdk "github.com/nknorg/nkn-sdk-go"
+	nknsdk "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 	ipify "github.com/rdegges/go-ipify"
@@ -52,7 +52,7 @@ func main() {
 		log.Fatalln("Load or create account error:", err)
 	}
 
-	wallet, err := nknSdk.NewWallet(account)
+	wallet, err := nknsdk.NewWallet(&nknsdk.Account{account}, nil)
 	if err != nil {
 		log.Fatalln("Create wallet error:", err)
 	}
