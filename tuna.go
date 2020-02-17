@@ -238,8 +238,8 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 }
 
 func (c *Common) UpdateServerConn() bool {
-	hasTCP := len(c.Service.TCP) > 0 || len(c.ReverseMetadata.ServiceTCP) > 0
-	hasUDP := len(c.Service.UDP) > 0 || len(c.ReverseMetadata.ServiceUDP) > 0
+	hasTCP := len(c.Service.TCP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceTCP) > 0)
+	hasUDP := len(c.Service.UDP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceUDP) > 0)
 	metadata := c.GetMetadata()
 
 	if hasTCP {
