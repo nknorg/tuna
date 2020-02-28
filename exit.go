@@ -12,8 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	. "github.com/nknorg/nkn-sdk-go"
-	nknsdk "github.com/nknorg/nkn-sdk-go"
+	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/transaction"
 	cache "github.com/patrickmn/go-cache"
@@ -44,7 +43,7 @@ type ExitConfiguration struct {
 
 type TunaExit struct {
 	config           *ExitConfiguration
-	wallet           *nknsdk.Wallet
+	wallet           *nkn.Wallet
 	services         []Service
 	serviceConn      *cache.Cache
 	common           *Common
@@ -57,7 +56,7 @@ type TunaExit struct {
 	closeChan        chan struct{}
 }
 
-func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nknsdk.Wallet) *TunaExit {
+func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) *TunaExit {
 	return &TunaExit{
 		config:      config,
 		wallet:      wallet,
@@ -82,8 +81,8 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 	bytesOut := make([]uint64, 256)
 
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
-	onErr := nknsdk.NewOnError(1, nil)
-	var npc *nknsdk.NanoPayClaimer
+	onErr := nkn.NewOnError(1, nil)
+	var npc *nkn.NanoPayClaimer
 	var err error
 	lastComputed := common.Fixed64(0)
 	lastClaimed := common.Fixed64(0)
@@ -388,7 +387,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) error
 func (te *TunaExit) Start() error {
 	ip, err := ipify.GetIp()
 	if err != nil {
-		return fmt.Errorf("Couldn't get IP:", err)
+		return fmt.Errorf("Couldn't get IP: %v", err)
 	}
 
 	err = te.listenTCP(te.config.ListenTCP)

@@ -10,7 +10,7 @@ import (
 	"time"
 	"unsafe"
 
-	. "github.com/nknorg/nkn-sdk-go"
+	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/trueinsider/smux"
@@ -54,7 +54,7 @@ type TunaEntry struct {
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *Wallet) *TunaEntry {
+func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
 			Service:             service,
@@ -123,7 +123,7 @@ func (te *TunaEntry) Start() {
 		}()
 
 		go func() {
-			var np *NanoPay
+			var np *nkn.NanoPay
 			for {
 				time.Sleep(DefaultNanoPayUpdateInterval)
 				bytesIn := atomic.LoadUint64(&te.bytesIn)

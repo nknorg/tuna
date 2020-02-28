@@ -533,12 +533,9 @@ func LoadPassword(path string) (string, error) {
 
 func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error) {
 	var wallet *vault.WalletImpl
-	pswd, err := LoadPassword(passwordFile)
-	if err != nil {
-		return nil, err
-	}
+	var pswd string
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
-		if len(pswd) == 0 {
+		if _, err = os.Stat(passwordFile); os.IsNotExist(err) {
 			pswd = base64.StdEncoding.EncodeToString(util.RandomBytes(24))
 			log.Println("Creating wallet.pswd")
 			err = ioutil.WriteFile(passwordFile, []byte(pswd), 0644)
@@ -552,8 +549,9 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 			return nil, fmt.Errorf("create wallet error: %v", err)
 		}
 	} else {
-		if len(pswd) == 0 {
-			return nil, fmt.Errorf("cannot load password from file %s", passwordFile)
+		pswd, err = LoadPassword(passwordFile)
+		if err != nil {
+			return nil, err
 		}
 		wallet, err = vault.OpenWallet(walletFile, []byte(pswd))
 		if err != nil {
