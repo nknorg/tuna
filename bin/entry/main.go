@@ -60,6 +60,8 @@ func main() {
 		log.Fatalln("Create wallet error:", err)
 	}
 
+	log.Println("Your NKN wallet address is:", wallet.Address())
+
 	if config.Reverse {
 		serviceListenIP := net.ParseIP(config.ReverseServiceListenIP)
 		if serviceListenIP == nil {

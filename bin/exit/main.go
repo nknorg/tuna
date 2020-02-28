@@ -54,6 +54,8 @@ func main() {
 		log.Fatalln("Create wallet error:", err)
 	}
 
+	log.Println("Your NKN wallet address is:", wallet.Address())
+
 	var services []tuna.Service
 	err = tuna.ReadJson(opts.ServicesFile, &services)
 	if err != nil {
