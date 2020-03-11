@@ -1,12 +1,14 @@
 package tuna
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/nknorg/nkn/common"
 )
 
 func ParsePrice(priceStr string) (common.Fixed64, common.Fixed64, error) {
+	fmt.Println("###", priceStr)
 	price := strings.Split(priceStr, ",")
 	entryToExitPrice, err := common.StringToFixed64(strings.Trim(price[0], " "))
 	if err != nil {

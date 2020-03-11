@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	flags "github.com/jessevdk/go-flags"
+	"github.com/jessevdk/go-flags"
 	nknsdk "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
@@ -63,8 +63,14 @@ func main() {
 	}
 
 	if config.Reverse {
-		for serviceName := range config.Services {
-			e := tuna.NewTunaExit(config, services, wallet)
+		var services []tuna.Service
+		err = tuna.ReadJson(opts.ServicesFile, &services)
+		if err != nil {
+			log.Fatalln("Load service file error:", err)
+		}
+		for serviceName, _ := range config.Services {
+			entryToExitMaxPrice, exitToEntryMaxPrice, err := tuna.ParsePrice("0.001")
+			e := tuna.NewTunaExit(config, services, wallet, entryToExitMaxPrice, exitToEntryMaxPrice)
 			e.OnEntryConnected(func() {
 				fmt.Printf("Service: %s, Address: %v:%v\n", serviceName, e.GetReverseIP(), e.GetReverseTCPPorts())
 			})
@@ -74,7 +80,7 @@ func main() {
 			}
 		}
 	} else {
-		err = tuna.NewTunaExit(config, services, wallet).Start()
+		err = tuna.NewTunaExit(config, services, wallet, 0, 0).Start()
 		if err != nil {
 			log.Fatalln(err)
 		}

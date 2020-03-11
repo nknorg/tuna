@@ -168,7 +168,7 @@ func main() {
 					te.SetServerUDPWriteChan(udpWriteChan)
 				}
 				go func() {
-					te.StartReverse(stream)
+					te.StartReverse(stream, tcpConn)
 					tuna.Close(tcpConn)
 					te = nil
 				}()

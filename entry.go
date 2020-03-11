@@ -2,6 +2,9 @@ package tuna
 
 import (
 	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"strconv"
@@ -10,7 +13,11 @@ import (
 	"time"
 	"unsafe"
 
-	nkn "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/transaction"
+
+	nknsdk "github.com/nknorg/nkn-sdk-go"
+
 	"github.com/nknorg/nkn/common"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/trueinsider/smux"
@@ -19,9 +26,12 @@ import (
 type EntryServiceInfo struct {
 	MaxPrice string `json:"maxPrice"`
 	ListenIP string `json:"ListenIP"`
+	Address  string `json:"address"`
+	Price    string `json:"price"`
 }
 
 type EntryConfiguration struct {
+	BeneficiaryAddr             string                      `json:"BeneficiaryAddr"`
 	Services                    map[string]EntryServiceInfo `json:"Services"`
 	DialTimeout                 uint16                      `json:"DialTimeout"`
 	UDPTimeout                  uint16                      `json:"UDPTimeout"`
@@ -37,12 +47,14 @@ type EntryConfiguration struct {
 	ReverseSubscriptionPrefix   string                      `json:"ReverseSubscriptionPrefix"`
 	ReverseSubscriptionDuration uint32                      `json:"ReverseSubscriptionDuration"`
 	ReverseSubscriptionFee      string                      `json:"ReverseSubscriptionFee"`
+	ClaimInterval               uint32                      `json:"ClaimInterval"`
 }
 
 type TunaEntry struct {
 	*Common
 	config             *EntryConfiguration
 	tcpListeners       map[byte]*net.TCPListener
+	services           []Service
 	serviceConn        map[byte]*net.UDPConn
 	clientAddr         *cache.Cache
 	Session            *smux.Session
@@ -52,6 +64,7 @@ type TunaEntry struct {
 	bytesOut           uint64
 	bytesOutPaid       uint64
 	reverseBeneficiary common.Uint160
+	wallet             *nknsdk.Wallet
 }
 
 func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
@@ -125,7 +138,7 @@ func (te *TunaEntry) Start() {
 		go func() {
 			var np *nkn.NanoPay
 			for {
-				time.Sleep(DefaultNanoPayUpdateInterval)
+				time.Sleep(time.Second * 2)
 				bytesIn := atomic.LoadUint64(&te.bytesIn)
 				bytesOut := atomic.LoadUint64(&te.bytesOut)
 				entryToExitPrice, exitToEntryPrice := te.GetPrice()
@@ -169,7 +182,7 @@ func (te *TunaEntry) Start() {
 	<-te.closeChan
 }
 
-func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
+func (te *TunaEntry) StartReverse(stream *smux.Stream, conn net.Conn) error {
 	metadata := te.GetMetadata()
 	tcpPorts, err := te.listenTCP(te.ListenIP, metadata.ServiceTCP)
 	if err != nil {
@@ -197,27 +210,167 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		te.close()
 		return err
 	}
+	session, err := te.getSession(false)
+
+	bytesIn := make([]uint64, 256)
+	bytesOut := make([]uint64, 256)
+
+	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
+	onErr := nknsdk.NewOnError(1, nil)
+	var npc *nknsdk.NanoPayClaimer
+	lastComputed := common.Fixed64(0)
+	lastClaimed := common.Fixed64(0)
+	lastUpdate := time.Now()
+	isClosed := false
+
+	npc, err = te.wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.BeneficiaryAddr)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	go func() {
-		session, err := te.getSession(false)
-		if err != nil {
-			return
-		}
-		stream, err := session.OpenStream()
-		if err != nil {
-			return
-		}
-		stream.Close()
 		for {
-			_, err = session.AcceptStream()
+			err := <-onErr.C
 			if err != nil {
-				log.Println("Close connection:", err)
-				te.close()
-				return
+				log.Println("Couldn't claim nano pay:", err)
+				if npc.IsClosed() {
+					Close(session)
+					Close(conn)
+					isClosed = true
+					break
+				}
 			}
 		}
 	}()
 
+	go func() {
+		for {
+			time.Sleep(claimInterval)
+
+			if isClosed {
+				break
+			}
+
+			if time.Since(lastUpdate) > claimInterval {
+				log.Println("Didn't update nano pay for more than", claimInterval.String())
+				Close(session)
+				Close(conn)
+				isClosed = true
+				break
+			}
+
+			if common.Fixed64(float64(lastComputed)*0.9) > lastClaimed {
+				log.Println("Nano pay amount covers less than 90% of total cost")
+				Close(session)
+				Close(conn)
+				isClosed = true
+				break
+			}
+		}
+	}()
+
+	for {
+		stream, err := session.AcceptStream()
+		if err != nil {
+			log.Println("Couldn't accept stream:", err)
+			break
+		}
+
+		metadata := stream.Metadata()
+		if len(metadata) == 0 { // payment stream
+			if te.config.Reverse {
+				continue
+			}
+			go func(stream *smux.Stream) {
+				txData, err := ioutil.ReadAll(stream)
+				if err != nil && err.Error() != io.EOF.Error() {
+					log.Println("Couldn't read payment stream:", err)
+					return
+				}
+				if len(txData) == 0 {
+					return
+				}
+				tx := new(transaction.Transaction)
+				if err := tx.Unmarshal(txData); err != nil {
+					log.Println("Couldn't unmarshal payment stream data:", err)
+					return
+				}
+				amount, err := npc.Claim(tx)
+				if err != nil {
+					log.Println("Couldn't accept nano pay update:", err)
+					return
+				}
+
+				totalCost := common.Fixed64(0)
+				for i := range bytesIn {
+					in := atomic.LoadUint64(&bytesIn[i])
+					out := atomic.LoadUint64(&bytesOut[i])
+					if in == 0 && out == 0 {
+						continue
+					}
+					service, err := te.getService(byte(i))
+					if err != nil {
+						continue
+					}
+					serviceInfo := te.config.Services[service.Name]
+					entryToExitPrice, exitToEntryPrice, err := ParsePrice(serviceInfo.Price)
+					if err != nil {
+						continue
+					}
+					totalCost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
+					fmt.Println("totalCost:", totalCost)
+				}
+
+				lastComputed = totalCost
+				lastClaimed = amount.ToFixed64()
+				lastUpdate = time.Now()
+			}(stream)
+			continue
+		}
+
+		serviceId := metadata[0]
+		portId := int(metadata[1])
+
+		service, err := te.getService(serviceId)
+		if err != nil {
+			log.Println(err)
+			//Close(stream)
+			continue
+		}
+		tcpPortsCount := len(service.TCP)
+		udpPortsCount := len(service.UDP)
+		var protocol Protocol
+		var port int
+		if portId < tcpPortsCount {
+			protocol = TCP
+			port = service.TCP[portId]
+		} else if portId-tcpPortsCount < udpPortsCount {
+			protocol = UDP
+			portId -= tcpPortsCount
+			port = service.UDP[portId]
+		} else {
+			log.Println("Wrong portId received:", portId)
+			//Close(stream)
+			continue
+		}
+
+		serviceInfo := te.config.Services[service.Name]
+		host := serviceInfo.Address + ":" + strconv.Itoa(port)
+
+		conn, err := net.DialTimeout(string(protocol), host, time.Duration(te.config.DialTimeout)*time.Second)
+		if err != nil {
+			log.Println("Couldn't connect to host", host, "with error:", err)
+			//Close(stream)
+			continue
+		}
+
+		go Pipe(conn, stream, &bytesIn[serviceId])
+		go Pipe(stream, conn, &bytesOut[serviceId])
+	}
+
+	Close(session)
+	Close(conn)
+	isClosed = true
 	<-te.closeChan
 
 	return nil
@@ -391,4 +544,11 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []int) ([]int, error) {
 
 func GetConnIdData(port int) [2]byte {
 	return *(*[2]byte)(unsafe.Pointer(&port))
+}
+
+func (te *TunaEntry) getService(serviceId byte) (*Service, error) {
+	if int(serviceId) >= len(te.services) {
+		return nil, errors.New("Wrong serviceId: " + strconv.Itoa(int(serviceId)))
+	}
+	return &te.services[serviceId], nil
 }

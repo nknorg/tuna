@@ -12,11 +12,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	nkn "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn-sdk-go"
+	nknsdk "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/transaction"
-	cache "github.com/patrickmn/go-cache"
-	ipify "github.com/rdegges/go-ipify"
+	"github.com/patrickmn/go-cache"
+	"github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 )
 
@@ -26,22 +27,25 @@ type ExitServiceInfo struct {
 }
 
 type ExitConfiguration struct {
-	BeneficiaryAddr      string                     `json:"BeneficiaryAddr"`
-	ListenTCP            int                        `json:"ListenTCP"`
-	ListenUDP            int                        `json:"ListenUDP"`
-	Reverse              bool                       `json:"Reverse"`
-	ReverseRandomPorts   bool                       `json:"ReverseRandomPorts"`
-	ReverseMaxPrice      string                     `json:"ReverseMaxPrice"`
-	DialTimeout          uint16                     `json:"DialTimeout"`
-	UDPTimeout           uint16                     `json:"UDPTimeout"`
-	SubscriptionPrefix   string                     `json:"SubscriptionPrefix"`
-	SubscriptionDuration uint32                     `json:"SubscriptionDuration"`
-	SubscriptionFee      string                     `json:"SubscriptionFee"`
-	ClaimInterval        uint32                     `json:"ClaimInterval"`
-	Services             map[string]ExitServiceInfo `json:"Services"`
+	BeneficiaryAddr        string                     `json:"BeneficiaryAddr"`
+	ListenTCP              int                        `json:"ListenTCP"`
+	ListenUDP              int                        `json:"ListenUDP"`
+	Reverse                bool                       `json:"Reverse"`
+	ReverseRandomPorts     bool                       `json:"ReverseRandomPorts"`
+	ReverseMaxPrice        string                     `json:"ReverseMaxPrice"`
+	ReverseServiceListenIP string                     `json:"ReverseServiceListenIP"`
+	DialTimeout            uint16                     `json:"DialTimeout"`
+	UDPTimeout             uint16                     `json:"UDPTimeout"`
+	SubscriptionPrefix     string                     `json:"SubscriptionPrefix"`
+	SubscriptionDuration   uint32                     `json:"SubscriptionDuration"`
+	SubscriptionFee        string                     `json:"SubscriptionFee"`
+	ClaimInterval          uint32                     `json:"ClaimInterval"`
+	Services               map[string]ExitServiceInfo `json:"Services"`
+	NanoPayFee             string                     `json:"NanoPayFee"`
 }
 
 type TunaExit struct {
+	*Common
 	config           *ExitConfiguration
 	wallet           *nkn.Wallet
 	services         []Service
@@ -54,10 +58,25 @@ type TunaExit struct {
 	reverseUdp       []int
 	onEntryConnected func()
 	closeChan        chan struct{}
+	bytesIn          uint64
+	bytesInPaid      uint64
+	bytesOut         uint64
+	bytesOutPaid     uint64
+	Session          *smux.Session
 }
 
-func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) *TunaExit {
+func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64) *TunaExit {
 	return &TunaExit{
+		Common: &Common{
+			Service:             &Service{},
+			ListenIP:            net.ParseIP(config.ReverseServiceListenIP),
+			EntryToExitMaxPrice: entryToExitMaxPrice,
+			ExitToEntryMaxPrice: exitToEntryMaxPrice,
+			Wallet:              wallet,
+			DialTimeout:         config.DialTimeout,
+			SubscriptionPrefix:  config.SubscriptionPrefix,
+			Reverse:             config.Reverse,
+		},
 		config:      config,
 		wallet:      wallet,
 		services:    services,
@@ -133,6 +152,53 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 					isClosed = true
 					break
 				}
+			}
+		}()
+	} else {
+		go func() {
+			var np *nknsdk.NanoPay
+			for {
+				time.Sleep(time.Second * 1)
+				bytesIn := atomic.LoadUint64(&te.bytesIn)
+				bytesOut := atomic.LoadUint64(&te.bytesOut)
+				entryToExitPrice, exitToEntryPrice := te.GetPrice()
+				fmt.Println("##entryToExitPrice, exitToEntryPrice:", entryToExitPrice, exitToEntryPrice)
+				delta := 100000*common.Fixed64(bytesIn-te.bytesInPaid)/TrafficUnit + 100000*common.Fixed64(bytesOut-te.bytesOutPaid)/TrafficUnit
+				if delta == 0 {
+					continue
+				}
+				fmt.Println("non zero delata:", delta)
+				paymentReceiver := te.GetPaymentReceiver()
+				fmt.Println("paymentReceiver:", paymentReceiver)
+				if np == nil || np.Address() != paymentReceiver {
+					var err error
+					np, err = te.Wallet.NewNanoPay(paymentReceiver, te.config.NanoPayFee, DefaultNanoPayDuration)
+					if err != nil {
+						fmt.Println("$$$", err)
+						continue
+					}
+				}
+				tx, err := np.IncrementAmount(delta.String())
+				if err != nil {
+					fmt.Println("####", err)
+					continue
+				}
+				txData := tx.ToArray()
+				session, err := te.getSession(false)
+				if err != nil {
+					continue
+				}
+				stream, err := session.OpenStream()
+				if err != nil {
+					continue
+				}
+				n, err := stream.Write(txData)
+				if n == len(txData) && err == nil {
+					te.bytesInPaid = bytesIn
+					te.bytesOutPaid = bytesOut
+					fmt.Println("###bytesInandOut: ", bytesIn, bytesOut)
+				}
+				stream.Close()
 			}
 		}()
 	}
@@ -233,6 +299,8 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 
 		go Pipe(conn, stream, &bytesIn[serviceId])
 		go Pipe(stream, conn, &bytesOut[serviceId])
+		te.bytesIn = bytesIn[serviceId]
+		te.bytesOut = bytesOut[serviceId]
 	}
 
 	Close(session)
@@ -574,6 +642,25 @@ func (te *TunaExit) GetReverseTCPPorts() []int {
 
 func (te *TunaExit) GetReverseUDPPorts() []int {
 	return te.reverseUdp
+}
+
+func (te *TunaExit) getSession(force bool) (*smux.Session, error) {
+	if te.Reverse && force {
+		te.Close()
+		return nil, errors.New("reverse connection to service is dead")
+	}
+	if te.Session == nil || te.Session.IsClosed() || force {
+		conn, err := te.GetServerTCPConn(force)
+		if err != nil {
+			return nil, err
+		}
+		te.Session, err = smux.Client(conn, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return te.Session, nil
 }
 
 func (te *TunaExit) Close() {

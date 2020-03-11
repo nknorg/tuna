@@ -37,7 +37,7 @@ const (
 	UDP                           Protocol = "udp"
 	DefaultNanoPayDuration                 = 4320 * 30
 	DefaultNanoPayUpdateInterval           = time.Minute
-	DefaultSubscriptionPrefix              = "tuna+1."
+	DefaultSubscriptionPrefix              = "tuna+1234567."
 	DefaultReverseServiceName              = "reverse"
 	DefaultServiceListenIP                 = "127.0.0.1"
 	DefaultReverseServiceListenIP          = "0.0.0.0"
@@ -307,6 +307,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 
 				metadata := c.GetMetadata()
+				fmt.Println("@@@metadata:", metadata)
 
 				if len(metadata.BeneficiaryAddr) > 0 {
 					c.SetPaymentReceiver(metadata.BeneficiaryAddr)
