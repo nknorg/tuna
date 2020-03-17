@@ -12,11 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	nkn "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/transaction"
-	cache "github.com/patrickmn/go-cache"
-	ipify "github.com/rdegges/go-ipify"
+	"github.com/patrickmn/go-cache"
+	"github.com/rdegges/go-ipify"
 	"github.com/trueinsider/smux"
 )
 
@@ -39,27 +39,40 @@ type ExitConfiguration struct {
 	SubscriptionFee      string                     `json:"SubscriptionFee"`
 	ClaimInterval        uint32                     `json:"ClaimInterval"`
 	Services             map[string]ExitServiceInfo `json:"Services"`
+	ReverseNanoPayFee    string                     `json:"ReverseNanopayfee"`
 }
 
 type TunaExit struct {
-	config           *ExitConfiguration
-	wallet           *nkn.Wallet
-	services         []Service
-	serviceConn      *cache.Cache
-	common           *Common
-	tcpListener      net.Listener
-	udpConn          *net.UDPConn
-	reverseIp        net.IP
-	reverseTcp       []int
-	reverseUdp       []int
-	onEntryConnected func()
-	closeChan        chan struct{}
+	config              *ExitConfiguration
+	Wallet              *nkn.Wallet
+	services            []Service
+	serviceConn         *cache.Cache
+	Common              *Common
+	tcpListener         net.Listener
+	udpConn             *net.UDPConn
+	reverseIp           net.IP
+	reverseTcp          []int
+	reverseUdp          []int
+	onEntryConnected    func()
+	closeChan           chan struct{}
+	reverseBytesIn      uint64
+	reverseBytesOut     uint64
+	reverseBytesInPaid  uint64
+	reverseBytesOutPaid uint64
 }
 
-func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) *TunaExit {
+func NewTunaExit(config *ExitConfiguration, services []Service, reverseEntryToExitPrice, reverseExitToEntryPrice common.Fixed64, wallet *nkn.Wallet) *TunaExit {
 	return &TunaExit{
+		Common: &Common{
+			entryToExitPrice:   reverseEntryToExitPrice,
+			exitToEntryPrice:   reverseExitToEntryPrice,
+			Wallet:             wallet,
+			DialTimeout:        config.DialTimeout,
+			SubscriptionPrefix: config.SubscriptionPrefix,
+			Reverse:            config.Reverse,
+		},
 		config:      config,
-		wallet:      wallet,
+		Wallet:      wallet,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
 		closeChan:   make(chan struct{}, 0),
@@ -90,7 +103,7 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 	isClosed := false
 
 	if !te.config.Reverse {
-		npc, err = te.wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.BeneficiaryAddr)
+		npc, err = te.Wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.BeneficiaryAddr)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -176,16 +189,8 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 					if in == 0 && out == 0 {
 						continue
 					}
-					service, err := te.getService(byte(i))
-					if err != nil {
-						continue
-					}
-					serviceInfo := te.config.Services[service.Name]
-					entryToExitPrice, exitToEntryPrice, err := ParsePrice(serviceInfo.Price)
-					if err != nil {
-						continue
-					}
-					totalCost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
+
+					totalCost += te.Common.entryToExitPrice*common.Fixed64(in)/TrafficUnit + te.Common.exitToEntryPrice*common.Fixed64(out)/TrafficUnit
 				}
 
 				lastComputed = totalCost
@@ -230,9 +235,13 @@ func (te *TunaExit) handleSession(session *smux.Session, conn net.Conn) {
 			Close(stream)
 			continue
 		}
-
-		go Pipe(conn, stream, &bytesIn[serviceId])
-		go Pipe(stream, conn, &bytesOut[serviceId])
+		if te.config.Reverse {
+			go Pipe(conn, stream, &te.reverseBytesIn)
+			go Pipe(stream, conn, &te.reverseBytesOut)
+		} else {
+			go Pipe(conn, stream, &bytesIn[serviceId])
+			go Pipe(stream, conn, &bytesOut[serviceId])
+		}
 	}
 
 	Close(session)
@@ -378,7 +387,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort int, udpPort int) error
 			te.config.SubscriptionPrefix,
 			te.config.SubscriptionDuration,
 			te.config.SubscriptionFee,
-			te.wallet,
+			te.Wallet,
 		)
 	}
 	return nil
@@ -422,11 +431,11 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 		return err
 	}
 
-	te.common = &Common{
+	te.Common = &Common{
 		Service:             &Service{Name: DefaultReverseServiceName},
 		EntryToExitMaxPrice: maxPrice,
 		ExitToEntryMaxPrice: maxPrice,
-		Wallet:              te.wallet,
+		Wallet:              te.Wallet,
 		DialTimeout:         te.config.DialTimeout,
 		ReverseMetadata:     reverseMetadata,
 		SubscriptionPrefix:  te.config.SubscriptionPrefix,
@@ -435,7 +444,7 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 	go func() {
 		var tcpConn net.Conn
 		for {
-			err := te.common.CreateServerConn(true)
+			err := te.Common.CreateServerConn(true)
 			if err != nil {
 				log.Println("Couldn't connect to reverse entry:", err)
 				time.Sleep(1 * time.Second)
@@ -445,7 +454,7 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 			udpPort := -1
 			var udpConn *net.UDPConn
 			if len(service.UDP) > 0 {
-				udpConn, err = te.common.GetServerUDPConn(false)
+				udpConn, err = te.Common.GetServerUDPConn(false)
 				if err != nil {
 					log.Println(err)
 					time.Sleep(1 * time.Second)
@@ -488,7 +497,7 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 				te.config.BeneficiaryAddr,
 			)
 
-			tcpConn, err = te.common.GetServerTCPConn(false)
+			tcpConn, err = te.Common.GetServerTCPConn(false)
 			if err != nil {
 				log.Println(err)
 				time.Sleep(1 * time.Second)
@@ -545,6 +554,14 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 				te.readUDP()
 			}
 
+			go func() {
+				var np *nkn.NanoPay
+				for {
+					time.Sleep(DefaultNanoPayUpdateInterval)
+					go sendNanoPayment(np, session, te.Wallet, &te.reverseBytesIn, &te.reverseBytesOut, &te.reverseBytesInPaid, &te.reverseBytesOutPaid, te.Common, "0")
+				}
+			}()
+
 			te.handleSession(session, tcpConn)
 
 			select {
@@ -580,6 +597,6 @@ func (te *TunaExit) Close() {
 	close(te.closeChan)
 	Close(te.tcpListener)
 	Close(te.udpConn)
-	Close(te.common.tcpConn)
-	Close(te.common.udpConn)
+	Close(te.Common.tcpConn)
+	Close(te.Common.udpConn)
 }
