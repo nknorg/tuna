@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	flags "github.com/jessevdk/go-flags"
-	nknsdk "github.com/nknorg/nkn-sdk-go"
+	"github.com/jessevdk/go-flags"
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 )
@@ -49,7 +49,7 @@ func main() {
 		log.Fatalln("Load or create account error:", err)
 	}
 
-	wallet, err := nknsdk.NewWallet(&nknsdk.Account{account}, nil)
+	wallet, err := nkn.NewWallet(&nkn.Account{account}, nil)
 	if err != nil {
 		log.Fatalln("Create wallet error:", err)
 	}
@@ -63,8 +63,9 @@ func main() {
 	}
 
 	if config.Reverse {
-		for serviceName := range config.Services {
-			e := tuna.NewTunaExit(config, services, wallet)
+		for serviceName, serviceInfo := range config.Services {
+			reverseEntryToExitPrice, reverseExitToEntryPrice, err := tuna.ParsePrice(serviceInfo.Price)
+			e := tuna.NewTunaExit(config, services, reverseEntryToExitPrice, reverseExitToEntryPrice, wallet)
 			e.OnEntryConnected(func() {
 				fmt.Printf("Service: %s, Address: %v:%v\n", serviceName, e.GetReverseIP(), e.GetReverseTCPPorts())
 			})
@@ -74,7 +75,7 @@ func main() {
 			}
 		}
 	} else {
-		err = tuna.NewTunaExit(config, services, wallet).Start()
+		err = tuna.NewTunaExit(config, services, common.Fixed64(0), common.Fixed64(0), wallet).Start()
 		if err != nil {
 			log.Fatalln(err)
 		}
