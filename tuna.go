@@ -20,7 +20,9 @@ import (
 	"time"
 	"unsafe"
 
-	nknsdk "github.com/nknorg/nkn-sdk-go"
+	"github.com/trueinsider/smux"
+
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/crypto/util"
@@ -66,7 +68,7 @@ type Common struct {
 	ListenIP            net.IP
 	EntryToExitMaxPrice common.Fixed64
 	ExitToEntryMaxPrice common.Fixed64
-	Wallet              *nknsdk.Wallet
+	Wallet              *nkn.Wallet
 	DialTimeout         uint16
 	SubscriptionPrefix  string
 	Reverse             bool
@@ -420,7 +422,7 @@ func UpdateMetadata(
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
 	subscriptionFee string,
-	wallet *nknsdk.Wallet,
+	wallet *nkn.Wallet,
 ) {
 	metadataRaw := CreateRawMetadata(
 		serviceId,
@@ -559,4 +561,45 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 		}
 	}
 	return wallet.GetDefaultAccount()
+}
+
+func sendNanoPayment(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, inBytes, outBytes, inBytesPaid, outBytesPaid *uint64, c *Common, nanoPayFee string) {
+
+	bytesIn := atomic.LoadUint64(inBytes)
+	bytesOut := atomic.LoadUint64(outBytes)
+
+	delta := c.exitToEntryPrice*common.Fixed64(bytesIn-*inBytesPaid)/TrafficUnit + c.entryToExitPrice*common.Fixed64(bytesOut-*outBytesPaid)/TrafficUnit
+	if delta == 0 {
+		return
+	}
+	paymentReceiver := c.GetPaymentReceiver()
+	if np == nil || np.Address() != paymentReceiver {
+		var err error
+		np, err = w.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+	}
+	tx, err := np.IncrementAmount(delta.String())
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	txData := tx.ToArray()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	stream, err := session.OpenStream()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	n, err := stream.Write(txData)
+	if n == len(txData) && err == nil {
+		*inBytesPaid = bytesIn
+		*outBytesPaid = bytesOut
+	}
+	stream.Close()
 }
