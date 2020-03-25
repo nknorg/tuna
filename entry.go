@@ -2,8 +2,6 @@ package tuna
 
 import (
 	"errors"
-	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"strconv"
@@ -14,7 +12,6 @@ import (
 
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
-	"github.com/nknorg/nkn/transaction"
 	"github.com/patrickmn/go-cache"
 	"github.com/trueinsider/smux"
 )
@@ -44,7 +41,7 @@ type EntryConfiguration struct {
 
 type TunaEntry struct {
 	*Common
-	Config             *EntryConfiguration
+	config             *EntryConfiguration
 	tcpListeners       map[byte]*net.TCPListener
 	serviceConn        map[byte]*net.UDPConn
 	clientAddr         *cache.Cache
@@ -71,7 +68,7 @@ func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitTo
 			SubscriptionPrefix:  config.SubscriptionPrefix,
 			Reverse:             config.Reverse,
 		},
-		Config:       config,
+		config:       config,
 		tcpListeners: make(map[byte]*net.TCPListener),
 		serviceConn:  make(map[byte]*net.UDPConn),
 		clientAddr:   cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
@@ -113,13 +110,16 @@ func (te *TunaEntry) Start() {
 			if err != nil {
 				return
 			}
-
+			stream, err := session.OpenStream()
+			if err != nil {
+				return
+			}
+			stream.Close()
 			for {
 				_, err = session.AcceptStream()
 				if err != nil {
 					log.Println("Close connection:", err)
-					time.Sleep(time.Second * 1)
-					continue
+					return
 				}
 			}
 		}()
@@ -133,7 +133,26 @@ func (te *TunaEntry) Start() {
 					log.Printf("get session err: %v", err)
 					continue
 				}
-				go sendNanoPayment(np, session, te.Wallet, &te.bytesIn, &te.bytesOut, &te.bytesInPaid, &te.bytesOutPaid, te.Common, te.Config.NanoPayFee)
+				bytesIn := atomic.LoadUint64(&te.bytesIn)
+				bytesOut := atomic.LoadUint64(&te.bytesOut)
+				entryToExitPrice, exitToEntryPrice := te.GetPrice()
+				cost := exitToEntryPrice*common.Fixed64(bytesIn-te.bytesInPaid)/TrafficUnit + entryToExitPrice*common.Fixed64(bytesOut-te.bytesOutPaid)/TrafficUnit
+				if cost == 0 {
+					continue
+				}
+				length, err := sendNanoPayment(np, session, te.Wallet, &cost, te.Common, te.config.NanoPayFee)
+				if err != nil {
+					log.Printf("send nano payment err: %v", err)
+					return
+				}
+				if length > 0 {
+					te.bytesInPaid = bytesIn
+					te.bytesOutPaid = bytesOut
+				}
+				_, ok := <-te.closeChan
+				if !ok {
+					return
+				}
 			}
 		}()
 		break
@@ -163,7 +182,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		-1,
 		-1,
 		"",
-		te.Config.ReverseBeneficiaryAddr,
+		te.config.ReverseBeneficiaryAddr,
 	)
 	_, err = stream.Write(serviceMetadata)
 	if err != nil {
@@ -182,55 +201,24 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		}
 		stream.Close()
 
+		totalCost := common.Fixed64(0)
 		lastComputed := common.Fixed64(0)
 		lastClaimed := common.Fixed64(0)
 		lastUpdate := time.Now()
-		claimInterval := time.Duration(te.Config.ReverseClaimInterval) * time.Second
+		claimInterval := time.Duration(te.config.ReverseClaimInterval) * time.Second
 		onErr := nkn.NewOnError(1, nil)
 		isClosed := false
 
-		npc, err := te.Wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.Config.ReverseBeneficiaryAddr)
+		npc, err := te.Wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.ReverseBeneficiaryAddr)
 		if err != nil {
 			log.Println(err)
+			te.close()
 			return
 		}
 
-		go func() {
-			for {
-				err := <-onErr.C
-				if err != nil {
-					log.Println("Couldn't claim nano pay:", err)
-					if npc.IsClosed() {
-						break
-					}
-					continue
-				}
-			}
-		}()
+		go claimCheck(session, npc, onErr, &isClosed)
 
-		go func() {
-			for {
-				time.Sleep(time.Second * 10)
-
-				if isClosed {
-					break
-				}
-
-				if time.Since(lastUpdate) > claimInterval {
-					log.Println("Didn't update nano pay for more than", claimInterval.String())
-					Close(session)
-					isClosed = true
-					break
-				}
-
-				if common.Fixed64(float64(lastComputed)*0.9) > lastClaimed {
-					log.Println("Nano pay amount covers less than 90% of total cost")
-					Close(session)
-					isClosed = true
-					break
-				}
-			}
-		}()
+		go paymentCheck(session, claimInterval, &lastComputed, &lastClaimed, &lastUpdate, &isClosed)
 
 		for {
 			stream, err = session.AcceptStream()
@@ -240,7 +228,18 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 				return
 			}
 			if len(stream.Metadata()) == 0 {
-				te.nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &lastUpdate)
+				in := atomic.LoadUint64(&te.reverseBytesIn)
+				out := atomic.LoadUint64(&te.reverseBytesOut)
+				if in == 0 && out == 0 {
+					continue
+				}
+				totalCost += te.entryToExitPrice*common.Fixed64(out)/TrafficUnit + te.exitToEntryPrice*common.Fixed64(in)/TrafficUnit
+				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
+				if err != nil {
+					log.Println("nanoPayClaim failed:", err)
+					te.close()
+					return
+				}
 			}
 		}
 	}()
@@ -248,44 +247,6 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	<-te.closeChan
 
 	return nil
-}
-
-func (te *TunaEntry) nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastComputed, lastClaimed *common.Fixed64, lastUpdate *time.Time) {
-	totalCost := common.Fixed64(0)
-
-	txData, err := ioutil.ReadAll(stream)
-	if err != nil && err.Error() != io.EOF.Error() {
-		log.Println("Couldn't read payment stream:", err)
-		return
-	}
-	if len(txData) == 0 {
-		return
-	}
-	tx := new(transaction.Transaction)
-	if err := tx.Unmarshal(txData); err != nil {
-		log.Println("Couldn't unmarshal payment stream data:", err)
-		return
-	}
-
-	amount, err := npc.Claim(tx)
-	if err != nil {
-		log.Println("Couldn't accept nano pay update:", err)
-		return
-	}
-
-	in := atomic.LoadUint64(&te.reverseBytesIn)
-	out := atomic.LoadUint64(&te.reverseBytesOut)
-	if in == 0 && out == 0 {
-		return
-	}
-
-	totalCost += te.Common.entryToExitPrice*common.Fixed64(out)/TrafficUnit + te.Common.exitToEntryPrice*common.Fixed64(in)/TrafficUnit
-
-	lastComputed = &totalCost
-	lc := amount.ToFixed64()
-	lastClaimed = &lc
-	lu := time.Now()
-	lastUpdate = &lu
 }
 
 func (te *TunaEntry) close() {
@@ -365,7 +326,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []int) ([]int, error) {
 					time.Sleep(time.Second)
 					continue
 				}
-				if te.Config.Reverse {
+				if te.config.Reverse {
 					go Pipe(stream, conn, &te.reverseBytesIn)
 					go Pipe(conn, stream, &te.reverseBytesOut)
 				} else {
