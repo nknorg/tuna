@@ -27,6 +27,7 @@ import (
 	"github.com/nknorg/nkn/crypto"
 	"github.com/nknorg/nkn/crypto/util"
 	"github.com/nknorg/nkn/program"
+	"github.com/nknorg/nkn/transaction"
 	"github.com/nknorg/nkn/util/address"
 	"github.com/nknorg/nkn/util/config"
 	"github.com/nknorg/nkn/vault"
@@ -563,43 +564,91 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 	return wallet.GetDefaultAccount()
 }
 
-func sendNanoPayment(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, inBytes, outBytes, inBytesPaid, outBytesPaid *uint64, c *Common, nanoPayFee string) {
-
-	bytesIn := atomic.LoadUint64(inBytes)
-	bytesOut := atomic.LoadUint64(outBytes)
-
-	delta := c.exitToEntryPrice*common.Fixed64(bytesIn-*inBytesPaid)/TrafficUnit + c.entryToExitPrice*common.Fixed64(bytesOut-*outBytesPaid)/TrafficUnit
-	if delta == 0 {
-		return
-	}
+func sendNanoPayment(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *common.Fixed64, c *Common, nanoPayFee string) (int, error) {
+	var err error
 	paymentReceiver := c.GetPaymentReceiver()
 	if np == nil || np.Address() != paymentReceiver {
-		var err error
 		np, err = w.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
 		if err != nil {
-			log.Println(err)
-			return
+			return 0, err
 		}
 	}
-	tx, err := np.IncrementAmount(delta.String())
+	tx, err := np.IncrementAmount(cost.String())
 	if err != nil {
-		log.Println(err)
-		return
+		return 0, err
 	}
 	txData := tx.ToArray()
-	if err != nil {
-		log.Println(err)
-		return
-	}
 	stream, err := session.OpenStream()
 	if err != nil {
-		log.Println(err)
-		return
+		return 0, err
 	}
 	n, err := stream.Write(txData)
-	if n == len(txData) && err == nil {
-		*inBytesPaid = bytesIn
-		*outBytesPaid = bytesOut
-	}
 	stream.Close()
+	if !(n == len(txData) && err == nil) {
+		return 0, err
+	}
+	return n, nil
+}
+
+func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastComputed, lastClaimed, totalCost *common.Fixed64, lastUpdate *time.Time) error {
+	txData, err := ioutil.ReadAll(stream)
+	if err != nil && err.Error() != io.EOF.Error() {
+		return fmt.Errorf("couldn't read payment stream: %v", err)
+	}
+	if len(txData) == 0 {
+		return fmt.Errorf("no data received")
+	}
+	tx := new(transaction.Transaction)
+	if err := tx.Unmarshal(txData); err != nil {
+		return fmt.Errorf("couldn't unmarshal payment stream data: %v", err)
+	}
+
+	amount, err := npc.Claim(tx)
+	if err != nil {
+		return fmt.Errorf("couldn't accept nano pay update: %v", err)
+	}
+
+	*lastComputed = *totalCost
+	lc := amount.ToFixed64()
+	lastClaimed = &lc
+	lu := time.Now()
+	lastUpdate = &lu
+	return nil
+}
+
+func claimCheck(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nkn.OnError, isClosed *bool) {
+	for {
+		err := <-onErr.C
+		if err != nil {
+			log.Println("Couldn't claim nano pay:", err)
+			if npc.IsClosed() {
+				Close(session)
+				*isClosed = true
+				break
+			}
+		}
+	}
+}
+func paymentCheck(session *smux.Session, claimInterval time.Duration, lastComputed, lastClaimed *common.Fixed64, lastUpdate *time.Time, isClosed *bool) {
+	for {
+		time.Sleep(claimInterval)
+
+		if *isClosed {
+			break
+		}
+
+		if time.Since(*lastUpdate) > claimInterval {
+			log.Println("Didn't update nano pay for more than", claimInterval.String())
+			Close(session)
+			*isClosed = true
+			break
+		}
+
+		if common.Fixed64(float64(*lastComputed)*0.9) > *lastClaimed {
+			log.Println("Nano pay amount covers less than 90% of total cost")
+			Close(session)
+			*isClosed = true
+			break
+		}
+	}
 }
