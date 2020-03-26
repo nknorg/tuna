@@ -127,8 +127,12 @@ func (te *TunaEntry) Start() {
 		go func() {
 			var np *nkn.NanoPay
 			for {
+				select {
+				case <-te.closeChan:
+					return
+				default:
+				}
 				time.Sleep(DefaultNanoPayUpdateInterval)
-				session, err := te.getSession(false)
 				if err != nil {
 					log.Printf("get session err: %v", err)
 					continue
@@ -140,19 +144,16 @@ func (te *TunaEntry) Start() {
 				if cost == 0 {
 					continue
 				}
-				length, err := sendNanoPayment(np, session, te.Wallet, &cost, te.Common, te.config.NanoPayFee)
+				session, err := te.getSession(false)
+				err = sendNanoPay(np, session, te.Wallet, &cost, te.Common, te.config.NanoPayFee)
 				if err != nil {
 					log.Printf("send nano payment err: %v", err)
-					return
+					continue
 				}
-				if length > 0 {
-					te.bytesInPaid = bytesIn
-					te.bytesOutPaid = bytesOut
-				}
-				_, ok := <-te.closeChan
-				if !ok {
-					return
-				}
+
+				te.bytesInPaid = bytesIn
+				te.bytesOutPaid = bytesOut
+
 			}
 		}()
 		break
@@ -237,8 +238,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
 				if err != nil {
 					log.Println("nanoPayClaim failed:", err)
-					te.close()
-					return
+					continue
 				}
 			}
 		}
