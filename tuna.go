@@ -564,30 +564,33 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 	return wallet.GetDefaultAccount()
 }
 
-func sendNanoPayment(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *common.Fixed64, c *Common, nanoPayFee string) (int, error) {
+func sendNanoPay(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *common.Fixed64, c *Common, nanoPayFee string) error {
 	var err error
 	paymentReceiver := c.GetPaymentReceiver()
 	if np == nil || np.Address() != paymentReceiver {
 		np, err = w.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
 		if err != nil {
-			return 0, err
+			return err
 		}
 	}
 	tx, err := np.IncrementAmount(cost.String())
 	if err != nil {
-		return 0, err
+		return err
 	}
 	txData := tx.ToArray()
 	stream, err := session.OpenStream()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	n, err := stream.Write(txData)
-	stream.Close()
-	if !(n == len(txData) && err == nil) {
-		return 0, err
+	if err != nil {
+		return err
 	}
-	return n, nil
+	stream.Close()
+	if n != len(txData) {
+		return fmt.Errorf("send txData err: should be %d, have %d", len(txData), n)
+	}
+	return nil
 }
 
 func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastComputed, lastClaimed, totalCost *common.Fixed64, lastUpdate *time.Time) error {
@@ -610,9 +613,9 @@ func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastComputed, la
 
 	*lastComputed = *totalCost
 	lc := amount.ToFixed64()
-	lastClaimed = &lc
+	*lastClaimed = lc
 	lu := time.Now()
-	lastUpdate = &lu
+	*lastUpdate = lu
 	return nil
 }
 

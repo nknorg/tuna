@@ -120,26 +120,31 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			if te.config.Reverse {
 				continue
 			}
-			totalCost := common.Fixed64(0)
-			for i := range bytesIn {
-				in := atomic.LoadUint64(&bytesIn[i])
-				out := atomic.LoadUint64(&bytesOut[i])
-				if in == 0 && out == 0 {
-					continue
+			go func(stream *smux.Stream) {
+				totalCost := common.Fixed64(0)
+				for i := range bytesIn {
+					in := atomic.LoadUint64(&bytesIn[i])
+					out := atomic.LoadUint64(&bytesOut[i])
+					if in == 0 && out == 0 {
+						continue
+					}
+					service, err := te.getService(byte(i))
+					if err != nil {
+						continue
+					}
+					serviceInfo := te.config.Services[service.Name]
+					entryToExitPrice, exitToEntryPrice, err := ParsePrice(serviceInfo.Price)
+					if err != nil {
+						continue
+					}
+					totalCost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
 				}
-				service, err := te.getService(byte(i))
-				if err != nil {
-					continue
-				}
-				serviceInfo := te.config.Services[service.Name]
-				entryToExitPrice, exitToEntryPrice, err := ParsePrice(serviceInfo.Price)
-				if err != nil {
-					continue
-				}
-				totalCost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
-			}
 
-			err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
+				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
+				if err != nil {
+					log.Println("Couldn't claim nanoPay:", err)
+				}
+			}(stream)
 			continue
 		}
 
@@ -215,8 +220,10 @@ func (te *TunaExit) listenTCP(port int) error {
 				continue
 			}
 
-			go te.handleSession(session)
-			Close(conn)
+			go func() {
+				te.handleSession(session)
+				Close(conn)
+			}()
 		}
 	}()
 
@@ -500,6 +507,13 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 			go func() {
 				var np *nkn.NanoPay
 				for {
+					select {
+					case _, ok := <-te.closeChan:
+						if !ok {
+							return
+						}
+					default:
+					}
 					time.Sleep(DefaultNanoPayUpdateInterval)
 					bytesIn := atomic.LoadUint64(&te.reverseBytesIn)
 					bytesOut := atomic.LoadUint64(&te.reverseBytesOut)
@@ -511,24 +525,20 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 						continue
 					}
 					log.Println("incurred costs：", cost)
-					length, err := sendNanoPayment(np, session, te.Wallet, &cost, te.Common, "0")
-					if length > 0 {
-						te.reverseBytesInPaid = bytesIn
-						te.reverseBytesOutPaid = bytesOut
-					}
+					err = sendNanoPay(np, session, te.Wallet, &cost, te.Common, "0")
 					if err != nil {
 						log.Printf("send nano payment err: %v", err)
-						return
+						continue
 					}
-					_, ok := <-te.closeChan
-					if !ok {
-						return
-					}
+					te.reverseBytesInPaid = bytesIn
+					te.reverseBytesOutPaid = bytesOut
+
 				}
 			}()
 
 			te.handleSession(session)
 			Close(tcpConn)
+
 			select {
 			case _, ok := <-te.closeChan:
 				if !ok {
