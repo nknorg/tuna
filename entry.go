@@ -16,27 +16,22 @@ import (
 	"github.com/trueinsider/smux"
 )
 
-type EntryServiceInfo struct {
-	MaxPrice string `json:"maxPrice"`
-	ListenIP string `json:"ListenIP"`
-}
-
 type EntryConfiguration struct {
-	Services                    map[string]EntryServiceInfo `json:"Services"`
-	DialTimeout                 uint16                      `json:"DialTimeout"`
-	UDPTimeout                  uint16                      `json:"UDPTimeout"`
-	NanoPayFee                  string                      `json:"NanoPayFee"`
-	SubscriptionPrefix          string                      `json:"SubscriptionPrefix"`
-	Reverse                     bool                        `json:"Reverse"`
-	ReverseBeneficiaryAddr      string                      `json:"ReverseBeneficiaryAddr"`
-	ReverseTCP                  int                         `json:"ReverseTCP"`
-	ReverseUDP                  int                         `json:"ReverseUDP"`
-	ReverseServiceListenIP      string                      `json:"ReverseServiceListenIP"`
-	ReversePrice                string                      `json:"ReversePrice"`
-	ReverseClaimInterval        uint32                      `json:"ReverseClaimInterval"`
-	ReverseSubscriptionPrefix   string                      `json:"ReverseSubscriptionPrefix"`
-	ReverseSubscriptionDuration uint32                      `json:"ReverseSubscriptionDuration"`
-	ReverseSubscriptionFee      string                      `json:"ReverseSubscriptionFee"`
+	Services                    map[string]ServiceInfo `json:"Services"`
+	DialTimeout                 uint16                 `json:"DialTimeout"`
+	UDPTimeout                  uint16                 `json:"UDPTimeout"`
+	NanoPayFee                  string                 `json:"NanoPayFee"`
+	SubscriptionPrefix          string                 `json:"SubscriptionPrefix"`
+	Reverse                     bool                   `json:"Reverse"`
+	ReverseBeneficiaryAddr      string                 `json:"ReverseBeneficiaryAddr"`
+	ReverseTCP                  int                    `json:"ReverseTCP"`
+	ReverseUDP                  int                    `json:"ReverseUDP"`
+	ReverseServiceListenIP      string                 `json:"ReverseServiceListenIP"`
+	ReversePrice                string                 `json:"ReversePrice"`
+	ReverseClaimInterval        uint32                 `json:"ReverseClaimInterval"`
+	ReverseSubscriptionPrefix   string                 `json:"ReverseSubscriptionPrefix"`
+	ReverseSubscriptionDuration uint32                 `json:"ReverseSubscriptionDuration"`
+	ReverseSubscriptionFee      string                 `json:"ReverseSubscriptionFee"`
 }
 
 type TunaEntry struct {
@@ -56,17 +51,16 @@ type TunaEntry struct {
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, listenIP net.IP, entryToExitMaxPrice, exitToEntryMaxPrice common.Fixed64, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
+func NewTunaEntry(service *Service, listenIP net.IP, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
-			Service:             service,
-			ListenIP:            listenIP,
-			EntryToExitMaxPrice: entryToExitMaxPrice,
-			ExitToEntryMaxPrice: exitToEntryMaxPrice,
-			Wallet:              wallet,
-			DialTimeout:         config.DialTimeout,
-			SubscriptionPrefix:  config.SubscriptionPrefix,
-			Reverse:             config.Reverse,
+			Service:            service,
+			ListenIP:           listenIP,
+			ServiceInfo:        serviceInfo,
+			Wallet:             wallet,
+			DialTimeout:        config.DialTimeout,
+			SubscriptionPrefix: config.SubscriptionPrefix,
+			Reverse:            config.Reverse,
 		},
 		config:       config,
 		tcpListeners: make(map[byte]*net.TCPListener),
