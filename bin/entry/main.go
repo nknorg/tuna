@@ -117,7 +117,7 @@ func main() {
 					continue
 				}
 
-				te := tuna.NewTunaEntry(&tuna.Service{}, serviceListenIP, 0, 0, config, wallet)
+				te := tuna.NewTunaEntry(&tuna.Service{}, serviceListenIP, &tuna.ServiceInfo{}, config, wallet)
 				te.Session, _ = smux.Client(tcpConn, nil)
 				stream, err := te.Session.OpenStream()
 				if err != nil {
@@ -204,14 +204,9 @@ func main() {
 				serviceListenIP = net.ParseIP(tuna.DefaultServiceListenIP)
 			}
 
-			entryToExitMaxPrice, exitToEntryMaxPrice, err := tuna.ParsePrice(serviceInfo.MaxPrice)
-			if err != nil {
-				log.Fatalf("Parse price of service %s error: %v", serviceName, err)
-			}
-
 			for _, service := range services {
 				if service.Name == serviceName {
-					go tuna.NewTunaEntry(&service, serviceListenIP, entryToExitMaxPrice, exitToEntryMaxPrice, config, wallet).Start()
+					go tuna.NewTunaEntry(&service, serviceListenIP, &serviceInfo, config, wallet).Start()
 					continue service
 				}
 			}
