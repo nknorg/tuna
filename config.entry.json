@@ -1,7 +1,15 @@
 {
   "Services": {
     "httpproxy": {
-      "maxPrice": "0.001"
+      "maxPrice": "0.001",
+      "IPFilter": {
+        "Allow": [
+          {"CountryCode": ""}
+        ],
+        "Disallow": [
+          {"CountryCode": ""}
+        ]
+      }
     }
   },
   "DialTimeout": 10,
