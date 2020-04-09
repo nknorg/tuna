@@ -37,6 +37,7 @@ type ExitConfiguration struct {
 	ClaimInterval        uint32                     `json:"ClaimInterval"`
 	Services             map[string]ExitServiceInfo `json:"Services"`
 	ReverseNanoPayFee    string                     `json:"ReverseNanopayfee"`
+	ReverseIPFilter      IPFilter                   `json:"IPFilter"`
 }
 
 type TunaExit struct {
@@ -57,15 +58,13 @@ type TunaExit struct {
 	reverseBytesOutPaid uint64
 }
 
-func NewTunaExit(config *ExitConfiguration, services []Service, reverseEntryToExitMaxPrice, reverseExitToEntryMaxPrice common.Fixed64, wallet *nkn.Wallet) *TunaExit {
+func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) *TunaExit {
 	return &TunaExit{
 		Common: &Common{
-			EntryToExitMaxPrice: reverseEntryToExitMaxPrice,
-			ExitToEntryMaxPrice: reverseExitToEntryMaxPrice,
-			Wallet:              wallet,
-			DialTimeout:         config.DialTimeout,
-			SubscriptionPrefix:  config.SubscriptionPrefix,
-			Reverse:             config.Reverse,
+			Wallet:             wallet,
+			DialTimeout:        config.DialTimeout,
+			SubscriptionPrefix: config.SubscriptionPrefix,
+			Reverse:            config.Reverse,
 		},
 		config:      config,
 		services:    services,
@@ -376,19 +375,13 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 	reverseMetadata.ServiceTCP = service.TCP
 	reverseMetadata.ServiceUDP = service.UDP
 
-	maxPrice, err := common.StringToFixed64(te.config.ReverseMaxPrice)
-	if err != nil {
-		return err
-	}
-
 	te.Common = &Common{
-		Service:             &Service{Name: DefaultReverseServiceName},
-		EntryToExitMaxPrice: maxPrice,
-		ExitToEntryMaxPrice: maxPrice,
-		Wallet:              te.Wallet,
-		DialTimeout:         te.config.DialTimeout,
-		ReverseMetadata:     reverseMetadata,
-		SubscriptionPrefix:  te.config.SubscriptionPrefix,
+		Service:            &Service{Name: DefaultReverseServiceName},
+		Wallet:             te.Wallet,
+		ServiceInfo:        &ServiceInfo{MaxPrice: te.config.ReverseMaxPrice},
+		DialTimeout:        te.config.DialTimeout,
+		ReverseMetadata:    reverseMetadata,
+		SubscriptionPrefix: te.config.SubscriptionPrefix,
 	}
 
 	go func() {

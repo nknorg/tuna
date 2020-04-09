@@ -64,8 +64,7 @@ func main() {
 
 	if config.Reverse {
 		for serviceName := range config.Services {
-			reverseEntryToExitMaxPrice, reverseExitToEntryMaxPrice, err := tuna.ParsePrice(config.ReverseMaxPrice)
-			e := tuna.NewTunaExit(config, services, reverseEntryToExitMaxPrice, reverseExitToEntryMaxPrice, wallet)
+			e := tuna.NewTunaExit(config, services, wallet)
 			e.OnEntryConnected(func() {
 				fmt.Printf("Service: %s, Address: %v:%v\n", serviceName, e.GetReverseIP(), e.GetReverseTCPPorts())
 			})
@@ -75,7 +74,7 @@ func main() {
 			}
 		}
 	} else {
-		err = tuna.NewTunaExit(config, services, common.Fixed64(0), common.Fixed64(0), wallet).Start()
+		err = tuna.NewTunaExit(config, services, wallet).Start()
 		if err != nil {
 			log.Fatalln(err)
 		}
