@@ -45,7 +45,14 @@ const (
 	DefaultServiceListenIP                 = "127.0.0.1"
 	DefaultReverseServiceListenIP          = "0.0.0.0"
 	TrafficUnit                            = 1024 * 1024
+	getSubscribersBatchSize                = 32
 )
+
+type ServiceInfo struct {
+	MaxPrice string    `json:"maxPrice"`
+	ListenIP string    `json:"ListenIP"`
+	IPFilter *IPFilter `json:"IPFilter"`
+}
 
 type Service struct {
 	Name string `json:"name"`
@@ -65,15 +72,14 @@ type Metadata struct {
 }
 
 type Common struct {
-	Service             *Service
-	ListenIP            net.IP
-	EntryToExitMaxPrice common.Fixed64
-	ExitToEntryMaxPrice common.Fixed64
-	Wallet              *nkn.Wallet
-	DialTimeout         uint16
-	SubscriptionPrefix  string
-	Reverse             bool
-	ReverseMetadata     *Metadata
+	Service            *Service
+	ListenIP           net.IP
+	Wallet             *nkn.Wallet
+	DialTimeout        uint16
+	SubscriptionPrefix string
+	Reverse            bool
+	ReverseMetadata    *Metadata
+	ServiceInfo        *ServiceInfo
 
 	udpReadChan  chan []byte
 	udpWriteChan chan []byte
@@ -286,6 +292,10 @@ func (c *Common) UpdateServerConn() bool {
 }
 
 func (c *Common) CreateServerConn(force bool) error {
+	entryToExitMaxPrice, exitToEntryMaxPrice, err := ParsePrice(c.ServiceInfo.MaxPrice)
+	if err != nil {
+		log.Fatalf("Parse price of service error: %v", err)
+	}
 	if !c.Reverse && (c.GetConnected() == false || force) {
 		topic := c.SubscriptionPrefix + c.Service.Name
 	RandomSubscriber:
@@ -298,8 +308,9 @@ func (c *Common) CreateServerConn(force bool) error {
 			if subscribersCount == 0 {
 				return errors.New("there is no service providers for " + c.Service.Name)
 			}
-			offset := rand.Intn(int(subscribersCount))
-			subscribers, err := c.Wallet.GetSubscribers(topic, offset, 1, true, false)
+
+			offset := rand.Intn(subscribersCount/getSubscribersBatchSize + 1)
+			subscribers, err := c.Wallet.GetSubscribers(topic, offset*getSubscribersBatchSize, getSubscribersBatchSize, true, false)
 			if err != nil {
 				return err
 			}
@@ -310,6 +321,14 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 
 				metadata := c.GetMetadata()
+
+				res, err := c.ServiceInfo.IPFilter.GeoCheck(metadata.IP)
+				if err != nil {
+					log.Println(err)
+				}
+				if !res {
+					continue
+				}
 
 				if len(metadata.BeneficiaryAddr) > 0 {
 					c.SetPaymentReceiver(metadata.BeneficiaryAddr)
@@ -347,12 +366,12 @@ func (c *Common) CreateServerConn(force bool) error {
 					continue RandomSubscriber
 				}
 
-				if entryToExitPrice > c.EntryToExitMaxPrice {
-					log.Printf("Entry to exit price %s is bigger than max allowed price %s\n", entryToExitPrice.String(), c.EntryToExitMaxPrice.String())
+				if entryToExitPrice > entryToExitMaxPrice {
+					log.Printf("Entry to exit price %s is bigger than max allowed price %s\n", entryToExitPrice.String(), c.ServiceInfo.MaxPrice)
 					continue RandomSubscriber
 				}
-				if exitToEntryPrice > c.ExitToEntryMaxPrice {
-					log.Printf("Exit to entry price %s is bigger than max allowed price %s\n", exitToEntryPrice.String(), c.ExitToEntryMaxPrice.String())
+				if exitToEntryPrice > exitToEntryMaxPrice {
+					log.Printf("Exit to entry price %s is bigger than max allowed price %s\n", exitToEntryPrice.String(), c.ServiceInfo.MaxPrice)
 					continue RandomSubscriber
 				}
 
