@@ -73,7 +73,6 @@ type Metadata struct {
 
 type Common struct {
 	Service            *Service
-	ListenIP           net.IP
 	Wallet             *nkn.Wallet
 	DialTimeout        uint16
 	SubscriptionPrefix string

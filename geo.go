@@ -3,6 +3,7 @@ package tuna
 import (
 	"errors"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -27,10 +28,10 @@ func (l *Location) Empty() bool {
 }
 
 func (l *Location) Match(location *Location) bool {
-	if len(location.IP) > 0 && location.IP == l.IP {
+	if len(l.IP) > 0 && location.IP == l.IP {
 		return true
 	}
-	if len(location.CountryCode) > 0 && location.CountryCode == l.CountryCode {
+	if len(l.CountryCode) > 0 && location.CountryCode == l.CountryCode {
 		return true
 	}
 	return false
@@ -64,28 +65,32 @@ func getLocationFromIP2C(ip string) (*Location, error) {
 	client := http.Client{
 		Timeout: 10 * time.Second,
 	}
-	unknown := &Location{CountryCode: "UNKNOWN"}
 	resp, err := client.Get(queryUrl)
 	if err != nil {
-		return unknown, err
+		log.Println(err)
+		return &emptyLocation, err
 	}
 
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return unknown, err
+		return &emptyLocation, err
 	}
 	loc, err := parseIP2C(string(body))
 	if err != nil {
-		return unknown, err
+		log.Println(err)
+		return &Location{CountryCode: "UNKNOWN"}, nil
 	}
 	loc.IP = ip
 	return loc, nil
 }
 
 func parseIP2C(body string) (*Location, error) {
-	if body[0:1] != "1" {
+	if len(body) == 0 {
+		return nil, nil
+	}
+	if body[0] != byte('1') {
 		return nil, errors.New("get ip2c result err")
 	}
 	res := strings.Split(body, ";")
@@ -99,32 +104,37 @@ func parseIP2C(body string) (*Location, error) {
 	return l, nil
 }
 
-func geoCheck(f *IPFilter, ip string) (bool, error) {
+func (f *IPFilter) GeoCheck(ip string) (bool, error) {
 	if f.Empty() {
 		return true, nil
 	}
 	loc, err := getLocationFromIP2C(ip)
 	if err != nil {
-		return false, err
+		return true, err
 	}
 
-	valid := ValidCheck(f, loc)
+	valid := f.ValidCheck(loc)
 	return valid, nil
 }
 
-func ValidCheck(f *IPFilter, loc *Location) bool {
-	if len(f.Allow) > 0 {
-		for _, l := range f.Allow {
-			if l.Match(loc) {
-				return true
-			}
-		}
-		return false
+func (f *IPFilter) ValidCheck(loc *Location) bool {
+	if loc.Empty() {
+		return true
 	}
 	for _, l := range f.Disallow {
 		if l.Match(loc) {
 			return false
 		}
 	}
-	return true
+	empty := true
+	for _, l := range f.Allow {
+		if l.Match(loc) {
+			return true
+		}
+		if !l.Empty() {
+			empty = false
+		}
+	}
+
+	return empty
 }
