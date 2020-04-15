@@ -51,11 +51,10 @@ type TunaEntry struct {
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, listenIP net.IP, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
+func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
 	te := &TunaEntry{
 		Common: &Common{
 			Service:            service,
-			ListenIP:           listenIP,
 			ServiceInfo:        serviceInfo,
 			Wallet:             wallet,
 			DialTimeout:        config.DialTimeout,
@@ -80,8 +79,8 @@ func (te *TunaEntry) Start() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
-		tcpPorts, err := te.listenTCP(te.ListenIP, te.Service.TCP)
+		listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
+		tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
 		if err != nil {
 			te.close()
 			return
@@ -90,7 +89,7 @@ func (te *TunaEntry) Start() {
 			log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
 		}
 
-		udpPorts, err := te.listenUDP(te.ListenIP, te.Service.UDP)
+		udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
 		if err != nil {
 			te.close()
 			return
@@ -158,12 +157,13 @@ func (te *TunaEntry) Start() {
 
 func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	metadata := te.GetMetadata()
-	tcpPorts, err := te.listenTCP(te.ListenIP, metadata.ServiceTCP)
+	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
+	tcpPorts, err := te.listenTCP(listenIP, metadata.ServiceTCP)
 	if err != nil {
 		te.close()
 		return err
 	}
-	udpPorts, err := te.listenUDP(te.ListenIP, metadata.ServiceUDP)
+	udpPorts, err := te.listenUDP(listenIP, metadata.ServiceUDP)
 	if err != nil {
 		te.close()
 		return err

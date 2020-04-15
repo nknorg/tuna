@@ -378,7 +378,7 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 	te.Common = &Common{
 		Service:            &Service{Name: DefaultReverseServiceName},
 		Wallet:             te.Wallet,
-		ServiceInfo:        &ServiceInfo{MaxPrice: te.config.ReverseMaxPrice},
+		ServiceInfo:        &ServiceInfo{MaxPrice: te.config.ReverseMaxPrice, IPFilter: &te.config.ReverseIPFilter},
 		DialTimeout:        te.config.DialTimeout,
 		ReverseMetadata:    reverseMetadata,
 		SubscriptionPrefix: te.config.SubscriptionPrefix,
