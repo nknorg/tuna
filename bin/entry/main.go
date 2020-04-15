@@ -63,9 +63,11 @@ func main() {
 	log.Println("Your NKN wallet address is:", wallet.Address())
 
 	if config.Reverse {
-		serviceListenIP := net.ParseIP(config.ReverseServiceListenIP)
-		if serviceListenIP == nil {
-			serviceListenIP = net.ParseIP(tuna.DefaultReverseServiceListenIP)
+		var serviceListenIP string
+		if net.ParseIP(config.ReverseServiceListenIP) == nil {
+			serviceListenIP = tuna.DefaultReverseServiceListenIP
+		} else {
+			serviceListenIP = config.ReverseServiceListenIP
 		}
 
 		ip, err := ipify.GetIp()
@@ -117,7 +119,7 @@ func main() {
 					continue
 				}
 
-				te := tuna.NewTunaEntry(&tuna.Service{}, serviceListenIP, &tuna.ServiceInfo{}, config, wallet)
+				te := tuna.NewTunaEntry(&tuna.Service{}, &tuna.ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
 				te.Session, _ = smux.Client(tcpConn, nil)
 				stream, err := te.Session.OpenStream()
 				if err != nil {
@@ -201,12 +203,12 @@ func main() {
 		for serviceName, serviceInfo := range config.Services {
 			serviceListenIP := net.ParseIP(serviceInfo.ListenIP)
 			if serviceListenIP == nil {
-				serviceListenIP = net.ParseIP(tuna.DefaultServiceListenIP)
+				serviceInfo.ListenIP = tuna.DefaultServiceListenIP
 			}
 
 			for _, service := range services {
 				if service.Name == serviceName {
-					go tuna.NewTunaEntry(&service, serviceListenIP, &serviceInfo, config, wallet).Start()
+					go tuna.NewTunaEntry(&service, &serviceInfo, config, wallet).Start()
 					continue service
 				}
 			}
