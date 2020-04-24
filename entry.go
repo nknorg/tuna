@@ -244,12 +244,17 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 }
 
 func (te *TunaEntry) close() {
-	close(te.closeChan)
-	for _, listener := range te.tcpListeners {
-		Close(listener)
-	}
-	for _, conn := range te.serviceConn {
-		Close(conn)
+	te.Lock()
+	defer te.Unlock()
+	if !te.isClosed {
+		te.isClosed = true
+		close(te.closeChan)
+		for _, listener := range te.tcpListeners {
+			Close(listener)
+		}
+		for _, conn := range te.serviceConn {
+			Close(conn)
+		}
 	}
 }
 
