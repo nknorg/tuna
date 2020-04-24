@@ -137,9 +137,11 @@ func (c *Common) GetServerTCPConn(force bool) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.RLock()
-	defer c.RUnlock()
-	return c.GetTCPConn(), nil
+	conn := c.GetTCPConn()
+	if conn == nil {
+		return nil, errors.New("nil tcp connection")
+	}
+	return conn, nil
 }
 
 func (c *Common) GetServerUDPConn(force bool) (*net.UDPConn, error) {
