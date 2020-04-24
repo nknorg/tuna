@@ -93,6 +93,7 @@ type Common struct {
 	connected        bool
 	tcpConn          net.Conn
 	udpConn          *net.UDPConn
+	isClosed         bool
 }
 
 func (c *Common) GetTCPConn() net.Conn {

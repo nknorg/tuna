@@ -562,9 +562,14 @@ func (te *TunaExit) GetReverseUDPPorts() []int {
 }
 
 func (te *TunaExit) Close() {
-	close(te.closeChan)
-	Close(te.tcpListener)
-	Close(te.udpConn)
-	Close(te.Common.tcpConn)
-	Close(te.Common.udpConn)
+	te.Lock()
+	defer te.Unlock()
+	if !te.isClosed {
+		te.isClosed = true
+		close(te.closeChan)
+		Close(te.tcpListener)
+		Close(te.udpConn)
+		Close(te.Common.tcpConn)
+		Close(te.Common.udpConn)
+	}
 }
