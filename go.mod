@@ -3,26 +3,19 @@ module github.com/nknorg/tuna
 go 1.12
 
 require (
-	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d // indirect
-	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c // indirect
-	github.com/itchyny/base58-go v0.1.0 // indirect
-	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/hashicorp/go-multierror v1.1.0 // indirect
+	github.com/jackpal/gateway v1.0.6 // indirect
 	github.com/jessevdk/go-flags v1.4.0
-	github.com/klauspost/cpuid v1.2.3 // indirect
-	github.com/klauspost/reedsolomon v1.9.3 // indirect
-	github.com/nknorg/consequential v0.0.0-20191113113929-5fd13b7f5984 // indirect
-	github.com/nknorg/nkn v1.1.3-beta
-	github.com/nknorg/nkn-sdk-go v1.1.0-beta.9.0.20200211004101-1242f1254c7a
-	github.com/nknorg/nnet v0.0.0-20191227203626-cd40f91ceda2 // indirect
+	github.com/klauspost/reedsolomon v1.9.6 // indirect
+	github.com/nknorg/ncp-go v0.0.0-20200406215949-844c0615f43e // indirect
+	github.com/nknorg/nkn v1.1.7-beta.0.20200508191852-5f3b0f1ddca2
+	github.com/nknorg/nkn-sdk-go v1.2.6
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rdegges/go-ipify v0.0.0-20150526035502-2d94a6a86c40
-	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
-	github.com/tjfoc/gmsm v1.2.0 // indirect
 	github.com/trueinsider/smux v1.3.5-metadata
-	github.com/xtaci/kcp-go v5.4.20+incompatible // indirect
-	github.com/xtaci/smux v2.0.1+incompatible // indirect
-	golang.org/x/crypto v0.0.0-20200210222208-86ce3cb69678 // indirect
-	golang.org/x/net v0.0.0-20200202094626-16171245cfb2 // indirect
-	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
+	golang.org/x/crypto v0.0.0-20200429183012-4b2356b1ed79 // indirect
+	golang.org/x/net v0.0.0-20200506145744-7e3656a0809f // indirect
+	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3 // indirect
+	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
 )

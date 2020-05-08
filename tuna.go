@@ -22,12 +22,11 @@ import (
 
 	"github.com/trueinsider/smux"
 
-	"github.com/nknorg/nkn-sdk-go"
+	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
-	"github.com/nknorg/nkn/crypto"
-	"github.com/nknorg/nkn/crypto/util"
 	"github.com/nknorg/nkn/program"
 	"github.com/nknorg/nkn/transaction"
+	"github.com/nknorg/nkn/util"
 	"github.com/nknorg/nkn/util/address"
 	"github.com/nknorg/nkn/util/config"
 	"github.com/nknorg/nkn/vault"
@@ -341,13 +340,7 @@ func (c *Common) CreateServerConn(force bool) error {
 						continue RandomSubscriber
 					}
 
-					pubKey, err := crypto.NewPubKeyFromBytes(publicKey)
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-
-					programHash, err := program.CreateProgramHash(pubKey)
+					programHash, err := program.CreateProgramHash(publicKey)
 					if err != nil {
 						log.Println(err)
 						continue RandomSubscriber
@@ -465,7 +458,7 @@ func UpdateMetadata(
 				topic,
 				int(subscriptionDuration),
 				string(metadataRaw),
-				subscriptionFee,
+				&nkn.TransactionConfig{Fee: subscriptionFee},
 			)
 			if err != nil {
 				waitTime = time.Second
@@ -556,7 +549,7 @@ func LoadPassword(path string) (string, error) {
 }
 
 func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error) {
-	var wallet *vault.WalletImpl
+	var wallet *vault.Wallet
 	var pswd string
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		if _, err = os.Stat(passwordFile); os.IsNotExist(err) {
@@ -568,7 +561,7 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 			}
 		}
 		log.Println("Creating wallet.json")
-		wallet, err = vault.NewWallet(walletFile, []byte(pswd), true)
+		wallet, err = vault.NewWallet(walletFile, []byte(pswd))
 		if err != nil {
 			return nil, fmt.Errorf("create wallet error: %v", err)
 		}
@@ -588,7 +581,7 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 func sendNanoPay(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *common.Fixed64, c *Common, nanoPayFee string) error {
 	var err error
 	paymentReceiver := c.GetPaymentReceiver()
-	if np == nil || np.Address() != paymentReceiver {
+	if np == nil || np.Recipient() != paymentReceiver {
 		np, err = w.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
 		if err != nil {
 			return err
@@ -653,6 +646,7 @@ func claimCheck(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nkn.OnErr
 		}
 	}
 }
+
 func paymentCheck(session *smux.Session, claimInterval time.Duration, lastComputed, lastClaimed *common.Fixed64, lastUpdate *time.Time, isClosed *bool) {
 	for {
 		time.Sleep(claimInterval)
