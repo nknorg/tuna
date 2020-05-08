@@ -177,8 +177,13 @@ func main() {
 			}
 		}()
 
+		reverseServiceName := config.ReverseServiceName
+		if len(reverseServiceName) == 0 {
+			reverseServiceName = tuna.DefaultReverseServiceName
+		}
+
 		tuna.UpdateMetadata(
-			tuna.DefaultReverseServiceName,
+			reverseServiceName,
 			255,
 			[]int{},
 			[]int{},
