@@ -29,6 +29,7 @@ type EntryConfiguration struct {
 	ReverseServiceListenIP      string                 `json:"ReverseServiceListenIP"`
 	ReversePrice                string                 `json:"ReversePrice"`
 	ReverseClaimInterval        uint32                 `json:"ReverseClaimInterval"`
+	ReverseServiceName          string                 `json:"ReverseServiceName"`
 	ReverseSubscriptionPrefix   string                 `json:"ReverseSubscriptionPrefix"`
 	ReverseSubscriptionDuration uint32                 `json:"ReverseSubscriptionDuration"`
 	ReverseSubscriptionFee      string                 `json:"ReverseSubscriptionFee"`

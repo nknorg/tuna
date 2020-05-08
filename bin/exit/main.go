@@ -28,7 +28,10 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	config := &tuna.ExitConfiguration{SubscriptionPrefix: tuna.DefaultSubscriptionPrefix}
+	config := &tuna.ExitConfiguration{
+		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
+		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
+	}
 	err = tuna.ReadJson(opts.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config file error:", err)

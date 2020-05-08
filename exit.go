@@ -23,21 +23,23 @@ type ExitServiceInfo struct {
 }
 
 type ExitConfiguration struct {
-	BeneficiaryAddr      string                     `json:"BeneficiaryAddr"`
-	ListenTCP            int                        `json:"ListenTCP"`
-	ListenUDP            int                        `json:"ListenUDP"`
-	DialTimeout          uint16                     `json:"DialTimeout"`
-	UDPTimeout           uint16                     `json:"UDPTimeout"`
-	SubscriptionPrefix   string                     `json:"SubscriptionPrefix"`
-	SubscriptionDuration uint32                     `json:"SubscriptionDuration"`
-	SubscriptionFee      string                     `json:"SubscriptionFee"`
-	ClaimInterval        uint32                     `json:"ClaimInterval"`
-	Services             map[string]ExitServiceInfo `json:"Services"`
-	Reverse              bool                       `json:"Reverse"`
-	ReverseRandomPorts   bool                       `json:"ReverseRandomPorts"`
-	ReverseMaxPrice      string                     `json:"ReverseMaxPrice"`
-	ReverseNanoPayFee    string                     `json:"ReverseNanopayfee"`
-	ReverseIPFilter      IPFilter                   `json:"ReverseIPFilter"`
+	BeneficiaryAddr           string                     `json:"BeneficiaryAddr"`
+	ListenTCP                 int                        `json:"ListenTCP"`
+	ListenUDP                 int                        `json:"ListenUDP"`
+	DialTimeout               uint16                     `json:"DialTimeout"`
+	UDPTimeout                uint16                     `json:"UDPTimeout"`
+	SubscriptionPrefix        string                     `json:"SubscriptionPrefix"`
+	SubscriptionDuration      uint32                     `json:"SubscriptionDuration"`
+	SubscriptionFee           string                     `json:"SubscriptionFee"`
+	ClaimInterval             uint32                     `json:"ClaimInterval"`
+	Services                  map[string]ExitServiceInfo `json:"Services"`
+	Reverse                   bool                       `json:"Reverse"`
+	ReverseRandomPorts        bool                       `json:"ReverseRandomPorts"`
+	ReverseMaxPrice           string                     `json:"ReverseMaxPrice"`
+	ReverseNanoPayFee         string                     `json:"ReverseNanopayfee"`
+	ReverseServiceName        string                     `json:"ReverseServiceName"`
+	ReverseSubscriptionPrefix string                     `json:"ReverseSubscriptionPrefix"`
+	ReverseIPFilter           IPFilter                   `json:"ReverseIPFilter"`
 }
 
 type TunaExit struct {
@@ -379,13 +381,18 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 	reverseMetadata.ServiceTCP = service.TCP
 	reverseMetadata.ServiceUDP = service.UDP
 
+	reverseServiceName := te.config.ReverseServiceName
+	if len(reverseServiceName) == 0 {
+		reverseServiceName = DefaultReverseServiceName
+	}
+
 	te.Common = &Common{
-		Service:            &Service{Name: DefaultReverseServiceName},
+		Service:            &Service{Name: reverseServiceName},
 		Wallet:             te.Wallet,
 		ServiceInfo:        &ServiceInfo{MaxPrice: te.config.ReverseMaxPrice, IPFilter: &te.config.ReverseIPFilter},
 		DialTimeout:        te.config.DialTimeout,
 		ReverseMetadata:    reverseMetadata,
-		SubscriptionPrefix: te.config.SubscriptionPrefix,
+		SubscriptionPrefix: te.config.ReverseSubscriptionPrefix,
 	}
 
 	go func() {
