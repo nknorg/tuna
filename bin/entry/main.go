@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/nknorg/nkn-sdk-go"
+	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 	"github.com/rdegges/go-ipify"

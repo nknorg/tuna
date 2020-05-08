@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nknorg/nkn-sdk-go"
+	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/patrickmn/go-cache"
 	"github.com/rdegges/go-ipify"
@@ -97,7 +97,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	isClosed := false
 
 	if !te.config.Reverse {
-		npc, err = te.Wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.BeneficiaryAddr)
+		npc, err = te.Wallet.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
 		if err != nil {
 			log.Fatalln(err)
 		}

@@ -10,7 +10,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/nknorg/nkn-sdk-go"
+	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/patrickmn/go-cache"
 	"github.com/trueinsider/smux"
@@ -126,10 +126,6 @@ func (te *TunaEntry) Start() {
 				default:
 				}
 				time.Sleep(DefaultNanoPayUpdateInterval)
-				if err != nil {
-					log.Printf("get session err: %v", err)
-					continue
-				}
 				bytesIn := atomic.LoadUint64(&te.bytesIn)
 				bytesOut := atomic.LoadUint64(&te.bytesOut)
 				entryToExitPrice, exitToEntryPrice := te.GetPrice()
@@ -138,6 +134,10 @@ func (te *TunaEntry) Start() {
 					continue
 				}
 				session, err := te.getSession(false)
+				if err != nil {
+					log.Printf("get session err: %v", err)
+					continue
+				}
 				err = sendNanoPay(np, session, te.Wallet, &cost, te.Common, te.config.NanoPayFee)
 				if err != nil {
 					log.Printf("send nano payment err: %v", err)
@@ -204,7 +204,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		onErr := nkn.NewOnError(1, nil)
 		isClosed := false
 
-		npc, err := te.Wallet.NewNanoPayClaimer(int32(claimInterval/time.Millisecond), onErr, te.config.ReverseBeneficiaryAddr)
+		npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
 		if err != nil {
 			log.Println(err)
 			te.close()
