@@ -146,7 +146,6 @@ func (te *TunaEntry) Start() {
 
 				te.bytesInPaid = bytesIn
 				te.bytesOutPaid = bytesOut
-
 			}
 		}()
 		break
@@ -169,16 +168,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	serviceMetadata := CreateRawMetadata(
-		0,
-		tcpPorts,
-		udpPorts,
-		"",
-		-1,
-		-1,
-		"",
-		te.config.ReverseBeneficiaryAddr,
-	)
+	serviceMetadata := CreateRawMetadata(0, tcpPorts, udpPorts, "", -1, -1, "", te.config.ReverseBeneficiaryAddr)
 	_, err = stream.Write(serviceMetadata)
 	if err != nil {
 		te.close()
@@ -211,9 +201,9 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 			return
 		}
 
-		go claimCheck(session, npc, onErr, &isClosed)
+		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-		go paymentCheck(session, claimInterval, &lastComputed, &lastClaimed, &lastUpdate, &isClosed)
+		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed)
 
 		for {
 			stream, err = session.AcceptStream()
@@ -222,16 +212,22 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 				te.close()
 				return
 			}
-			if len(stream.Metadata()) == 0 {
+
+			if len(stream.Metadata()) == 0 { // payment stream
 				in := atomic.LoadUint64(&te.reverseBytesIn)
 				out := atomic.LoadUint64(&te.reverseBytesOut)
 				if in == 0 && out == 0 {
 					continue
 				}
 				totalCost += te.entryToExitPrice*common.Fixed64(out)/TrafficUnit + te.exitToEntryPrice*common.Fixed64(in)/TrafficUnit
+
 				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
 				if err != nil {
 					log.Println("nanoPayClaim failed:", err)
+					continue
+				}
+
+				if !checkTrafficCoverage(session, lastComputed, lastClaimed, &isClosed) {
 					continue
 				}
 			}

@@ -102,9 +102,9 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			log.Fatalln(err)
 		}
 
-		go claimCheck(session, npc, onErr, &isClosed)
+		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-		go paymentCheck(session, claimInterval, &lastComputed, &lastClaimed, &lastUpdate, &isClosed)
+		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed)
 	}
 
 	for {
@@ -142,6 +142,10 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
 				if err != nil {
 					log.Println("Couldn't claim nanoPay:", err)
+				}
+
+				if !checkTrafficCoverage(session, lastComputed, lastClaimed, &isClosed) {
+					return
 				}
 			}(stream)
 			continue
