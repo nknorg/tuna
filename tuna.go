@@ -44,6 +44,7 @@ const (
 	DefaultServiceListenIP                 = "127.0.0.1"
 	DefaultReverseServiceListenIP          = "0.0.0.0"
 	TrafficUnit                            = 1024 * 1024
+	MinTrafficCoverage                     = 0.9
 	getSubscribersBatchSize                = 32
 )
 
@@ -626,14 +627,12 @@ func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastComputed, la
 	}
 
 	*lastComputed = *totalCost
-	lc := amount.ToFixed64()
-	*lastClaimed = lc
-	lu := time.Now()
-	*lastUpdate = lu
+	*lastClaimed = amount.ToFixed64()
+	*lastUpdate = time.Now()
 	return nil
 }
 
-func claimCheck(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nkn.OnError, isClosed *bool) {
+func checkNanoPayClaim(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nkn.OnError, isClosed *bool) {
 	for {
 		err := <-onErr.C
 		if err != nil {
@@ -647,26 +646,29 @@ func claimCheck(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nkn.OnErr
 	}
 }
 
-func paymentCheck(session *smux.Session, claimInterval time.Duration, lastComputed, lastClaimed *common.Fixed64, lastUpdate *time.Time, isClosed *bool) {
+func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, lastUpdate *time.Time, isClosed *bool) {
 	for {
-		time.Sleep(claimInterval)
+		time.Sleep(5 * time.Second)
 
 		if *isClosed {
 			break
 		}
 
-		if time.Since(*lastUpdate) > claimInterval {
-			log.Println("Didn't update nano pay for more than", claimInterval.String())
-			Close(session)
-			*isClosed = true
-			break
-		}
-
-		if common.Fixed64(float64(*lastComputed)*0.9) > *lastClaimed {
-			log.Println("Nano pay amount covers less than 90% of total cost")
+		if time.Since(*lastUpdate) > updateTimeout {
+			log.Println("Didn't update nano pay for more than", updateTimeout.String())
 			Close(session)
 			*isClosed = true
 			break
 		}
 	}
+}
+
+func checkTrafficCoverage(session *smux.Session, lastComputed, lastClaimed common.Fixed64, isClosed *bool) bool {
+	if float64(lastClaimed) > float64(lastComputed)*MinTrafficCoverage {
+		return true
+	}
+	log.Printf("Nano pay amount covers less than %f%% of total cost", MinTrafficCoverage*100)
+	Close(session)
+	*isClosed = true
+	return false
 }
