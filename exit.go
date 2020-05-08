@@ -26,9 +26,6 @@ type ExitConfiguration struct {
 	BeneficiaryAddr      string                     `json:"BeneficiaryAddr"`
 	ListenTCP            int                        `json:"ListenTCP"`
 	ListenUDP            int                        `json:"ListenUDP"`
-	Reverse              bool                       `json:"Reverse"`
-	ReverseRandomPorts   bool                       `json:"ReverseRandomPorts"`
-	ReverseMaxPrice      string                     `json:"ReverseMaxPrice"`
 	DialTimeout          uint16                     `json:"DialTimeout"`
 	UDPTimeout           uint16                     `json:"UDPTimeout"`
 	SubscriptionPrefix   string                     `json:"SubscriptionPrefix"`
@@ -36,8 +33,11 @@ type ExitConfiguration struct {
 	SubscriptionFee      string                     `json:"SubscriptionFee"`
 	ClaimInterval        uint32                     `json:"ClaimInterval"`
 	Services             map[string]ExitServiceInfo `json:"Services"`
+	Reverse              bool                       `json:"Reverse"`
+	ReverseRandomPorts   bool                       `json:"ReverseRandomPorts"`
+	ReverseMaxPrice      string                     `json:"ReverseMaxPrice"`
 	ReverseNanoPayFee    string                     `json:"ReverseNanopayfee"`
-	ReverseIPFilter      IPFilter                   `json:"IPFilter"`
+	ReverseIPFilter      IPFilter                   `json:"ReverseIPFilter"`
 }
 
 type TunaExit struct {

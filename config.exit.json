@@ -2,9 +2,6 @@
   "BeneficiaryAddr": "",
   "ListenTCP": 30010,
   "ListenUDP": 30011,
-  "Reverse": false,
-  "ReverseRandomPorts": true,
-  "ReverseMaxPrice": "0.001",
   "DialTimeout": 10,
   "UDPTimeout": 60,
   "ClaimInterval": 3600,
@@ -16,7 +13,11 @@
       "price": "0.001"
     }
   },
-  "IPFilter": {
+  "Reverse": false,
+  "ReverseRandomPorts": true,
+  "ReverseMaxPrice": "0.001",
+  "ReverseNanoPayFee": "0",
+  "ReverseIPFilter": {
     "Allow": [
       {"CountryCode": ""}
     ],
