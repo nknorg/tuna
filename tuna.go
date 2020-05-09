@@ -64,7 +64,7 @@ type Metadata struct {
 	IP              string `json:"ip"`
 	TCPPort         int    `json:"tcpPort"`
 	UDPPort         int    `json:"udpPort"`
-	ServiceId       uint8  `json:"serviceId"`
+	ServiceId       int    `json:"serviceId"` // valid range: 0-255
 	ServiceTCP      []int  `json:"serviceTcp,omitempty"`
 	ServiceUDP      []int  `json:"serviceUdp,omitempty"`
 	Price           string `json:"price,omitempty"`
@@ -410,7 +410,7 @@ func CreateRawMetadata(
 		IP:              ip,
 		TCPPort:         tcpPort,
 		UDPPort:         udpPort,
-		ServiceId:       serviceId,
+		ServiceId:       int(serviceId),
 		ServiceTCP:      serviceTCP,
 		ServiceUDP:      serviceUDP,
 		Price:           price,

@@ -280,7 +280,7 @@ func (te *TunaEntry) openStream(portId byte, force bool) (*smux.Stream, error) {
 		return nil, err
 	}
 	serviceId := te.GetMetadata().ServiceId
-	stream, err := session.OpenStream(serviceId, portId)
+	stream, err := session.OpenStream(byte(serviceId), portId)
 	if err != nil {
 		return te.openStream(portId, true)
 	}
@@ -407,7 +407,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []int) ([]int, error) {
 				}
 				connId := GetConnIdData(addr.Port)
 				serviceId := te.GetMetadata().ServiceId
-				serverWriteChan <- append([]byte{connId[0], connId[1], serviceId, portId}, localBuffer[:n]...)
+				serverWriteChan <- append([]byte{connId[0], connId[1], byte(serviceId), portId}, localBuffer[:n]...)
 			}
 		}()
 	}
