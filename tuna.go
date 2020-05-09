@@ -64,7 +64,7 @@ type Metadata struct {
 	IP              string `json:"ip"`
 	TCPPort         int    `json:"tcpPort"`
 	UDPPort         int    `json:"udpPort"`
-	ServiceId       byte   `json:"serviceId"`
+	ServiceId       uint8  `json:"serviceId"`
 	ServiceTCP      []int  `json:"serviceTcp,omitempty"`
 	ServiceUDP      []int  `json:"serviceUdp,omitempty"`
 	Price           string `json:"price,omitempty"`
@@ -363,11 +363,9 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 
 				if entryToExitPrice > entryToExitMaxPrice {
-					log.Printf("Entry to exit price %s is bigger than max allowed price %s\n", entryToExitPrice.String(), c.ServiceInfo.MaxPrice)
 					continue RandomSubscriber
 				}
 				if exitToEntryPrice > exitToEntryMaxPrice {
-					log.Printf("Exit to entry price %s is bigger than max allowed price %s\n", exitToEntryPrice.String(), c.ServiceInfo.MaxPrice)
 					continue RandomSubscriber
 				}
 
