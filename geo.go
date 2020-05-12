@@ -10,6 +10,7 @@ import (
 )
 
 const IP2CUrl = "https://ip2c.org/"
+const MAX_RETRY = 3
 
 type Location struct {
 	IP          string `json:"IP"`
@@ -60,17 +61,25 @@ func (f *IPFilter) Empty() bool {
 	return true
 }
 
-func getLocationFromIP2C(ip string) (*Location, error) {
+func getLocationFromIP2C(ip string, retry int) (*Location, error) {
 	queryUrl := IP2CUrl + ip
 	client := http.Client{
 		Timeout: 10 * time.Second,
 	}
-	resp, err := client.Get(queryUrl)
-	if err != nil {
-		log.Println(err)
+
+	i := 0
+	var resp *http.Response
+	var err error
+	for ; i < retry; i++ {
+		resp, err = client.Get(queryUrl)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+	}
+	if i == retry {
 		return &emptyLocation, err
 	}
-
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -108,7 +117,7 @@ func (f *IPFilter) GeoCheck(ip string) (bool, error) {
 	if f.Empty() {
 		return true, nil
 	}
-	loc, err := getLocationFromIP2C(ip)
+	loc, err := getLocationFromIP2C(ip, MAX_RETRY)
 	if err != nil {
 		return true, err
 	}
