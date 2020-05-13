@@ -194,6 +194,12 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		claimInterval := time.Duration(te.config.ReverseClaimInterval) * time.Second
 		onErr := nkn.NewOnError(1, nil)
 		isClosed := false
+		entryToExitPrice, exitToEntryPrice, err := ParsePrice(te.config.ReversePrice)
+		if err != nil {
+			log.Println("parse reverse price error:", err)
+			te.close()
+			return
+		}
 
 		npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
 		if err != nil {
@@ -204,7 +210,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 
 		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed)
+		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, &totalCost)
 
 		for {
 			stream, err = session.AcceptStream()
@@ -220,7 +226,8 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 				if in == 0 && out == 0 {
 					continue
 				}
-				totalCost += te.entryToExitPrice*common.Fixed64(out)/TrafficUnit + te.exitToEntryPrice*common.Fixed64(in)/TrafficUnit
+
+				totalCost += entryToExitPrice*common.Fixed64(out)/TrafficUnit + exitToEntryPrice*common.Fixed64(in)/TrafficUnit
 
 				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
 				if err != nil {

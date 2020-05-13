@@ -644,13 +644,19 @@ func checkNanoPayClaim(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nk
 	}
 }
 
-func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, lastUpdate *time.Time, isClosed *bool) {
+func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, lastUpdate *time.Time, isClosed *bool, totalCost *common.Fixed64) {
+	lastCost := common.Fixed64(0)
 	for {
 		time.Sleep(5 * time.Second)
 
 		if *isClosed {
 			break
 		}
+
+		if totalCost.GetData() == lastCost.GetData() {
+			continue
+		}
+		lastCost = *totalCost
 
 		if time.Since(*lastUpdate) > updateTimeout {
 			log.Println("Didn't update nano pay for more than", updateTimeout.String())
