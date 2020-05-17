@@ -76,6 +76,7 @@ func getLocationFromIP2C(ip string, retry int) (*Location, error) {
 			log.Println(err)
 			continue
 		}
+		break
 	}
 	if i == retry {
 		return &emptyLocation, err
