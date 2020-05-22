@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package pb;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.gostring_all) = true;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+option (gogoproto.testgen_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.populate_all) = true;
+
+message Metadata {
+  string ip = 1;
+  uint32 tcp_port = 2;
+  uint32 udp_port = 3;
+  uint32 service_id = 4;
+  repeated uint32 service_tcp = 5;
+  repeated uint32 service_udp = 6;
+  string price = 7;
+  string beneficiary_addr = 8;
+}

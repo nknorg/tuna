@@ -32,7 +32,7 @@ func main() {
 		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
 		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
 	}
-	err = tuna.ReadJson(opts.ConfigFile, config)
+	err = tuna.ReadJSON(opts.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config file error:", err)
 	}
@@ -60,7 +60,7 @@ func main() {
 	log.Println("Your NKN wallet address is:", wallet.Address())
 
 	var services []tuna.Service
-	err = tuna.ReadJson(opts.ServicesFile, &services)
+	err = tuna.ReadJSON(opts.ServicesFile, &services)
 	if err != nil {
 		log.Fatalln("Load service file error:", err)
 	}
