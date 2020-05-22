@@ -35,7 +35,7 @@ func main() {
 		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
 		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
 	}
-	err = tuna.ReadJson(opts.ConfigFile, config)
+	err = tuna.ReadJSON(opts.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config error:", err)
 	}
@@ -75,12 +75,12 @@ func main() {
 			log.Fatalln("Couldn't get IP:", err)
 		}
 
-		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: config.ReverseTCP})
+		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: int(config.ReverseTCP)})
 		if err != nil {
 			log.Fatalln("Couldn't bind listener:", err)
 		}
 
-		udpConn, err := net.ListenUDP(string(tuna.UDP), &net.UDPAddr{Port: config.ReverseUDP})
+		udpConn, err := net.ListenUDP(string(tuna.UDP), &net.UDPAddr{Port: int(config.ReverseUDP)})
 		if err != nil {
 			log.Fatalln("Couldn't bind listener:", err)
 		}
@@ -143,9 +143,9 @@ func main() {
 				te.SetServerTCPConn(tcpConn)
 
 				metadata := te.GetMetadata()
-				if metadata.UDPPort > 0 {
+				if metadata.UdpPort > 0 {
 					ip, _, _ := net.SplitHostPort(tcpConn.RemoteAddr().String())
-					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: metadata.UDPPort}
+					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
 
 					udpReadChan := make(chan []byte)
 					udpWriteChan := make(chan []byte)
@@ -185,21 +185,21 @@ func main() {
 		tuna.UpdateMetadata(
 			reverseServiceName,
 			255,
-			[]int{},
-			[]int{},
+			nil,
+			nil,
 			ip,
-			config.ReverseTCP,
-			config.ReverseUDP,
+			uint32(config.ReverseTCP),
+			uint32(config.ReverseUDP),
 			config.ReversePrice,
 			config.ReverseBeneficiaryAddr,
 			config.ReverseSubscriptionPrefix,
-			config.ReverseSubscriptionDuration,
+			uint32(config.ReverseSubscriptionDuration),
 			config.ReverseSubscriptionFee,
 			wallet,
 		)
 	} else {
 		var services []tuna.Service
-		err = tuna.ReadJson(opts.ServicesFile, &services)
+		err = tuna.ReadJSON(opts.ServicesFile, &services)
 		if err != nil {
 			log.Fatalln("Load service file error:", err)
 		}

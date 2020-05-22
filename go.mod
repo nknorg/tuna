@@ -3,6 +3,7 @@ module github.com/nknorg/tuna
 go 1.12
 
 require (
+	github.com/gogo/protobuf v1.3.1
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/jackpal/gateway v1.0.6 // indirect

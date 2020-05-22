@@ -48,3 +48,7 @@ all:
 	${MAKE} build GOOS=darwin GOARCH=amd64
 	${MAKE} build GOOS=linux GOARCH=amd64
 	${MAKE} build GOOS=windows GOARCH=amd64 EXT=.exe
+
+.PHONY: pb
+pb:
+	protoc -I=. -I=$(GOPATH)/src -I=$(GOPATH)/src/github.com/gogo/protobuf/protobuf --gogoslick_out=. pb/*.proto

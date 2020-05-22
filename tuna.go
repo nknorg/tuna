@@ -3,6 +3,7 @@ package tuna
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,8 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
+	"github.com/gogo/protobuf/proto"
 	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/program"
@@ -28,6 +29,7 @@ import (
 	"github.com/nknorg/nkn/util/address"
 	"github.com/nknorg/nkn/util/config"
 	"github.com/nknorg/nkn/vault"
+	"github.com/nknorg/tuna/pb"
 	"github.com/trueinsider/smux"
 )
 
@@ -38,7 +40,7 @@ const (
 	UDP                           Protocol = "udp"
 	DefaultNanoPayDuration                 = 4320 * 30
 	DefaultNanoPayUpdateInterval           = time.Minute
-	DefaultSubscriptionPrefix              = "tuna+1."
+	DefaultSubscriptionPrefix              = "tuna_v1."
 	DefaultReverseServiceName              = "reverse"
 	DefaultServiceListenIP                 = "127.0.0.1"
 	DefaultReverseServiceListenIP          = "0.0.0.0"
@@ -54,29 +56,18 @@ type ServiceInfo struct {
 }
 
 type Service struct {
-	Name string `json:"name"`
-	TCP  []int  `json:"tcp"`
-	UDP  []int  `json:"udp"`
-}
-
-type Metadata struct {
-	IP              string `json:"ip"`
-	TCPPort         int    `json:"tcpPort"`
-	UDPPort         int    `json:"udpPort"`
-	ServiceId       int    `json:"serviceId"` // valid range: 0-255
-	ServiceTCP      []int  `json:"serviceTcp,omitempty"`
-	ServiceUDP      []int  `json:"serviceUdp,omitempty"`
-	Price           string `json:"price,omitempty"`
-	BeneficiaryAddr string `json:"beneficiaryAddr,omitempty"`
+	Name string   `json:"name"`
+	TCP  []uint32 `json:"tcp"`
+	UDP  []uint32 `json:"udp"`
 }
 
 type Common struct {
 	Service            *Service
 	Wallet             *nkn.Wallet
-	DialTimeout        uint16
+	DialTimeout        int32
 	SubscriptionPrefix string
 	Reverse            bool
-	ReverseMetadata    *Metadata
+	ReverseMetadata    *pb.Metadata
 	ServiceInfo        *ServiceInfo
 
 	udpReadChan  chan []byte
@@ -88,7 +79,7 @@ type Common struct {
 	paymentReceiver  string
 	entryToExitPrice common.Fixed64
 	exitToEntryPrice common.Fixed64
-	metadata         *Metadata
+	metadata         *pb.Metadata
 	connected        bool
 	tcpConn          net.Conn
 	udpConn          *net.UDPConn
@@ -177,7 +168,7 @@ func (c *Common) GetServerUDPWriteChan(force bool) (chan []byte, error) {
 	return c.udpWriteChan, nil
 }
 
-func (c *Common) GetMetadata() *Metadata {
+func (c *Common) GetMetadata() *pb.Metadata {
 	c.RLock()
 	defer c.RUnlock()
 	return c.metadata
@@ -248,14 +239,14 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 }
 
 func (c *Common) UpdateServerConn() bool {
-	hasTCP := len(c.Service.TCP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceTCP) > 0)
-	hasUDP := len(c.Service.UDP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceUDP) > 0)
+	hasTCP := len(c.Service.TCP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceTcp) > 0)
+	hasUDP := len(c.Service.UDP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceUdp) > 0)
 	metadata := c.GetMetadata()
 
 	if hasTCP {
 		Close(c.GetTCPConn())
 
-		address := metadata.IP + ":" + strconv.Itoa(metadata.TCPPort)
+		address := metadata.Ip + ":" + strconv.Itoa(int(metadata.TcpPort))
 		tcpConn, err := net.DialTimeout(
 			string(TCP),
 			address,
@@ -272,7 +263,7 @@ func (c *Common) UpdateServerConn() bool {
 		udpConn := c.GetUDPConn()
 		Close(udpConn)
 
-		address := net.UDPAddr{IP: net.ParseIP(metadata.IP), Port: metadata.UDPPort}
+		address := net.UDPAddr{IP: net.ParseIP(metadata.Ip), Port: int(metadata.UdpPort)}
 		udpConn, err := net.DialUDP(
 			string(UDP),
 			nil,
@@ -323,7 +314,7 @@ func (c *Common) CreateServerConn(force bool) error {
 
 				metadata := c.GetMetadata()
 
-				res, err := c.ServiceInfo.IPFilter.GeoCheck(metadata.IP)
+				res, err := c.ServiceInfo.IPFilter.GeoCheck(metadata.Ip)
 				if err != nil {
 					log.Println(err)
 				}
@@ -372,8 +363,8 @@ func (c *Common) CreateServerConn(force bool) error {
 				c.entryToExitPrice = entryToExitPrice
 				c.exitToEntryPrice = exitToEntryPrice
 				if c.ReverseMetadata != nil {
-					c.metadata.ServiceTCP = c.ReverseMetadata.ServiceTCP
-					c.metadata.ServiceUDP = c.ReverseMetadata.ServiceUDP
+					c.metadata.ServiceTcp = c.ReverseMetadata.ServiceTcp
+					c.metadata.ServiceUdp = c.ReverseMetadata.ServiceUdp
 				}
 				c.Unlock()
 
@@ -389,47 +380,54 @@ func (c *Common) CreateServerConn(force bool) error {
 	return nil
 }
 
-func ReadMetadata(metadataString string) (*Metadata, error) {
-	metadata := &Metadata{}
-	err := json.Unmarshal([]byte(metadataString), metadata)
-	return metadata, err
+func ReadMetadata(metadataString string) (*pb.Metadata, error) {
+	metadataRaw, err := base64.StdEncoding.DecodeString(metadataString)
+	if err != nil {
+		return nil, err
+	}
+	metadata := &pb.Metadata{}
+	err = proto.Unmarshal(metadataRaw, metadata)
+	if err != nil {
+		return nil, err
+	}
+	return metadata, nil
 }
 
 func CreateRawMetadata(
-	serviceId byte,
-	serviceTCP []int,
-	serviceUDP []int,
+	serviceID byte,
+	serviceTCP []uint32,
+	serviceUDP []uint32,
 	ip string,
-	tcpPort int,
-	udpPort int,
+	tcpPort uint32,
+	udpPort uint32,
 	price string,
 	beneficiaryAddr string,
 ) []byte {
-	metadata := Metadata{
-		IP:              ip,
-		TCPPort:         tcpPort,
-		UDPPort:         udpPort,
-		ServiceId:       int(serviceId),
-		ServiceTCP:      serviceTCP,
-		ServiceUDP:      serviceUDP,
+	metadata := &pb.Metadata{
+		Ip:              ip,
+		TcpPort:         tcpPort,
+		UdpPort:         udpPort,
+		ServiceId:       uint32(serviceID),
+		ServiceTcp:      serviceTCP,
+		ServiceUdp:      serviceUDP,
 		Price:           price,
 		BeneficiaryAddr: beneficiaryAddr,
 	}
-	metadataRaw, err := json.Marshal(metadata)
+	metadataRaw, err := proto.Marshal(metadata)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	return metadataRaw
+	return []byte(base64.StdEncoding.EncodeToString(metadataRaw))
 }
 
 func UpdateMetadata(
 	serviceName string,
-	serviceId byte,
-	serviceTCP []int,
-	serviceUDP []int,
+	serviceID byte,
+	serviceTCP []uint32,
+	serviceUDP []uint32,
 	ip string,
-	tcpPort int,
-	udpPort int,
+	tcpPort uint32,
+	udpPort uint32,
 	price string,
 	beneficiaryAddr string,
 	subscriptionPrefix string,
@@ -438,7 +436,7 @@ func UpdateMetadata(
 	wallet *nkn.Wallet,
 ) {
 	metadataRaw := CreateRawMetadata(
-		serviceId,
+		serviceID,
 		serviceTCP,
 		serviceUDP,
 		ip,
@@ -518,7 +516,7 @@ func Close(conn io.Closer) {
 	}
 }
 
-func ReadJson(fileName string, value interface{}) error {
+func ReadJSON(fileName string, value interface{}) error {
 	file, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return fmt.Errorf("read file error: %v", err)
@@ -532,8 +530,14 @@ func ReadJson(fileName string, value interface{}) error {
 	return nil
 }
 
-func GetConnIdString(data []byte) string {
-	return strconv.Itoa(int(*(*uint16)(unsafe.Pointer(&data[0]))))
+func PortToConnID(port uint16) []byte {
+	b := make([]byte, 2)
+	binary.LittleEndian.PutUint16(b, port)
+	return b
+}
+
+func ConnIDToPort(data []byte) uint16 {
+	return binary.LittleEndian.Uint16(data)
 }
 
 func LoadPassword(path string) (string, error) {

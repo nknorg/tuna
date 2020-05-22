@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
@@ -18,20 +17,20 @@ import (
 
 type EntryConfiguration struct {
 	Services                    map[string]ServiceInfo `json:"services"`
-	DialTimeout                 uint16                 `json:"dialTimeout"`
-	UDPTimeout                  uint16                 `json:"udpTimeout"`
+	DialTimeout                 int32                  `json:"dialTimeout"`
+	UDPTimeout                  int32                  `json:"udpTimeout"`
 	NanoPayFee                  string                 `json:"nanoPayFee"`
 	SubscriptionPrefix          string                 `json:"subscriptionPrefix"`
 	Reverse                     bool                   `json:"reverse"`
 	ReverseBeneficiaryAddr      string                 `json:"reverseBeneficiaryAddr"`
-	ReverseTCP                  int                    `json:"reverseTCP"`
-	ReverseUDP                  int                    `json:"reverseUDP"`
+	ReverseTCP                  int32                  `json:"reverseTCP"`
+	ReverseUDP                  int32                  `json:"reverseUDP"`
 	ReverseServiceListenIP      string                 `json:"reverseServiceListenIP"`
 	ReversePrice                string                 `json:"reversePrice"`
-	ReverseClaimInterval        uint32                 `json:"reverseClaimInterval"`
+	ReverseClaimInterval        int32                  `json:"reverseClaimInterval"`
 	ReverseServiceName          string                 `json:"reverseServiceName"`
 	ReverseSubscriptionPrefix   string                 `json:"reverseSubscriptionPrefix"`
-	ReverseSubscriptionDuration uint32                 `json:"reverseSubscriptionDuration"`
+	ReverseSubscriptionDuration int32                  `json:"reverseSubscriptionDuration"`
 	ReverseSubscriptionFee      string                 `json:"reverseSubscriptionFee"`
 }
 
@@ -165,18 +164,18 @@ func (te *TunaEntry) Start() {
 func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	metadata := te.GetMetadata()
 	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
-	tcpPorts, err := te.listenTCP(listenIP, metadata.ServiceTCP)
+	tcpPorts, err := te.listenTCP(listenIP, metadata.ServiceTcp)
 	if err != nil {
 		te.close()
 		return err
 	}
-	udpPorts, err := te.listenUDP(listenIP, metadata.ServiceUDP)
+	udpPorts, err := te.listenUDP(listenIP, metadata.ServiceUdp)
 	if err != nil {
 		te.close()
 		return err
 	}
 
-	serviceMetadata := CreateRawMetadata(0, tcpPorts, udpPorts, "", -1, -1, "", te.config.ReverseBeneficiaryAddr)
+	serviceMetadata := CreateRawMetadata(0, tcpPorts, udpPorts, "", 0, 0, "", te.config.ReverseBeneficiaryAddr)
 	_, err = stream.Write(serviceMetadata)
 	if err != nil {
 		te.close()
@@ -287,32 +286,32 @@ func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
 	return te.Session, nil
 }
 
-func (te *TunaEntry) openStream(portId byte, force bool) (*smux.Stream, error) {
+func (te *TunaEntry) openStream(portID byte, force bool) (*smux.Stream, error) {
 	session, err := te.getSession(force)
 	if err != nil {
 		return nil, err
 	}
-	serviceId := te.GetMetadata().ServiceId
-	stream, err := session.OpenStream(byte(serviceId), portId)
+	serviceID := te.GetMetadata().ServiceId
+	stream, err := session.OpenStream(byte(serviceID), portID)
 	if err != nil {
-		return te.openStream(portId, true)
+		return te.openStream(portID, true)
 	}
 	return stream, err
 }
 
-func (te *TunaEntry) listenTCP(ip net.IP, ports []int) ([]int, error) {
-	assignedPorts := make([]int, 0)
+func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
+	assignedPorts := make([]uint32, 0, len(ports))
 	for i, _port := range ports {
-		listener, err := net.ListenTCP(string(TCP), &net.TCPAddr{IP: ip, Port: _port})
+		listener, err := net.ListenTCP(string(TCP), &net.TCPAddr{IP: ip, Port: int(_port)})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
 		}
 		port := listener.Addr().(*net.TCPAddr).Port
-		portId := byte(i)
-		assignedPorts = append(assignedPorts, port)
+		portID := byte(i)
+		assignedPorts = append(assignedPorts, uint32(port))
 
-		te.tcpListeners[portId] = listener
+		te.tcpListeners[portID] = listener
 
 		go func() {
 			for {
@@ -328,7 +327,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []int) ([]int, error) {
 					continue
 				}
 
-				stream, err := te.openStream(portId, false)
+				stream, err := te.openStream(portID, false)
 				if err != nil {
 					log.Println("Couldn't open stream:", err)
 					Close(conn)
@@ -349,8 +348,8 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []int) ([]int, error) {
 	return assignedPorts, nil
 }
 
-func (te *TunaEntry) listenUDP(ip net.IP, ports []int) ([]int, error) {
-	assignedPorts := make([]int, 0)
+func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
+	assignedPorts := make([]uint32, 0, len(ports))
 	if len(ports) == 0 {
 		return assignedPorts, nil
 	}
@@ -365,19 +364,20 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []int) ([]int, error) {
 
 			data := <-serverReadChan
 
-			portId := data[3]
-			connId := GetConnIdString(data)
+			portID := data[3]
+			port := ConnIDToPort(data)
+			connID := strconv.Itoa(int(port))
 
 			var serviceConn *net.UDPConn
 			var ok bool
-			if serviceConn, ok = te.serviceConn[portId]; !ok {
-				log.Println("Couldn't get service conn for portId:", portId)
+			if serviceConn, ok = te.serviceConn[portID]; !ok {
+				log.Println("Couldn't get service conn for portId:", portID)
 				continue
 			}
 
 			var x interface{}
-			if x, ok = te.clientAddr.Get(connId); !ok {
-				log.Println("Couldn't get client address for:", connId)
+			if x, ok = te.clientAddr.Get(connID); !ok {
+				log.Println("Couldn't get client address for:", connID)
 				continue
 			}
 			clientAddr := x.(*net.UDPAddr)
@@ -390,16 +390,16 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []int) ([]int, error) {
 	}()
 
 	for i, _port := range ports {
-		localConn, err := net.ListenUDP(string(UDP), &net.UDPAddr{IP: ip, Port: _port})
+		localConn, err := net.ListenUDP(string(UDP), &net.UDPAddr{IP: ip, Port: int(_port)})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
 		}
 		port := localConn.LocalAddr().(*net.UDPAddr).Port
-		portId := byte(i)
-		assignedPorts = append(assignedPorts, port)
+		portID := byte(i)
+		assignedPorts = append(assignedPorts, uint32(port))
 
-		te.serviceConn[portId] = localConn
+		te.serviceConn[portID] = localConn
 
 		go func() {
 			localBuffer := make([]byte, 2048)
@@ -418,16 +418,12 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []int) ([]int, error) {
 					log.Println("Couldn't get remote connection:", err)
 					continue
 				}
-				connId := GetConnIdData(addr.Port)
-				serviceId := te.GetMetadata().ServiceId
-				serverWriteChan <- append([]byte{connId[0], connId[1], byte(serviceId), portId}, localBuffer[:n]...)
+				connID := PortToConnID(uint16(addr.Port))
+				serviceID := te.GetMetadata().ServiceId
+				serverWriteChan <- append([]byte{connID[0], connID[1], byte(serviceID), portID}, localBuffer[:n]...)
 			}
 		}()
 	}
 
 	return assignedPorts, nil
-}
-
-func GetConnIdData(port int) [2]byte {
-	return *(*[2]byte)(unsafe.Pointer(&port))
 }
