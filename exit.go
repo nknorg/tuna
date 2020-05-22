@@ -23,23 +23,23 @@ type ExitServiceInfo struct {
 }
 
 type ExitConfiguration struct {
-	BeneficiaryAddr           string                     `json:"BeneficiaryAddr"`
-	ListenTCP                 int                        `json:"ListenTCP"`
-	ListenUDP                 int                        `json:"ListenUDP"`
-	DialTimeout               uint16                     `json:"DialTimeout"`
-	UDPTimeout                uint16                     `json:"UDPTimeout"`
-	SubscriptionPrefix        string                     `json:"SubscriptionPrefix"`
-	SubscriptionDuration      uint32                     `json:"SubscriptionDuration"`
-	SubscriptionFee           string                     `json:"SubscriptionFee"`
-	ClaimInterval             uint32                     `json:"ClaimInterval"`
-	Services                  map[string]ExitServiceInfo `json:"Services"`
-	Reverse                   bool                       `json:"Reverse"`
-	ReverseRandomPorts        bool                       `json:"ReverseRandomPorts"`
-	ReverseMaxPrice           string                     `json:"ReverseMaxPrice"`
-	ReverseNanoPayFee         string                     `json:"ReverseNanopayfee"`
-	ReverseServiceName        string                     `json:"ReverseServiceName"`
-	ReverseSubscriptionPrefix string                     `json:"ReverseSubscriptionPrefix"`
-	ReverseIPFilter           IPFilter                   `json:"ReverseIPFilter"`
+	BeneficiaryAddr           string                     `json:"beneficiaryAddr"`
+	ListenTCP                 int                        `json:"listenTCP"`
+	ListenUDP                 int                        `json:"listenUDP"`
+	DialTimeout               uint16                     `json:"dialTimeout"`
+	UDPTimeout                uint16                     `json:"udpTimeout"`
+	SubscriptionPrefix        string                     `json:"subscriptionPrefix"`
+	SubscriptionDuration      uint32                     `json:"subscriptionDuration"`
+	SubscriptionFee           string                     `json:"subscriptionFee"`
+	ClaimInterval             uint32                     `json:"claimInterval"`
+	Services                  map[string]ExitServiceInfo `json:"services"`
+	Reverse                   bool                       `json:"reverse"`
+	ReverseRandomPorts        bool                       `json:"reverseRandomPorts"`
+	ReverseMaxPrice           string                     `json:"reverseMaxPrice"`
+	ReverseNanoPayFee         string                     `json:"reverseNanopayfee"`
+	ReverseServiceName        string                     `json:"reverseServiceName"`
+	ReverseSubscriptionPrefix string                     `json:"reverseSubscriptionPrefix"`
+	ReverseIPFilter           IPFilter                   `json:"reverseIPFilter"`
 }
 
 type TunaExit struct {

@@ -17,22 +17,22 @@ import (
 )
 
 type EntryConfiguration struct {
-	Services                    map[string]ServiceInfo `json:"Services"`
-	DialTimeout                 uint16                 `json:"DialTimeout"`
-	UDPTimeout                  uint16                 `json:"UDPTimeout"`
-	NanoPayFee                  string                 `json:"NanoPayFee"`
-	SubscriptionPrefix          string                 `json:"SubscriptionPrefix"`
-	Reverse                     bool                   `json:"Reverse"`
-	ReverseBeneficiaryAddr      string                 `json:"ReverseBeneficiaryAddr"`
-	ReverseTCP                  int                    `json:"ReverseTCP"`
-	ReverseUDP                  int                    `json:"ReverseUDP"`
-	ReverseServiceListenIP      string                 `json:"ReverseServiceListenIP"`
-	ReversePrice                string                 `json:"ReversePrice"`
-	ReverseClaimInterval        uint32                 `json:"ReverseClaimInterval"`
-	ReverseServiceName          string                 `json:"ReverseServiceName"`
-	ReverseSubscriptionPrefix   string                 `json:"ReverseSubscriptionPrefix"`
-	ReverseSubscriptionDuration uint32                 `json:"ReverseSubscriptionDuration"`
-	ReverseSubscriptionFee      string                 `json:"ReverseSubscriptionFee"`
+	Services                    map[string]ServiceInfo `json:"services"`
+	DialTimeout                 uint16                 `json:"dialTimeout"`
+	UDPTimeout                  uint16                 `json:"udpTimeout"`
+	NanoPayFee                  string                 `json:"nanoPayFee"`
+	SubscriptionPrefix          string                 `json:"subscriptionPrefix"`
+	Reverse                     bool                   `json:"reverse"`
+	ReverseBeneficiaryAddr      string                 `json:"reverseBeneficiaryAddr"`
+	ReverseTCP                  int                    `json:"reverseTCP"`
+	ReverseUDP                  int                    `json:"reverseUDP"`
+	ReverseServiceListenIP      string                 `json:"reverseServiceListenIP"`
+	ReversePrice                string                 `json:"reversePrice"`
+	ReverseClaimInterval        uint32                 `json:"reverseClaimInterval"`
+	ReverseServiceName          string                 `json:"reverseServiceName"`
+	ReverseSubscriptionPrefix   string                 `json:"reverseSubscriptionPrefix"`
+	ReverseSubscriptionDuration uint32                 `json:"reverseSubscriptionDuration"`
+	ReverseSubscriptionFee      string                 `json:"reverseSubscriptionFee"`
 }
 
 type TunaEntry struct {

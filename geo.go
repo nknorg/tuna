@@ -9,14 +9,15 @@ import (
 	"time"
 )
 
-const IP2CUrl = "https://ip2c.org/"
-const MAX_RETRY = 3
+const (
+	GeoIPRetry = 3
+)
 
 type Location struct {
-	IP          string `json:"IP"`
-	CountryCode string `json:"CountryCode"`
-	Country     string `json:"Country"`
-	City        string `json:"City"`
+	IP          string `json:"ip"`
+	CountryCode string `json:"countryCode"`
+	Country     string `json:"country"`
+	City        string `json:"city"`
 }
 
 var emptyLocation = Location{}
@@ -32,15 +33,15 @@ func (l *Location) Match(location *Location) bool {
 	if len(l.IP) > 0 && location.IP == l.IP {
 		return true
 	}
-	if len(l.CountryCode) > 0 && location.CountryCode == l.CountryCode {
+	if len(l.CountryCode) > 0 && strings.ToLower(location.CountryCode) == strings.ToLower(l.CountryCode) {
 		return true
 	}
 	return false
 }
 
 type IPFilter struct {
-	Allow    []Location `json:"Allow"`
-	Disallow []Location `json:"Disallow"`
+	Allow    []Location `json:"allow"`
+	Disallow []Location `json:"disallow"`
 }
 
 func (f *IPFilter) Empty() bool {
@@ -62,7 +63,7 @@ func (f *IPFilter) Empty() bool {
 }
 
 func getLocationFromIP2C(ip string, retry int) (*Location, error) {
-	queryUrl := IP2CUrl + ip
+	queryURL := "https://ip2c.org/" + ip
 	client := http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -71,7 +72,7 @@ func getLocationFromIP2C(ip string, retry int) (*Location, error) {
 	var resp *http.Response
 	var err error
 	for ; i < retry; i++ {
-		resp, err = client.Get(queryUrl)
+		resp, err = client.Get(queryURL)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -118,7 +119,7 @@ func (f *IPFilter) GeoCheck(ip string) (bool, error) {
 	if f.Empty() {
 		return true, nil
 	}
-	loc, err := getLocationFromIP2C(ip, MAX_RETRY)
+	loc, err := getLocationFromIP2C(ip, GeoIPRetry)
 	if err != nil {
 		return true, err
 	}
