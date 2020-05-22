@@ -49,8 +49,8 @@ const (
 
 type ServiceInfo struct {
 	MaxPrice string    `json:"maxPrice"`
-	ListenIP string    `json:"ListenIP"`
-	IPFilter *IPFilter `json:"IPFilter"`
+	ListenIP string    `json:"listenIP"`
+	IPFilter *IPFilter `json:"ipFilter"`
 }
 
 type Service struct {

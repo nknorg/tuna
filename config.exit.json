@@ -1,28 +1,28 @@
 {
-  "BeneficiaryAddr": "",
-  "ListenTCP": 30010,
-  "ListenUDP": 30011,
-  "DialTimeout": 10,
-  "UDPTimeout": 60,
-  "ClaimInterval": 3600,
-  "SubscriptionDuration": 180,
-  "SubscriptionFee": "0",
-  "Services": {
+  "beneficiaryAddr": "",
+  "listenTCP": 30010,
+  "listenUDP": 30011,
+  "dialTimeout": 10,
+  "udpTimeout": 60,
+  "claimInterval": 3600,
+  "subscriptionDuration": 180,
+  "subscriptionFee": "0",
+  "services": {
     "httpproxy": {
       "address": "127.0.0.1",
       "price": "0.001"
     }
   },
-  "Reverse": false,
-  "ReverseRandomPorts": true,
-  "ReverseMaxPrice": "0.001",
-  "ReverseNanoPayFee": "0",
-  "ReverseIPFilter": {
-    "Allow": [
-      {"CountryCode": ""}
+  "reverse": false,
+  "reverseRandomPorts": true,
+  "reverseMaxPrice": "0.001",
+  "reverseNanoPayFee": "0",
+  "reverseIPFilter": {
+    "allow": [
+      {"countryCode": ""}
     ],
-    "Disallow": [
-      {"CountryCode": ""}
+    "disallow": [
+      {"countryCode": ""}
     ]
   }
 }

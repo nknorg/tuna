@@ -1,26 +1,26 @@
 {
-  "Services": {
+  "services": {
     "httpproxy": {
       "maxPrice": "0.001",
-      "IPFilter": {
-        "Allow": [
-          {"CountryCode": ""}
+      "ipFilter": {
+        "allow": [
+          {"countryCode": ""}
         ],
-        "Disallow": [
-          {"CountryCode": ""}
+        "disallow": [
+          {"countryCode": ""}
         ]
       }
     }
   },
-  "DialTimeout": 10,
-  "UDPTimeout": 60,
-  "NanoPayFee": "0",
-  "Reverse": false,
-  "ReverseBeneficiaryAddr": "",
-  "ReverseTCP": 30020,
-  "ReverseUDP": 30021,
-  "ReversePrice": "0.001",
-  "ReverseClaimInterval": 3600,
-  "ReverseSubscriptionDuration": 180,
-  "ReverseSubscriptionFee": "0"
+  "dialTimeout": 10,
+  "udpTimeout": 60,
+  "nanoPayFee": "0",
+  "reverse": false,
+  "reverseBeneficiaryAddr": "",
+  "reverseTCP": 30020,
+  "reverseUDP": 30021,
+  "reversePrice": "0.001",
+  "reverseClaimInterval": 3600,
+  "reverseSubscriptionDuration": 180,
+  "reverseSubscriptionFee": "0"
 }
