@@ -380,6 +380,65 @@ func (c *Common) CreateServerConn(force bool) error {
 	return nil
 }
 
+func (c *Common) startPayment(
+	bytesInUsed, bytesOutUsed, bytesInPaid, bytesOutPaid *uint64,
+	nanoPayFee string,
+	getPaymentStream func() (*smux.Stream, error),
+	closeChan chan struct{},
+) {
+	var np *nkn.NanoPay
+	lastCost := common.Fixed64(0)
+	entryToExitPrice, exitToEntryPrice := c.GetPrice()
+
+	time.Sleep(DefaultNanoPayUpdateInterval)
+
+	for {
+		select {
+		case <-closeChan:
+			return
+		default:
+		}
+
+		bytesIn := atomic.LoadUint64(bytesInUsed)
+		bytesOut := atomic.LoadUint64(bytesOutUsed)
+		cost := exitToEntryPrice*common.Fixed64(bytesIn-*bytesInPaid)/TrafficUnit + entryToExitPrice*common.Fixed64(bytesOut-*bytesOutPaid)/TrafficUnit
+		if cost == lastCost {
+			time.Sleep(DefaultNanoPayUpdateInterval / 10)
+			continue
+		}
+		lastCost = cost
+
+		paymentStream, err := getPaymentStream()
+		if err != nil {
+			log.Printf("get payment stream err: %v", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		paymentReceiver := c.GetPaymentReceiver()
+		if np == nil || np.Recipient() != paymentReceiver {
+			np, err = c.Wallet.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
+			if err != nil {
+				log.Printf("create nano payment err: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+
+		err = sendNanoPay(np, paymentStream, cost)
+		if err != nil {
+			log.Printf("send nano payment err: %v", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		*bytesInPaid = bytesIn
+		*bytesOutPaid = bytesOut
+
+		time.Sleep(DefaultNanoPayUpdateInterval)
+	}
+}
+
 func ReadMetadata(metadataString string) (*pb.ServiceMetadata, error) {
 	metadataRaw, err := base64.StdEncoding.DecodeString(metadataString)
 	if err != nil {
@@ -580,16 +639,25 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 	return wallet.GetDefaultAccount()
 }
 
-func sendNanoPay(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *common.Fixed64, c *Common, nanoPayFee string) error {
-	var err error
-	paymentReceiver := c.GetPaymentReceiver()
-	if np == nil || np.Recipient() != paymentReceiver {
-		np, err = w.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
-		if err != nil {
-			return err
-		}
+func openPaymentStream(session *smux.Session) (*smux.Stream, error) {
+	stream, err := session.OpenStream()
+	if err != nil {
+		return nil, err
 	}
 
+	streamMetadata := &pb.StreamMetadata{
+		IsPayment: true,
+	}
+
+	err = writeStreamMetadata(stream, streamMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	return stream, nil
+}
+
+func sendNanoPay(np *nkn.NanoPay, paymentStream *smux.Stream, cost common.Fixed64) error {
 	tx, err := np.IncrementAmount(cost.String())
 	if err != nil {
 		return err
@@ -600,23 +668,7 @@ func sendNanoPay(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *co
 		return err
 	}
 
-	stream, err := session.OpenStream()
-	if err != nil {
-		return err
-	}
-
-	defer stream.Close()
-
-	streamMetadata := &pb.StreamMetadata{
-		IsPayment: true,
-	}
-
-	err = writeStreamMetadata(stream, streamMetadata)
-	if err != nil {
-		return err
-	}
-
-	err = WriteVarBytes(stream, txBytes)
+	err = WriteVarBytes(paymentStream, txBytes)
 	if err != nil {
 		return err
 	}
@@ -624,12 +676,7 @@ func sendNanoPay(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *co
 	return nil
 }
 
-func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastClaimed *common.Fixed64) error {
-	txBytes, err := ReadVarBytes(stream)
-	if err != nil {
-		return fmt.Errorf("couldn't read payment stream: %v", err)
-	}
-
+func nanoPayClaim(txBytes []byte, npc *nkn.NanoPayClaimer, lastClaimed *common.Fixed64) error {
 	tx := &transaction.Transaction{}
 	if err := tx.Unmarshal(txBytes); err != nil {
 		return fmt.Errorf("couldn't unmarshal payment stream data: %v", err)
@@ -687,7 +734,7 @@ func checkTrafficCoverage(session *smux.Session, lastComputed, lastClaimed commo
 	if float64(lastClaimed) >= float64(lastComputed)*MinTrafficCoverage {
 		return true
 	}
-	log.Printf("Nano pay amount covers less than %f%% of total cost", MinTrafficCoverage*100)
+	log.Printf("Nano pay amount covers less than %f%% of total cost (%d/%d)", MinTrafficCoverage*100, lastClaimed, lastComputed)
 	Close(session)
 	*isClosed = true
 	return false
@@ -720,4 +767,50 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 	}
 
 	return nil
+}
+
+func acceptStream(
+	session *smux.Session,
+	npc *nkn.NanoPayClaimer,
+	lastClaimed *common.Fixed64,
+	getTotalCost func() common.Fixed64,
+	lastUpdate *time.Time,
+	isClosed *bool,
+) (*smux.Stream, *pb.StreamMetadata, error) {
+	stream, err := session.AcceptStream()
+	if err != nil {
+		return nil, nil, fmt.Errorf("Couldn't accept stream: %v", err)
+	}
+
+	streamMetadata, err := readStreamMetadata(stream)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Read stream metadata error: %v", err)
+	}
+
+	if streamMetadata.IsPayment {
+		go func() {
+			for {
+				tx, err := ReadVarBytes(stream)
+				if err != nil {
+					log.Println("couldn't read payment stream:", err)
+					return
+				}
+
+				err = nanoPayClaim(tx, npc, lastClaimed)
+				if err != nil {
+					log.Println("Couldn't claim nanoPay:", err)
+					continue
+				}
+
+				totalCost := getTotalCost()
+				*lastUpdate = time.Now()
+
+				if !checkTrafficCoverage(session, totalCost, *lastClaimed, isClosed) {
+					return
+				}
+			}
+		}()
+	}
+
+	return stream, streamMetadata, nil
 }
