@@ -93,11 +93,31 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	onErr := nkn.NewOnError(1, nil)
 	var npc *nkn.NanoPayClaimer
 	var err error
-	lastComputed := common.Fixed64(0)
 	lastClaimed := common.Fixed64(0)
 	lastUpdate := time.Now()
 	isClosed := false
-	totalCost := common.Fixed64(0)
+
+	getTotalCost := func() common.Fixed64 {
+		cost := common.Fixed64(0)
+		for i := range bytesIn {
+			in := atomic.LoadUint64(&bytesIn[i])
+			out := atomic.LoadUint64(&bytesOut[i])
+			if in == 0 && out == 0 {
+				continue
+			}
+			service, err := te.getService(byte(i))
+			if err != nil {
+				continue
+			}
+			serviceInfo := te.config.Services[service.Name]
+			entryToExitPrice, exitToEntryPrice, err := ParsePrice(serviceInfo.Price)
+			if err != nil {
+				continue
+			}
+			cost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
+		}
+		return cost
+	}
 
 	if !te.config.Reverse {
 		npc, err = te.Wallet.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
@@ -107,7 +127,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 
 		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, &totalCost)
+		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, getTotalCost)
 	}
 
 	for {
@@ -123,32 +143,17 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				continue
 			}
 			go func(stream *smux.Stream) {
-				cost := common.Fixed64(0)
-				for i := range bytesIn {
-					in := atomic.LoadUint64(&bytesIn[i])
-					out := atomic.LoadUint64(&bytesOut[i])
-					if in == 0 && out == 0 {
-						continue
-					}
-					service, err := te.getService(byte(i))
-					if err != nil {
-						continue
-					}
-					serviceInfo := te.config.Services[service.Name]
-					entryToExitPrice, exitToEntryPrice, err := ParsePrice(serviceInfo.Price)
-					if err != nil {
-						continue
-					}
-					cost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
-				}
-
-				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &cost, &lastUpdate)
+				totalCost := getTotalCost()
+				err = nanoPayClaim(stream, npc, &lastClaimed)
 				if err != nil {
 					log.Println("Couldn't claim nanoPay:", err)
+					return
 				}
-				totalCost = cost
 
-				if !checkTrafficCoverage(session, lastComputed, lastClaimed, &isClosed) {
+				log.Println("update nanopay")
+				lastUpdate = time.Now()
+
+				if !checkTrafficCoverage(session, totalCost, lastClaimed, &isClosed) {
 					return
 				}
 			}(stream)

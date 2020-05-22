@@ -120,33 +120,40 @@ func (te *TunaEntry) Start() {
 
 		go func() {
 			var np *nkn.NanoPay
+			lastCost := common.Fixed64(0)
+			entryToExitPrice, exitToEntryPrice := te.GetPrice()
 			for {
 				select {
 				case <-te.closeChan:
 					return
 				default:
 				}
-				time.Sleep(DefaultNanoPayUpdateInterval)
+
 				bytesIn := atomic.LoadUint64(&te.bytesIn)
 				bytesOut := atomic.LoadUint64(&te.bytesOut)
-				entryToExitPrice, exitToEntryPrice := te.GetPrice()
 				cost := exitToEntryPrice*common.Fixed64(bytesIn-te.bytesInPaid)/TrafficUnit + entryToExitPrice*common.Fixed64(bytesOut-te.bytesOutPaid)/TrafficUnit
-				if cost == 0 {
+				if cost == lastCost {
+					time.Sleep(DefaultNanoPayUpdateInterval / 10)
 					continue
 				}
+				lastCost = cost
 				session, err := te.getSession(false)
 				if err != nil {
 					log.Printf("get session err: %v", err)
+					time.Sleep(time.Second)
 					continue
 				}
 				err = sendNanoPay(np, session, te.Wallet, &cost, te.Common, te.config.NanoPayFee)
 				if err != nil {
 					log.Printf("send nano payment err: %v", err)
+					time.Sleep(time.Second)
 					continue
 				}
 
 				te.bytesInPaid = bytesIn
 				te.bytesOutPaid = bytesOut
+
+				time.Sleep(DefaultNanoPayUpdateInterval)
 			}
 		}()
 		break
@@ -187,8 +194,6 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		}
 		stream.Close()
 
-		totalCost := common.Fixed64(0)
-		lastComputed := common.Fixed64(0)
 		lastClaimed := common.Fixed64(0)
 		lastUpdate := time.Now()
 		claimInterval := time.Duration(te.config.ReverseClaimInterval) * time.Second
@@ -208,9 +213,15 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 			return
 		}
 
+		getTotalCost := func() common.Fixed64 {
+			in := atomic.LoadUint64(&te.reverseBytesIn)
+			out := atomic.LoadUint64(&te.reverseBytesOut)
+			return entryToExitPrice*common.Fixed64(out)/TrafficUnit + exitToEntryPrice*common.Fixed64(in)/TrafficUnit
+		}
+
 		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, &totalCost)
+		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, getTotalCost)
 
 		for {
 			stream, err = session.AcceptStream()
@@ -221,21 +232,16 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 			}
 
 			if len(stream.Metadata()) == 0 { // payment stream
-				in := atomic.LoadUint64(&te.reverseBytesIn)
-				out := atomic.LoadUint64(&te.reverseBytesOut)
-				if in == 0 && out == 0 {
-					continue
-				}
-
-				totalCost += entryToExitPrice*common.Fixed64(out)/TrafficUnit + exitToEntryPrice*common.Fixed64(in)/TrafficUnit
-
-				err = nanoPayClaim(stream, npc, &lastComputed, &lastClaimed, &totalCost, &lastUpdate)
+				totalCost := getTotalCost()
+				err = nanoPayClaim(stream, npc, &lastClaimed)
 				if err != nil {
 					log.Println("nanoPayClaim failed:", err)
 					continue
 				}
 
-				if !checkTrafficCoverage(session, lastComputed, lastClaimed, &isClosed) {
+				lastUpdate = time.Now()
+
+				if !checkTrafficCoverage(session, totalCost, lastClaimed, &isClosed) {
 					continue
 				}
 			}
