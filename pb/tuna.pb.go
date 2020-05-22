@@ -24,7 +24,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-type Metadata struct {
+type ServiceMetadata struct {
 	Ip              string   `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
 	TcpPort         uint32   `protobuf:"varint,2,opt,name=tcp_port,json=tcpPort,proto3" json:"tcp_port,omitempty"`
 	UdpPort         uint32   `protobuf:"varint,3,opt,name=udp_port,json=udpPort,proto3" json:"udp_port,omitempty"`
@@ -35,17 +35,17 @@ type Metadata struct {
 	BeneficiaryAddr string   `protobuf:"bytes,8,opt,name=beneficiary_addr,json=beneficiaryAddr,proto3" json:"beneficiary_addr,omitempty"`
 }
 
-func (m *Metadata) Reset()      { *m = Metadata{} }
-func (*Metadata) ProtoMessage() {}
-func (*Metadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tuna_c3674ba1f821682b, []int{0}
+func (m *ServiceMetadata) Reset()      { *m = ServiceMetadata{} }
+func (*ServiceMetadata) ProtoMessage() {}
+func (*ServiceMetadata) Descriptor() ([]byte, []int) {
+	return fileDescriptor_tuna_607c72e3a0605a47, []int{0}
 }
-func (m *Metadata) XXX_Unmarshal(b []byte) error {
+func (m *ServiceMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Metadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ServiceMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_Metadata.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ServiceMetadata.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalTo(b)
@@ -55,85 +55,145 @@ func (m *Metadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (dst *Metadata) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Metadata.Merge(dst, src)
+func (dst *ServiceMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ServiceMetadata.Merge(dst, src)
 }
-func (m *Metadata) XXX_Size() int {
+func (m *ServiceMetadata) XXX_Size() int {
 	return m.Size()
 }
-func (m *Metadata) XXX_DiscardUnknown() {
-	xxx_messageInfo_Metadata.DiscardUnknown(m)
+func (m *ServiceMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_ServiceMetadata.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Metadata proto.InternalMessageInfo
+var xxx_messageInfo_ServiceMetadata proto.InternalMessageInfo
 
-func (m *Metadata) GetIp() string {
+func (m *ServiceMetadata) GetIp() string {
 	if m != nil {
 		return m.Ip
 	}
 	return ""
 }
 
-func (m *Metadata) GetTcpPort() uint32 {
+func (m *ServiceMetadata) GetTcpPort() uint32 {
 	if m != nil {
 		return m.TcpPort
 	}
 	return 0
 }
 
-func (m *Metadata) GetUdpPort() uint32 {
+func (m *ServiceMetadata) GetUdpPort() uint32 {
 	if m != nil {
 		return m.UdpPort
 	}
 	return 0
 }
 
-func (m *Metadata) GetServiceId() uint32 {
+func (m *ServiceMetadata) GetServiceId() uint32 {
 	if m != nil {
 		return m.ServiceId
 	}
 	return 0
 }
 
-func (m *Metadata) GetServiceTcp() []uint32 {
+func (m *ServiceMetadata) GetServiceTcp() []uint32 {
 	if m != nil {
 		return m.ServiceTcp
 	}
 	return nil
 }
 
-func (m *Metadata) GetServiceUdp() []uint32 {
+func (m *ServiceMetadata) GetServiceUdp() []uint32 {
 	if m != nil {
 		return m.ServiceUdp
 	}
 	return nil
 }
 
-func (m *Metadata) GetPrice() string {
+func (m *ServiceMetadata) GetPrice() string {
 	if m != nil {
 		return m.Price
 	}
 	return ""
 }
 
-func (m *Metadata) GetBeneficiaryAddr() string {
+func (m *ServiceMetadata) GetBeneficiaryAddr() string {
 	if m != nil {
 		return m.BeneficiaryAddr
 	}
 	return ""
 }
 
-func init() {
-	proto.RegisterType((*Metadata)(nil), "pb.Metadata")
+type StreamMetadata struct {
+	ServiceId uint32 `protobuf:"varint,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	PortId    uint32 `protobuf:"varint,2,opt,name=port_id,json=portId,proto3" json:"port_id,omitempty"`
+	IsPayment bool   `protobuf:"varint,3,opt,name=is_payment,json=isPayment,proto3" json:"is_payment,omitempty"`
 }
-func (this *Metadata) Equal(that interface{}) bool {
+
+func (m *StreamMetadata) Reset()      { *m = StreamMetadata{} }
+func (*StreamMetadata) ProtoMessage() {}
+func (*StreamMetadata) Descriptor() ([]byte, []int) {
+	return fileDescriptor_tuna_607c72e3a0605a47, []int{1}
+}
+func (m *StreamMetadata) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StreamMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StreamMetadata.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *StreamMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamMetadata.Merge(dst, src)
+}
+func (m *StreamMetadata) XXX_Size() int {
+	return m.Size()
+}
+func (m *StreamMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_StreamMetadata.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StreamMetadata proto.InternalMessageInfo
+
+func (m *StreamMetadata) GetServiceId() uint32 {
+	if m != nil {
+		return m.ServiceId
+	}
+	return 0
+}
+
+func (m *StreamMetadata) GetPortId() uint32 {
+	if m != nil {
+		return m.PortId
+	}
+	return 0
+}
+
+func (m *StreamMetadata) GetIsPayment() bool {
+	if m != nil {
+		return m.IsPayment
+	}
+	return false
+}
+
+func init() {
+	proto.RegisterType((*ServiceMetadata)(nil), "pb.ServiceMetadata")
+	proto.RegisterType((*StreamMetadata)(nil), "pb.StreamMetadata")
+}
+func (this *ServiceMetadata) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*Metadata)
+	that1, ok := that.(*ServiceMetadata)
 	if !ok {
-		that2, ok := that.(Metadata)
+		that2, ok := that.(ServiceMetadata)
 		if ok {
 			that1 = &that2
 		} else {
@@ -181,12 +241,42 @@ func (this *Metadata) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *Metadata) GoString() string {
+func (this *StreamMetadata) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*StreamMetadata)
+	if !ok {
+		that2, ok := that.(StreamMetadata)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.ServiceId != that1.ServiceId {
+		return false
+	}
+	if this.PortId != that1.PortId {
+		return false
+	}
+	if this.IsPayment != that1.IsPayment {
+		return false
+	}
+	return true
+}
+func (this *ServiceMetadata) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 12)
-	s = append(s, "&pb.Metadata{")
+	s = append(s, "&pb.ServiceMetadata{")
 	s = append(s, "Ip: "+fmt.Sprintf("%#v", this.Ip)+",\n")
 	s = append(s, "TcpPort: "+fmt.Sprintf("%#v", this.TcpPort)+",\n")
 	s = append(s, "UdpPort: "+fmt.Sprintf("%#v", this.UdpPort)+",\n")
@@ -198,6 +288,18 @@ func (this *Metadata) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
+func (this *StreamMetadata) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 7)
+	s = append(s, "&pb.StreamMetadata{")
+	s = append(s, "ServiceId: "+fmt.Sprintf("%#v", this.ServiceId)+",\n")
+	s = append(s, "PortId: "+fmt.Sprintf("%#v", this.PortId)+",\n")
+	s = append(s, "IsPayment: "+fmt.Sprintf("%#v", this.IsPayment)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
 func valueToGoStringTuna(v interface{}, typ string) string {
 	rv := reflect.ValueOf(v)
 	if rv.IsNil() {
@@ -206,7 +308,7 @@ func valueToGoStringTuna(v interface{}, typ string) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
 }
-func (m *Metadata) Marshal() (dAtA []byte, err error) {
+func (m *ServiceMetadata) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -216,7 +318,7 @@ func (m *Metadata) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *Metadata) MarshalTo(dAtA []byte) (int, error) {
+func (m *ServiceMetadata) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -291,6 +393,44 @@ func (m *Metadata) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *StreamMetadata) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StreamMetadata) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ServiceId != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintTuna(dAtA, i, uint64(m.ServiceId))
+	}
+	if m.PortId != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintTuna(dAtA, i, uint64(m.PortId))
+	}
+	if m.IsPayment {
+		dAtA[i] = 0x18
+		i++
+		if m.IsPayment {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	return i, nil
+}
+
 func encodeVarintTuna(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -300,8 +440,8 @@ func encodeVarintTuna(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
-func NewPopulatedMetadata(r randyTuna, easy bool) *Metadata {
-	this := &Metadata{}
+func NewPopulatedServiceMetadata(r randyTuna, easy bool) *ServiceMetadata {
+	this := &ServiceMetadata{}
 	this.Ip = string(randStringTuna(r))
 	this.TcpPort = uint32(r.Uint32())
 	this.UdpPort = uint32(r.Uint32())
@@ -318,6 +458,16 @@ func NewPopulatedMetadata(r randyTuna, easy bool) *Metadata {
 	}
 	this.Price = string(randStringTuna(r))
 	this.BeneficiaryAddr = string(randStringTuna(r))
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedStreamMetadata(r randyTuna, easy bool) *StreamMetadata {
+	this := &StreamMetadata{}
+	this.ServiceId = uint32(r.Uint32())
+	this.PortId = uint32(r.Uint32())
+	this.IsPayment = bool(bool(r.Intn(2) == 0))
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
@@ -395,7 +545,7 @@ func encodeVarintPopulateTuna(dAtA []byte, v uint64) []byte {
 	dAtA = append(dAtA, uint8(v))
 	return dAtA
 }
-func (m *Metadata) Size() (n int) {
+func (m *ServiceMetadata) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -439,6 +589,24 @@ func (m *Metadata) Size() (n int) {
 	return n
 }
 
+func (m *StreamMetadata) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ServiceId != 0 {
+		n += 1 + sovTuna(uint64(m.ServiceId))
+	}
+	if m.PortId != 0 {
+		n += 1 + sovTuna(uint64(m.PortId))
+	}
+	if m.IsPayment {
+		n += 2
+	}
+	return n
+}
+
 func sovTuna(x uint64) (n int) {
 	for {
 		n++
@@ -452,11 +620,11 @@ func sovTuna(x uint64) (n int) {
 func sozTuna(x uint64) (n int) {
 	return sovTuna(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *Metadata) String() string {
+func (this *ServiceMetadata) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&Metadata{`,
+	s := strings.Join([]string{`&ServiceMetadata{`,
 		`Ip:` + fmt.Sprintf("%v", this.Ip) + `,`,
 		`TcpPort:` + fmt.Sprintf("%v", this.TcpPort) + `,`,
 		`UdpPort:` + fmt.Sprintf("%v", this.UdpPort) + `,`,
@@ -469,6 +637,18 @@ func (this *Metadata) String() string {
 	}, "")
 	return s
 }
+func (this *StreamMetadata) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StreamMetadata{`,
+		`ServiceId:` + fmt.Sprintf("%v", this.ServiceId) + `,`,
+		`PortId:` + fmt.Sprintf("%v", this.PortId) + `,`,
+		`IsPayment:` + fmt.Sprintf("%v", this.IsPayment) + `,`,
+		`}`,
+	}, "")
+	return s
+}
 func valueToStringTuna(v interface{}) string {
 	rv := reflect.ValueOf(v)
 	if rv.IsNil() {
@@ -477,7 +657,7 @@ func valueToStringTuna(v interface{}) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
 }
-func (m *Metadata) Unmarshal(dAtA []byte) error {
+func (m *ServiceMetadata) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -500,10 +680,10 @@ func (m *Metadata) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Metadata: wiretype end group for non-group")
+			return fmt.Errorf("proto: ServiceMetadata: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Metadata: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ServiceMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -795,6 +975,114 @@ func (m *Metadata) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *StreamMetadata) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTuna
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StreamMetadata: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StreamMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ServiceId", wireType)
+			}
+			m.ServiceId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTuna
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ServiceId |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PortId", wireType)
+			}
+			m.PortId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTuna
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PortId |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsPayment", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTuna
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsPayment = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTuna(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthTuna
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipTuna(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -900,27 +1188,31 @@ var (
 	ErrIntOverflowTuna   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("pb/tuna.proto", fileDescriptor_tuna_c3674ba1f821682b) }
+func init() { proto.RegisterFile("pb/tuna.proto", fileDescriptor_tuna_607c72e3a0605a47) }
 
-var fileDescriptor_tuna_c3674ba1f821682b = []byte{
-	// 304 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0xd0, 0x3f, 0x4e, 0x2b, 0x31,
-	0x10, 0x06, 0xf0, 0x9d, 0xcd, 0xcb, 0x3f, 0x3f, 0x05, 0xd0, 0x8a, 0xc2, 0x20, 0x31, 0x44, 0x54,
-	0xa1, 0x20, 0x29, 0x68, 0x69, 0xa0, 0xa3, 0x40, 0x42, 0x11, 0xd4, 0xd1, 0xae, 0xed, 0x04, 0x17,
-	0xc4, 0x23, 0x63, 0x23, 0xd1, 0x71, 0x04, 0x8e, 0xc1, 0x11, 0x38, 0x02, 0x65, 0xca, 0x94, 0xac,
-	0xd3, 0x50, 0x46, 0x54, 0x94, 0x08, 0x6f, 0x22, 0x85, 0xce, 0xdf, 0xfc, 0xbe, 0x91, 0xac, 0x61,
-	0x1d, 0x2a, 0x06, 0xce, 0x4f, 0xf3, 0x3e, 0x59, 0xe3, 0x4c, 0x96, 0x52, 0xb1, 0x7f, 0x32, 0xd1,
-	0xee, 0xce, 0x17, 0x7d, 0x61, 0xee, 0x07, 0x13, 0x33, 0x31, 0x83, 0x48, 0x85, 0x1f, 0xc7, 0x14,
-	0x43, 0x7c, 0x55, 0x2b, 0x47, 0x5f, 0xc0, 0x5a, 0x57, 0xca, 0xe5, 0x32, 0x77, 0x79, 0xb6, 0xc5,
-	0x52, 0x4d, 0x1c, 0xba, 0xd0, 0x6b, 0x0f, 0x53, 0x4d, 0xd9, 0x1e, 0x6b, 0x39, 0x41, 0x23, 0x32,
-	0xd6, 0xf1, 0xb4, 0x0b, 0xbd, 0xce, 0xb0, 0xe9, 0x04, 0x5d, 0x1b, 0xeb, 0x7e, 0xc9, 0xcb, 0x15,
-	0xd5, 0x2a, 0xf2, 0xb2, 0xa2, 0x03, 0xc6, 0x1e, 0x94, 0x7d, 0xd4, 0x42, 0x8d, 0xb4, 0xe4, 0xff,
-	0x22, 0xb6, 0x57, 0x93, 0x4b, 0x99, 0x1d, 0xb2, 0xff, 0x6b, 0x76, 0x82, 0x78, 0xbd, 0x5b, 0xeb,
-	0x75, 0x86, 0xeb, 0x8d, 0x1b, 0x41, 0x9b, 0x05, 0x2f, 0x89, 0x37, 0xfe, 0x14, 0x6e, 0x25, 0x65,
-	0xbb, 0xac, 0x4e, 0x56, 0x0b, 0xc5, 0x9b, 0xf1, 0xa7, 0x55, 0xc8, 0x8e, 0xd9, 0x4e, 0xa1, 0xa6,
-	0x6a, 0xac, 0x85, 0xce, 0xed, 0xd3, 0x28, 0x97, 0xd2, 0xf2, 0x56, 0x2c, 0x6c, 0x6f, 0xcc, 0xcf,
-	0xa5, 0xb4, 0x17, 0x67, 0xb3, 0x12, 0x93, 0x79, 0x89, 0xc9, 0xb2, 0x44, 0xf8, 0x2e, 0x11, 0x9e,
-	0x03, 0xc2, 0x6b, 0x40, 0x78, 0x0b, 0x08, 0xef, 0x01, 0x61, 0x16, 0x10, 0x3e, 0x02, 0xc2, 0x67,
-	0xc0, 0x64, 0x19, 0x10, 0x5e, 0x16, 0x98, 0xcc, 0x16, 0x98, 0xcc, 0x17, 0x98, 0x14, 0x8d, 0x78,
-	0xb9, 0xd3, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xa6, 0x02, 0x4c, 0x31, 0x7d, 0x01, 0x00, 0x00,
+var fileDescriptor_tuna_607c72e3a0605a47 = []byte{
+	// 356 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x91, 0x3f, 0x6f, 0xe2, 0x30,
+	0x18, 0xc6, 0xe3, 0x70, 0xfc, 0xf3, 0x09, 0x38, 0x45, 0x27, 0x5d, 0xee, 0xa4, 0x7b, 0x8b, 0x98,
+	0xe8, 0x50, 0x18, 0xba, 0x76, 0x69, 0x37, 0x86, 0x4a, 0x28, 0xb4, 0x73, 0xe4, 0xd8, 0x26, 0xf5,
+	0x00, 0xb1, 0x8c, 0x53, 0x89, 0xad, 0x1f, 0xa1, 0x1f, 0xa3, 0x1f, 0xa1, 0x1f, 0xa1, 0x23, 0x23,
+	0x63, 0x63, 0x96, 0x8e, 0x8c, 0xed, 0x56, 0xc5, 0x86, 0x0a, 0xba, 0xe5, 0x79, 0x7f, 0xcf, 0x13,
+	0x3d, 0xef, 0x6b, 0xdc, 0x92, 0xc9, 0x50, 0xe7, 0x73, 0x32, 0x90, 0x2a, 0xd3, 0x59, 0xe0, 0xcb,
+	0xe4, 0xdf, 0x59, 0x2a, 0xf4, 0x5d, 0x9e, 0x0c, 0x68, 0x36, 0x1b, 0xa6, 0x59, 0x9a, 0x0d, 0x2d,
+	0x4a, 0xf2, 0xa9, 0x55, 0x56, 0xd8, 0x2f, 0x17, 0xe9, 0x7d, 0x20, 0xdc, 0x99, 0x70, 0x75, 0x2f,
+	0x28, 0xbf, 0xe6, 0x9a, 0x30, 0xa2, 0x49, 0xd0, 0xc6, 0xbe, 0x90, 0x21, 0xea, 0xa2, 0x7e, 0x33,
+	0xf2, 0x85, 0x0c, 0xfe, 0xe2, 0x86, 0xa6, 0x32, 0x96, 0x99, 0xd2, 0xa1, 0xdf, 0x45, 0xfd, 0x56,
+	0x54, 0xd7, 0x54, 0x8e, 0x33, 0xa5, 0x4b, 0x94, 0xb3, 0x1d, 0xaa, 0x38, 0x94, 0x33, 0x87, 0xfe,
+	0x63, 0xbc, 0x70, 0x3f, 0x8e, 0x05, 0x0b, 0x7f, 0x58, 0xd8, 0xdc, 0x4d, 0x46, 0x2c, 0x38, 0xc1,
+	0x3f, 0xf7, 0x58, 0x53, 0x19, 0x56, 0xbb, 0x95, 0x7e, 0x2b, 0xda, 0x27, 0x6e, 0xa8, 0x3c, 0x34,
+	0xe4, 0x4c, 0x86, 0xb5, 0x23, 0xc3, 0x2d, 0x93, 0xc1, 0x6f, 0x5c, 0x95, 0x4a, 0x50, 0x1e, 0xd6,
+	0x6d, 0x53, 0x27, 0x82, 0x53, 0xfc, 0x2b, 0xe1, 0x73, 0x3e, 0x15, 0x54, 0x10, 0xb5, 0x8c, 0x09,
+	0x63, 0x2a, 0x6c, 0x58, 0x43, 0xe7, 0x60, 0x7e, 0xc9, 0x98, 0xea, 0xa5, 0xb8, 0x3d, 0xd1, 0x8a,
+	0x93, 0xd9, 0xd7, 0xe6, 0xc7, 0x9d, 0xd1, 0xf7, 0xce, 0x7f, 0x70, 0xbd, 0xdc, 0xb4, 0x64, 0xee,
+	0x0e, 0xb5, 0x52, 0x8e, 0x58, 0x99, 0x13, 0x8b, 0x58, 0x92, 0xe5, 0x8c, 0xcf, 0xdd, 0x21, 0x1a,
+	0x51, 0x53, 0x2c, 0xc6, 0x6e, 0x70, 0x75, 0xb1, 0x2a, 0xc0, 0x5b, 0x17, 0xe0, 0x6d, 0x0b, 0x40,
+	0xef, 0x05, 0xa0, 0x07, 0x03, 0xe8, 0xc9, 0x00, 0x7a, 0x36, 0x80, 0x5e, 0x0c, 0xa0, 0x95, 0x01,
+	0xf4, 0x6a, 0x00, 0xbd, 0x19, 0xf0, 0xb6, 0x06, 0xd0, 0xe3, 0x06, 0xbc, 0xd5, 0x06, 0xbc, 0xf5,
+	0x06, 0xbc, 0xa4, 0x66, 0x5f, 0xea, 0xfc, 0x33, 0x00, 0x00, 0xff, 0xff, 0xfa, 0xef, 0x55, 0xc0,
+	0xed, 0x01, 0x00, 0x00,
 }

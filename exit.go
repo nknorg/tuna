@@ -15,7 +15,7 @@ import (
 	"github.com/nknorg/tuna/pb"
 	"github.com/patrickmn/go-cache"
 	"github.com/rdegges/go-ipify"
-	"github.com/trueinsider/smux"
+	"github.com/xtaci/smux"
 )
 
 type ExitServiceInfo struct {
@@ -138,8 +138,13 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			break
 		}
 
-		metadata := stream.Metadata()
-		if len(metadata) == 0 { // payment stream
+		streamMetadata, err := readStreamMetadata(stream)
+		if err != nil {
+			log.Println("Read stream metadata error:", err)
+			break
+		}
+
+		if streamMetadata.IsPayment {
 			if te.config.Reverse {
 				continue
 			}
@@ -160,8 +165,8 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			continue
 		}
 
-		serviceID := metadata[0]
-		portID := int(metadata[1])
+		serviceID := byte(streamMetadata.ServiceId)
+		portID := int(streamMetadata.PortId)
 
 		service, err := te.getService(serviceID)
 		if err != nil {
@@ -181,7 +186,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			portID -= tcpPortsCount
 			port = int(service.UDP[portID])
 		} else {
-			log.Println("Wrong portId received:", portID)
+			log.Println("Invalid portId received:", portID)
 			Close(stream)
 			continue
 		}
@@ -384,7 +389,7 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 		return err
 	}
 
-	reverseMetadata := &pb.Metadata{}
+	reverseMetadata := &pb.ServiceMetadata{}
 	reverseMetadata.ServiceTcp = service.TCP
 	reverseMetadata.ServiceUdp = service.UDP
 

@@ -14,7 +14,7 @@ require (
 	github.com/nknorg/nkn-sdk-go v1.2.6
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/rdegges/go-ipify v0.0.0-20150526035502-2d94a6a86c40
-	github.com/trueinsider/smux v1.3.5-metadata
+	github.com/xtaci/smux v2.0.1+incompatible
 	golang.org/x/crypto v0.0.0-20200429183012-4b2356b1ed79 // indirect
 	golang.org/x/net v0.0.0-20200506145744-7e3656a0809f // indirect
 	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3 // indirect

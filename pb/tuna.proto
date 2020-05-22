@@ -15,7 +15,7 @@ option (gogoproto.testgen_all) = true;
 option (gogoproto.equal_all) = true;
 option (gogoproto.populate_all) = true;
 
-message Metadata {
+message ServiceMetadata {
   string ip = 1;
   uint32 tcp_port = 2;
   uint32 udp_port = 3;
@@ -24,4 +24,10 @@ message Metadata {
   repeated uint32 service_udp = 6;
   string price = 7;
   string beneficiary_addr = 8;
+}
+
+message StreamMetadata {
+  uint32 service_id = 1;
+  uint32 port_id = 2;
+  bool is_payment = 3;
 }
