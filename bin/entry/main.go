@@ -4,14 +4,11 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 
 	"github.com/jessevdk/go-flags"
 	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
-	"github.com/rdegges/go-ipify"
-	"github.com/xtaci/smux"
 )
 
 var opts struct {
@@ -63,149 +60,10 @@ func main() {
 	log.Println("Your NKN wallet address is:", wallet.Address())
 
 	if config.Reverse {
-		var serviceListenIP string
-		if net.ParseIP(config.ReverseServiceListenIP) == nil {
-			serviceListenIP = tuna.DefaultReverseServiceListenIP
-		} else {
-			serviceListenIP = config.ReverseServiceListenIP
-		}
-
-		ip, err := ipify.GetIp()
+		err = tuna.StartReverse(config, wallet)
 		if err != nil {
-			log.Fatalln("Couldn't get IP:", err)
+			log.Fatalln(err)
 		}
-
-		listener, err := net.ListenTCP(string(tuna.TCP), &net.TCPAddr{Port: int(config.ReverseTCP)})
-		if err != nil {
-			log.Fatalln("Couldn't bind listener:", err)
-		}
-
-		udpConn, err := net.ListenUDP(string(tuna.UDP), &net.UDPAddr{Port: int(config.ReverseUDP)})
-		if err != nil {
-			log.Fatalln("Couldn't bind listener:", err)
-		}
-
-		udpReadChans := make(map[string]chan []byte)
-		udpCloseChan := make(chan struct{})
-
-		go func() {
-			for {
-				buffer := make([]byte, 2048)
-				n, addr, err := udpConn.ReadFromUDP(buffer)
-				if err != nil {
-					log.Println("Couldn't receive data from server:", err)
-					if strings.Contains(err.Error(), "use of closed network connection") {
-						udpCloseChan <- struct{}{}
-						return
-					}
-					continue
-				}
-
-				data := make([]byte, n)
-				copy(data, buffer)
-
-				if udpReadChan, ok := udpReadChans[addr.String()]; ok {
-					udpReadChan <- data
-				}
-			}
-		}()
-
-		go func() {
-			for {
-				tcpConn, err := listener.Accept()
-				if err != nil {
-					log.Println("Couldn't accept client connection:", err)
-					tuna.Close(tcpConn)
-					continue
-				}
-
-				te := tuna.NewTunaEntry(&tuna.Service{}, &tuna.ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
-				te.Session, err = smux.Client(tcpConn, nil)
-				if err != nil {
-					log.Println("Create session error:", err)
-					tuna.Close(tcpConn)
-					continue
-				}
-
-				stream, err := te.Session.OpenStream()
-				if err != nil {
-					log.Println("Couldn't open stream:", err)
-					tuna.Close(tcpConn)
-					continue
-				}
-
-				buf := make([]byte, 2048)
-				n, err := stream.Read(buf)
-				if err != nil {
-					log.Println("Couldn't read service metadata:", err)
-					tuna.Close(tcpConn)
-					continue
-				}
-
-				te.SetMetadata(string(buf[:n]))
-
-				te.SetServerTCPConn(tcpConn)
-
-				metadata := te.GetMetadata()
-				if metadata.UdpPort > 0 {
-					ip, _, err := net.SplitHostPort(tcpConn.RemoteAddr().String())
-					if err != nil {
-						log.Println("Parse host error:", err)
-						tuna.Close(tcpConn)
-						continue
-					}
-
-					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
-					udpReadChan := make(chan []byte)
-					udpWriteChan := make(chan []byte)
-
-					go func() {
-						for {
-							select {
-							case data := <-udpWriteChan:
-								_, err := udpConn.WriteToUDP(data, &udpAddr)
-								if err != nil {
-									log.Println("Couldn't send data to server:", err)
-								}
-							case <-udpCloseChan:
-								return
-							}
-						}
-					}()
-
-					udpReadChans[udpAddr.String()] = udpReadChan
-
-					te.SetServerUDPReadChan(udpReadChan)
-					te.SetServerUDPWriteChan(udpWriteChan)
-				}
-				go func() {
-					te.StartReverse(stream)
-					tuna.Close(tcpConn)
-					te = nil
-				}()
-			}
-		}()
-
-		reverseServiceName := config.ReverseServiceName
-		if len(reverseServiceName) == 0 {
-			reverseServiceName = tuna.DefaultReverseServiceName
-		}
-
-		tuna.UpdateMetadata(
-			reverseServiceName,
-			255,
-			nil,
-			nil,
-			ip,
-			uint32(config.ReverseTCP),
-			uint32(config.ReverseUDP),
-			config.ReversePrice,
-			config.ReverseBeneficiaryAddr,
-			config.ReverseSubscriptionPrefix,
-			uint32(config.ReverseSubscriptionDuration),
-			config.ReverseSubscriptionFee,
-			wallet,
-		)
 	} else {
 		var services []tuna.Service
 		err = tuna.ReadJSON(opts.ServicesFile, &services)
@@ -222,7 +80,8 @@ func main() {
 
 			for _, service := range services {
 				if service.Name == serviceName {
-					go tuna.NewTunaEntry(&service, &serviceInfo, config, wallet).Start()
+					e := tuna.NewTunaEntry(&service, &serviceInfo, config, wallet)
+					go e.Start()
 					continue service
 				}
 			}

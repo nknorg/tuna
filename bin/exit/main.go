@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -69,7 +68,7 @@ func main() {
 		for serviceName := range config.Services {
 			e := tuna.NewTunaExit(config, services, wallet)
 			e.OnEntryConnected(func() {
-				fmt.Printf("Service: %s, Address: %v:%v\n", serviceName, e.GetReverseIP(), e.GetReverseTCPPorts())
+				log.Printf("Service: %s, Address: %v:%v\n", serviceName, e.GetReverseIP(), e.GetReverseTCPPorts())
 			})
 			err = e.StartReverse(serviceName)
 			if err != nil {
@@ -77,7 +76,8 @@ func main() {
 			}
 		}
 	} else {
-		err = tuna.NewTunaExit(config, services, wallet).Start()
+		e := tuna.NewTunaExit(config, services, wallet)
+		err = e.Start()
 		if err != nil {
 			log.Fatalln(err)
 		}

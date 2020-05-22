@@ -132,36 +132,12 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	}
 
 	for {
-		stream, err := session.AcceptStream()
+		stream, streamMetadata, err := acceptStream(session, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
 		if err != nil {
-			log.Println("Couldn't accept stream:", err)
+			log.Println(err)
 			break
 		}
-
-		streamMetadata, err := readStreamMetadata(stream)
-		if err != nil {
-			log.Println("Read stream metadata error:", err)
-			break
-		}
-
 		if streamMetadata.IsPayment {
-			if te.config.Reverse {
-				continue
-			}
-			go func(stream *smux.Stream) {
-				totalCost := getTotalCost()
-				err = nanoPayClaim(stream, npc, &lastClaimed)
-				if err != nil {
-					log.Println("Couldn't claim nanoPay:", err)
-					return
-				}
-
-				lastUpdate = time.Now()
-
-				if !checkTrafficCoverage(session, totalCost, lastClaimed, &isClosed) {
-					return
-				}
-			}(stream)
 			continue
 		}
 
@@ -470,40 +446,44 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 				continue
 			}
 
-			session, err := smux.Server(tcpConn, nil)
+			session, err := smux.Client(tcpConn, nil)
 			if err != nil {
 				log.Println(err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
-			stream, err := session.AcceptStream()
+			stream, err := session.OpenStream()
 			if err != nil {
 				log.Println("Couldn't open stream to reverse entry:", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
-			_, err = stream.Write(serviceMetadata)
+			err = WriteVarBytes(stream, serviceMetadata)
 			if err != nil {
 				log.Println("Couldn't send metadata to reverse entry:", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
-			buf := make([]byte, 2048)
-			n, err := stream.Read(buf)
+			buf, err := ReadVarBytes(stream)
 			if err != nil {
 				log.Println("Couldn't read reverse metadata:", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
-			reverseMetadataRaw := make([]byte, n)
-			copy(reverseMetadataRaw, buf)
-			reverseMetadata, err := ReadMetadata(string(reverseMetadataRaw))
+			reverseMetadata, err := ReadMetadata(string(buf))
 			if err != nil {
 				log.Println("Couldn't unmarshal metadata:", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			paymentStream, err := openPaymentStream(session)
+			if err != nil {
+				log.Println("Couldn't open payment stream:", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -520,38 +500,19 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 				te.readUDP()
 			}
 
-			go func() {
-				var np *nkn.NanoPay
-				for {
-					select {
-					case _, ok := <-te.closeChan:
-						if !ok {
-							return
-						}
-					default:
-					}
-					time.Sleep(DefaultNanoPayUpdateInterval)
-					bytesIn := atomic.LoadUint64(&te.reverseBytesIn)
-					bytesOut := atomic.LoadUint64(&te.reverseBytesOut)
+			getPaymentStream := func() (*smux.Stream, error) {
+				return paymentStream, nil
+			}
 
-					exitToEntryPrice, entryToExitPrice := te.Common.GetPrice()
-					cost := entryToExitPrice*common.Fixed64(bytesIn-te.reverseBytesInPaid)/TrafficUnit + exitToEntryPrice*common.Fixed64(bytesOut-te.reverseBytesOutPaid)/TrafficUnit
-					if cost == 0 {
-						log.Println("no costs")
-						continue
-					}
-					log.Println("incurred costs：", cost)
-					err = sendNanoPay(np, session, te.Wallet, &cost, te.Common, "0")
-					if err != nil {
-						log.Printf("send nano payment err: %v", err)
-						continue
-					}
-					te.reverseBytesInPaid = bytesIn
-					te.reverseBytesOutPaid = bytesOut
-				}
-			}()
+			go te.Common.startPayment(
+				&te.reverseBytesIn, &te.reverseBytesOut, &te.reverseBytesInPaid, &te.reverseBytesOutPaid,
+				te.config.ReverseNanoPayFee,
+				getPaymentStream,
+				te.closeChan,
+			)
 
 			te.handleSession(session)
+
 			Close(tcpConn)
 
 			select {
