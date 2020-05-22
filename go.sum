@@ -148,8 +148,6 @@ github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b/go.mod h1:5XA7W9S6mn
 github.com/tjfoc/gmsm v0.0.0-20190417070453-18fd8096dc8a/go.mod h1:XxO4hdhhrzAd+G4CjDqaOkd0hUzmtPR/d3EiBBMn/wc=
 github.com/tjfoc/gmsm v1.3.0 h1:i7c6Za/IlgBvnGxYpfD7L3TGuaS+v6oGcgq+J9/ecEA=
 github.com/tjfoc/gmsm v1.3.0/go.mod h1:HaUcFuY0auTiaHB9MHFGCPx5IaLhTUd2atbCFBQXn9w=
-github.com/trueinsider/smux v1.3.5-metadata h1:+5g+oFutqA7aAVEuSJZYehFWOYCPsXljDPJzyB7o3uo=
-github.com/trueinsider/smux v1.3.5-metadata/go.mod h1:mL7/XFztFsqWyRBJDQqgKrpdECDnp/y/utBdIgFMeFk=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
 github.com/urfave/cli v1.21.0/go.mod h1:lxDj6qX9Q6lWQxIrbrT0nwecwUtRnhVZAJjJZrVUZZQ=
 github.com/xtaci/kcp-go v4.3.1+incompatible/go.mod h1:bN6vIwHQbfHaHtFpEssmWsN45a+AZwO7eyRCmEIbtvE=

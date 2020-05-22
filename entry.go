@@ -11,8 +11,9 @@ import (
 
 	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/tuna/pb"
 	"github.com/patrickmn/go-cache"
-	"github.com/trueinsider/smux"
+	"github.com/xtaci/smux"
 )
 
 type EntryConfiguration struct {
@@ -103,11 +104,7 @@ func (te *TunaEntry) Start() {
 			if err != nil {
 				return
 			}
-			stream, err := session.OpenStream()
-			if err != nil {
-				return
-			}
-			stream.Close()
+
 			for {
 				_, err = session.AcceptStream()
 				if err != nil {
@@ -187,11 +184,6 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		if err != nil {
 			return
 		}
-		stream, err := session.OpenStream()
-		if err != nil {
-			return
-		}
-		stream.Close()
 
 		lastClaimed := common.Fixed64(0)
 		lastUpdate := time.Now()
@@ -230,7 +222,14 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 				return
 			}
 
-			if len(stream.Metadata()) == 0 { // payment stream
+			streamMetadata, err := readStreamMetadata(stream)
+			if err != nil {
+				log.Println("Read stream metadata error:", err)
+				te.close()
+				return
+			}
+
+			if streamMetadata.IsPayment {
 				totalCost := getTotalCost()
 				err = nanoPayClaim(stream, npc, &lastClaimed)
 				if err != nil {
@@ -286,17 +285,33 @@ func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
 	return te.Session, nil
 }
 
-func (te *TunaEntry) openStream(portID byte, force bool) (*smux.Stream, error) {
+func (te *TunaEntry) openServiceStream(portID byte, force bool) (*smux.Stream, error) {
 	session, err := te.getSession(force)
 	if err != nil {
 		return nil, err
 	}
-	serviceID := te.GetMetadata().ServiceId
-	stream, err := session.OpenStream(byte(serviceID), portID)
+
+	stream, err := session.OpenStream()
 	if err != nil {
-		return te.openStream(portID, true)
+		if !force {
+			return te.openServiceStream(portID, true)
+		}
+		return nil, err
 	}
-	return stream, err
+
+	streamMetadata := &pb.StreamMetadata{
+		ServiceId: te.GetMetadata().ServiceId,
+		PortId:    uint32(portID),
+		IsPayment: false,
+	}
+
+	err = writeStreamMetadata(stream, streamMetadata)
+	if err != nil {
+		stream.Close()
+		return nil, err
+	}
+
+	return stream, nil
 }
 
 func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
@@ -327,7 +342,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 					continue
 				}
 
-				stream, err := te.openStream(portID, false)
+				stream, err := te.openServiceStream(portID, false)
 				if err != nil {
 					log.Println("Couldn't open stream:", err)
 					Close(conn)

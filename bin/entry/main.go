@@ -11,7 +11,7 @@ import (
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 	"github.com/rdegges/go-ipify"
-	"github.com/trueinsider/smux"
+	"github.com/xtaci/smux"
 )
 
 var opts struct {
@@ -120,7 +120,13 @@ func main() {
 				}
 
 				te := tuna.NewTunaEntry(&tuna.Service{}, &tuna.ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
-				te.Session, _ = smux.Client(tcpConn, nil)
+				te.Session, err = smux.Client(tcpConn, nil)
+				if err != nil {
+					log.Println("Create session error:", err)
+					tuna.Close(tcpConn)
+					continue
+				}
+
 				stream, err := te.Session.OpenStream()
 				if err != nil {
 					log.Println("Couldn't open stream:", err)
@@ -135,18 +141,21 @@ func main() {
 					tuna.Close(tcpConn)
 					continue
 				}
-				metadataRaw := make([]byte, n)
-				copy(metadataRaw, buf)
 
-				te.SetMetadata(string(metadataRaw))
+				te.SetMetadata(string(buf[:n]))
 
 				te.SetServerTCPConn(tcpConn)
 
 				metadata := te.GetMetadata()
 				if metadata.UdpPort > 0 {
-					ip, _, _ := net.SplitHostPort(tcpConn.RemoteAddr().String())
-					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
+					ip, _, err := net.SplitHostPort(tcpConn.RemoteAddr().String())
+					if err != nil {
+						log.Println("Parse host error:", err)
+						tuna.Close(tcpConn)
+						continue
+					}
 
+					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
 					udpReadChan := make(chan []byte)
 					udpWriteChan := make(chan []byte)
 

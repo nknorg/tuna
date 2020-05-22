@@ -109,7 +109,7 @@ func parseIP2C(body string) (*Location, error) {
 		return nil, errors.New("invalid response from ip2c service")
 	}
 
-	l := new(Location)
+	l := &Location{}
 	l.CountryCode = res[1]
 	l.Country = res[3]
 	return l, nil

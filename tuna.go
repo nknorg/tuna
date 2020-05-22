@@ -30,7 +30,7 @@ import (
 	"github.com/nknorg/nkn/util/config"
 	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna/pb"
-	"github.com/trueinsider/smux"
+	"github.com/xtaci/smux"
 )
 
 type Protocol string
@@ -67,7 +67,7 @@ type Common struct {
 	DialTimeout        int32
 	SubscriptionPrefix string
 	Reverse            bool
-	ReverseMetadata    *pb.Metadata
+	ReverseMetadata    *pb.ServiceMetadata
 	ServiceInfo        *ServiceInfo
 
 	udpReadChan  chan []byte
@@ -79,7 +79,7 @@ type Common struct {
 	paymentReceiver  string
 	entryToExitPrice common.Fixed64
 	exitToEntryPrice common.Fixed64
-	metadata         *pb.Metadata
+	metadata         *pb.ServiceMetadata
 	connected        bool
 	tcpConn          net.Conn
 	udpConn          *net.UDPConn
@@ -168,7 +168,7 @@ func (c *Common) GetServerUDPWriteChan(force bool) (chan []byte, error) {
 	return c.udpWriteChan, nil
 }
 
-func (c *Common) GetMetadata() *pb.Metadata {
+func (c *Common) GetMetadata() *pb.ServiceMetadata {
 	c.RLock()
 	defer c.RUnlock()
 	return c.metadata
@@ -380,12 +380,12 @@ func (c *Common) CreateServerConn(force bool) error {
 	return nil
 }
 
-func ReadMetadata(metadataString string) (*pb.Metadata, error) {
+func ReadMetadata(metadataString string) (*pb.ServiceMetadata, error) {
 	metadataRaw, err := base64.StdEncoding.DecodeString(metadataString)
 	if err != nil {
 		return nil, err
 	}
-	metadata := &pb.Metadata{}
+	metadata := &pb.ServiceMetadata{}
 	err = proto.Unmarshal(metadataRaw, metadata)
 	if err != nil {
 		return nil, err
@@ -403,7 +403,7 @@ func CreateRawMetadata(
 	price string,
 	beneficiaryAddr string,
 ) []byte {
-	metadata := &pb.Metadata{
+	metadata := &pb.ServiceMetadata{
 		Ip:              ip,
 		TcpPort:         tcpPort,
 		UdpPort:         udpPort,
@@ -589,36 +589,49 @@ func sendNanoPay(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *co
 			return err
 		}
 	}
+
 	tx, err := np.IncrementAmount(cost.String())
 	if err != nil {
 		return err
 	}
-	txData := tx.ToArray()
+
+	txBytes, err := tx.Marshal()
+	if err != nil {
+		return err
+	}
+
 	stream, err := session.OpenStream()
 	if err != nil {
 		return err
 	}
-	n, err := stream.Write(txData)
+
+	defer stream.Close()
+
+	streamMetadata := &pb.StreamMetadata{
+		IsPayment: true,
+	}
+
+	err = writeStreamMetadata(stream, streamMetadata)
 	if err != nil {
 		return err
 	}
-	stream.Close()
-	if n != len(txData) {
-		return fmt.Errorf("send txData err: should be %d, have %d", len(txData), n)
+
+	err = WriteVarBytes(stream, txBytes)
+	if err != nil {
+		return err
 	}
+
 	return nil
 }
 
 func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastClaimed *common.Fixed64) error {
-	txData, err := ioutil.ReadAll(stream)
-	if err != nil && err.Error() != io.EOF.Error() {
+	txBytes, err := ReadVarBytes(stream)
+	if err != nil {
 		return fmt.Errorf("couldn't read payment stream: %v", err)
 	}
-	if len(txData) == 0 {
-		return errors.New("no data received")
-	}
-	tx := new(transaction.Transaction)
-	if err := tx.Unmarshal(txData); err != nil {
+
+	tx := &transaction.Transaction{}
+	if err := tx.Unmarshal(txBytes); err != nil {
 		return fmt.Errorf("couldn't unmarshal payment stream data: %v", err)
 	}
 
@@ -678,4 +691,33 @@ func checkTrafficCoverage(session *smux.Session, lastComputed, lastClaimed commo
 	Close(session)
 	*isClosed = true
 	return false
+}
+
+func readStreamMetadata(stream *smux.Stream) (*pb.StreamMetadata, error) {
+	b, err := ReadVarBytes(stream)
+	if err != nil {
+		return nil, err
+	}
+
+	streamMetadata := &pb.StreamMetadata{}
+	err = proto.Unmarshal(b, streamMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	return streamMetadata, nil
+}
+
+func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata) error {
+	b, err := proto.Marshal(streamMetadata)
+	if err != nil {
+		return err
+	}
+
+	err = WriteVarBytes(stream, b)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
