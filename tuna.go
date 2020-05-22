@@ -20,8 +20,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/trueinsider/smux"
-
 	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/program"
@@ -30,6 +28,7 @@ import (
 	"github.com/nknorg/nkn/util/address"
 	"github.com/nknorg/nkn/util/config"
 	"github.com/nknorg/nkn/vault"
+	"github.com/trueinsider/smux"
 )
 
 type Protocol string
@@ -606,13 +605,13 @@ func sendNanoPay(np *nkn.NanoPay, session *smux.Session, w *nkn.Wallet, cost *co
 	return nil
 }
 
-func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastComputed, lastClaimed, totalCost *common.Fixed64, lastUpdate *time.Time) error {
+func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastClaimed *common.Fixed64) error {
 	txData, err := ioutil.ReadAll(stream)
 	if err != nil && err.Error() != io.EOF.Error() {
 		return fmt.Errorf("couldn't read payment stream: %v", err)
 	}
 	if len(txData) == 0 {
-		return fmt.Errorf("no data received")
+		return errors.New("no data received")
 	}
 	tx := new(transaction.Transaction)
 	if err := tx.Unmarshal(txData); err != nil {
@@ -624,9 +623,7 @@ func nanoPayClaim(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastComputed, la
 		return fmt.Errorf("couldn't accept nano pay update: %v", err)
 	}
 
-	*lastComputed = *totalCost
 	*lastClaimed = amount.ToFixed64()
-	*lastUpdate = time.Now()
 	return nil
 }
 
@@ -644,7 +641,8 @@ func checkNanoPayClaim(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nk
 	}
 }
 
-func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, lastUpdate *time.Time, isClosed *bool, totalCost *common.Fixed64) {
+func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, lastUpdate *time.Time, isClosed *bool, getTotalCost func() common.Fixed64) {
+	totalCost := getTotalCost()
 	lastCost := common.Fixed64(0)
 	for {
 		time.Sleep(5 * time.Second)
@@ -653,10 +651,11 @@ func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, las
 			break
 		}
 
+		totalCost = getTotalCost()
 		if totalCost.GetData() == lastCost.GetData() {
 			continue
 		}
-		lastCost = *totalCost
+		lastCost = totalCost
 
 		if time.Since(*lastUpdate) > updateTimeout {
 			log.Println("Didn't update nano pay for more than", updateTimeout.String())
@@ -668,7 +667,7 @@ func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, las
 }
 
 func checkTrafficCoverage(session *smux.Session, lastComputed, lastClaimed common.Fixed64, isClosed *bool) bool {
-	if float64(lastClaimed) > float64(lastComputed)*MinTrafficCoverage {
+	if float64(lastClaimed) >= float64(lastComputed)*MinTrafficCoverage {
 		return true
 	}
 	log.Printf("Nano pay amount covers less than %f%% of total cost", MinTrafficCoverage*100)
