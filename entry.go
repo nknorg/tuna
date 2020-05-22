@@ -187,12 +187,30 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, getTotalCost)
 
 		for {
-			_, _, err = acceptStream(session, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
+			stream, err := session.AcceptStream()
 			if err != nil {
-				log.Println(err)
-				te.close()
-				return
+				log.Println("Couldn't accept stream:", err)
+				break
 			}
+
+			go func() {
+				err := func() error {
+					streamMetadata, err := readStreamMetadata(stream)
+					if err != nil {
+						return fmt.Errorf("Read stream metadata error: %v", err)
+					}
+
+					if streamMetadata.IsPayment {
+						return handlePaymentStream(session, stream, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
+					}
+
+					return nil
+				}()
+				if err != nil {
+					log.Println(err)
+					Close(stream)
+				}
+			}()
 		}
 	}()
 
@@ -298,7 +316,6 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 				conn, err := listener.Accept()
 				if err != nil {
 					log.Println("Couldn't accept connection:", err)
-					Close(conn)
 					if strings.Contains(err.Error(), "use of closed network connection") {
 						te.close()
 						return
@@ -307,20 +324,22 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 					continue
 				}
 
-				stream, err := te.openServiceStream(portID, false)
-				if err != nil {
-					log.Println("Couldn't open stream:", err)
-					Close(conn)
-					time.Sleep(time.Second)
-					continue
-				}
-				if te.config.Reverse {
-					go Pipe(stream, conn, &te.reverseBytesIn)
-					go Pipe(conn, stream, &te.reverseBytesOut)
-				} else {
-					go Pipe(stream, conn, &te.bytesOut)
-					go Pipe(conn, stream, &te.bytesIn)
-				}
+				go func() {
+					stream, err := te.openServiceStream(portID, false)
+					if err != nil {
+						log.Println("Couldn't open stream:", err)
+						Close(conn)
+						return
+					}
+
+					if te.config.Reverse {
+						go Pipe(stream, conn, &te.reverseBytesIn)
+						go Pipe(conn, stream, &te.reverseBytesOut)
+					} else {
+						go Pipe(stream, conn, &te.bytesOut)
+						go Pipe(conn, stream, &te.bytesIn)
+					}
+				}()
 			}
 		}()
 	}
@@ -461,74 +480,71 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 			tcpConn, err := listener.Accept()
 			if err != nil {
 				log.Println("Couldn't accept client connection:", err)
-				Close(tcpConn)
-				continue
-			}
-
-			te := NewTunaEntry(&Service{}, &ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
-			te.session, err = smux.Server(tcpConn, nil)
-			if err != nil {
-				log.Println("Create session error:", err)
-				Close(tcpConn)
 				continue
 			}
 
 			go func() {
-				stream, err := te.session.AcceptStream()
-				if err != nil {
-					log.Println("Couldn't accept stream:", err)
-					Close(tcpConn)
-					return
-				}
-
-				buf, err := ReadVarBytes(stream)
-				if err != nil {
-					log.Println("Couldn't read service metadata:", err)
-					Close(tcpConn)
-					return
-				}
-
-				te.SetMetadata(string(buf))
-
-				te.SetServerTCPConn(tcpConn)
-
-				metadata := te.GetMetadata()
-				if metadata.UdpPort > 0 {
-					ip, _, err := net.SplitHostPort(tcpConn.RemoteAddr().String())
+				err := func() error {
+					te := NewTunaEntry(&Service{}, &ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
+					var err error
+					te.session, err = smux.Server(tcpConn, nil)
 					if err != nil {
-						log.Println("Parse host error:", err)
-						Close(tcpConn)
-						return
+						return fmt.Errorf("create session error: %v", err)
 					}
 
-					udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
-					udpReadChan := make(chan []byte)
-					udpWriteChan := make(chan []byte)
+					stream, err := te.session.AcceptStream()
+					if err != nil {
+						return fmt.Errorf("couldn't accept stream: %v", err)
+					}
 
-					go func() {
-						for {
-							select {
-							case data := <-udpWriteChan:
-								_, err := udpConn.WriteToUDP(data, &udpAddr)
-								if err != nil {
-									log.Println("Couldn't send data to server:", err)
-								}
-							case <-udpCloseChan:
-								return
-							}
+					buf, err := ReadVarBytes(stream)
+					if err != nil {
+						return fmt.Errorf("couldn't read service metadata: %v", err)
+					}
+
+					te.SetMetadata(string(buf))
+
+					te.SetServerTCPConn(tcpConn)
+
+					metadata := te.GetMetadata()
+					if metadata.UdpPort > 0 {
+						ip, _, err := net.SplitHostPort(tcpConn.RemoteAddr().String())
+						if err != nil {
+							return fmt.Errorf("Parse host error: %v", err)
 						}
-					}()
 
-					udpReadChans[udpAddr.String()] = udpReadChan
+						udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
+						udpReadChan := make(chan []byte)
+						udpWriteChan := make(chan []byte)
 
-					te.SetServerUDPReadChan(udpReadChan)
-					te.SetServerUDPWriteChan(udpWriteChan)
+						go func() {
+							for {
+								select {
+								case data := <-udpWriteChan:
+									_, err := udpConn.WriteToUDP(data, &udpAddr)
+									if err != nil {
+										log.Println("Couldn't send data to server:", err)
+									}
+								case <-udpCloseChan:
+									return
+								}
+							}
+						}()
+
+						udpReadChans[udpAddr.String()] = udpReadChan
+
+						te.SetServerUDPReadChan(udpReadChan)
+						te.SetServerUDPWriteChan(udpWriteChan)
+					}
+
+					te.StartReverse(stream)
+
+					return nil
+				}()
+				if err != nil {
+					log.Println(err)
 				}
-
-				te.StartReverse(stream)
-
 				Close(tcpConn)
-				te = nil
 			}()
 		}
 	}()
@@ -540,7 +556,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 	UpdateMetadata(
 		reverseServiceName,
-		255,
+		0,
 		nil,
 		nil,
 		ip,

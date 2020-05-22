@@ -730,16 +730,6 @@ func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, las
 	}
 }
 
-func checkTrafficCoverage(session *smux.Session, lastComputed, lastClaimed common.Fixed64, isClosed *bool) bool {
-	if float64(lastClaimed) >= float64(lastComputed)*MinTrafficCoverage {
-		return true
-	}
-	log.Printf("Nano pay amount covers less than %f%% of total cost (%d/%d)", MinTrafficCoverage*100, lastClaimed, lastComputed)
-	Close(session)
-	*isClosed = true
-	return false
-}
-
 func readStreamMetadata(stream *smux.Stream) (*pb.StreamMetadata, error) {
 	b, err := ReadVarBytes(stream)
 	if err != nil {
@@ -769,48 +759,34 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 	return nil
 }
 
-func acceptStream(
+func handlePaymentStream(
 	session *smux.Session,
+	stream *smux.Stream,
 	npc *nkn.NanoPayClaimer,
 	lastClaimed *common.Fixed64,
 	getTotalCost func() common.Fixed64,
 	lastUpdate *time.Time,
 	isClosed *bool,
-) (*smux.Stream, *pb.StreamMetadata, error) {
-	stream, err := session.AcceptStream()
-	if err != nil {
-		return nil, nil, fmt.Errorf("Couldn't accept stream: %v", err)
+) error {
+	for {
+		tx, err := ReadVarBytes(stream)
+		if err != nil {
+			return fmt.Errorf("couldn't read payment stream: %v", err)
+		}
+
+		err = nanoPayClaim(tx, npc, lastClaimed)
+		if err != nil {
+			log.Println("Couldn't claim nanoPay:", err)
+			continue
+		}
+
+		totalCost := getTotalCost()
+		*lastUpdate = time.Now()
+
+		if float64(*lastClaimed) < float64(totalCost)*MinTrafficCoverage {
+			Close(session)
+			*isClosed = true
+			return fmt.Errorf("Nano pay amount covers less than %f%% of total cost (%d/%d)", MinTrafficCoverage*100, lastClaimed, totalCost)
+		}
 	}
-
-	streamMetadata, err := readStreamMetadata(stream)
-	if err != nil {
-		return nil, nil, fmt.Errorf("Read stream metadata error: %v", err)
-	}
-
-	if streamMetadata.IsPayment {
-		go func() {
-			for {
-				tx, err := ReadVarBytes(stream)
-				if err != nil {
-					log.Println("couldn't read payment stream:", err)
-					return
-				}
-
-				err = nanoPayClaim(tx, npc, lastClaimed)
-				if err != nil {
-					log.Println("Couldn't claim nanoPay:", err)
-					continue
-				}
-
-				totalCost := getTotalCost()
-				*lastUpdate = time.Now()
-
-				if !checkTrafficCoverage(session, totalCost, *lastClaimed, isClosed) {
-					return
-				}
-			}
-		}()
-	}
-
-	return stream, streamMetadata, nil
 }

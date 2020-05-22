@@ -132,57 +132,68 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	}
 
 	for {
-		stream, streamMetadata, err := acceptStream(session, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
+		stream, err := session.AcceptStream()
 		if err != nil {
-			log.Println(err)
+			log.Println("Couldn't accept stream:", err)
 			break
 		}
-		if streamMetadata.IsPayment {
-			continue
-		}
 
-		serviceID := byte(streamMetadata.ServiceId)
-		portID := int(streamMetadata.PortId)
+		go func() {
+			err := func() error {
+				streamMetadata, err := readStreamMetadata(stream)
+				if err != nil {
+					return fmt.Errorf("Read stream metadata error: %v", err)
+				}
 
-		service, err := te.getService(serviceID)
-		if err != nil {
-			log.Println(err)
-			Close(stream)
-			continue
-		}
-		tcpPortsCount := len(service.TCP)
-		udpPortsCount := len(service.UDP)
-		var protocol Protocol
-		var port int
-		if portID < tcpPortsCount {
-			protocol = TCP
-			port = int(service.TCP[portID])
-		} else if portID-tcpPortsCount < udpPortsCount {
-			protocol = UDP
-			portID -= tcpPortsCount
-			port = int(service.UDP[portID])
-		} else {
-			log.Println("Invalid portId received:", portID)
-			Close(stream)
-			continue
-		}
+				if streamMetadata.IsPayment {
+					return handlePaymentStream(session, stream, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
+				}
 
-		serviceInfo := te.config.Services[service.Name]
-		host := serviceInfo.Address + ":" + strconv.Itoa(port)
+				serviceID := byte(streamMetadata.ServiceId)
+				portID := int(streamMetadata.PortId)
 
-		conn, err := net.DialTimeout(string(protocol), host, time.Duration(te.config.DialTimeout)*time.Second)
-		if err != nil {
-			log.Println("Couldn't connect to host", host, "with error:", err)
-			Close(stream)
-			continue
-		}
-		if te.config.Reverse {
-			go Pipe(conn, stream, &te.reverseBytesIn)
-			go Pipe(stream, conn, &te.reverseBytesOut)
-		} else {
-			go Pipe(conn, stream, &bytesIn[serviceID])
-			go Pipe(stream, conn, &bytesOut[serviceID])
-		}
+				service, err := te.getService(serviceID)
+				if err != nil {
+					return err
+				}
+				tcpPortsCount := len(service.TCP)
+				udpPortsCount := len(service.UDP)
+				var protocol Protocol
+				var port int
+				if portID < tcpPortsCount {
+					protocol = TCP
+					port = int(service.TCP[portID])
+				} else if portID-tcpPortsCount < udpPortsCount {
+					protocol = UDP
+					portID -= tcpPortsCount
+					port = int(service.UDP[portID])
+				} else {
+					return fmt.Errorf("invalid portId: %d", portID)
+				}
+
+				serviceInfo := te.config.Services[service.Name]
+				host := serviceInfo.Address + ":" + strconv.Itoa(port)
+
+				conn, err := net.DialTimeout(string(protocol), host, time.Duration(te.config.DialTimeout)*time.Second)
+				if err != nil {
+					return err
+				}
+
+				if te.config.Reverse {
+					go Pipe(conn, stream, &te.reverseBytesIn)
+					go Pipe(stream, conn, &te.reverseBytesOut)
+				} else {
+					go Pipe(conn, stream, &bytesIn[serviceID])
+					go Pipe(stream, conn, &bytesOut[serviceID])
+				}
+
+				return nil
+			}()
+			if err != nil {
+				log.Println(err)
+				Close(stream)
+			}
+		}()
 	}
 
 	Close(session)
@@ -202,20 +213,19 @@ func (te *TunaExit) listenTCP(port int) error {
 			conn, err := listener.Accept()
 			if err != nil {
 				log.Println("Couldn't accept client connection:", err)
-				Close(conn)
-				continue
-			}
-
-			session, err := smux.Server(conn, nil)
-			if err != nil {
-				log.Println(err)
-				Close(conn)
 				continue
 			}
 
 			go func() {
+				defer Close(conn)
+
+				session, err := smux.Server(conn, nil)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
 				te.handleSession(session)
-				Close(conn)
 			}()
 		}
 	}()
