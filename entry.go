@@ -57,14 +57,7 @@ type TunaEntry struct {
 
 func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
 	te := &TunaEntry{
-		Common: &Common{
-			Service:            service,
-			ServiceInfo:        serviceInfo,
-			Wallet:             wallet,
-			DialTimeout:        config.DialTimeout,
-			SubscriptionPrefix: config.SubscriptionPrefix,
-			Reverse:            config.Reverse,
-		},
+		Common:       NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil),
 		config:       config,
 		tcpListeners: make(map[byte]*net.TCPListener),
 		serviceConn:  make(map[byte]*net.UDPConn),
@@ -485,9 +478,18 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 			go func() {
 				err := func() error {
+					defer Close(tcpConn)
+
 					te := NewTunaEntry(&Service{}, &ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
-					var err error
-					te.session, err = smux.Server(tcpConn, nil)
+
+					encryptedConn, err := te.Common.encryptConn(tcpConn, nil)
+					if err != nil {
+						return err
+					}
+
+					defer Close(encryptedConn)
+
+					te.session, err = smux.Server(encryptedConn, nil)
 					if err != nil {
 						return fmt.Errorf("create session error: %v", err)
 					}
@@ -504,11 +506,11 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 					te.SetMetadata(string(buf))
 
-					te.SetServerTCPConn(tcpConn)
+					te.SetServerTCPConn(encryptedConn)
 
 					metadata := te.GetMetadata()
 					if metadata.UdpPort > 0 {
-						ip, _, err := net.SplitHostPort(tcpConn.RemoteAddr().String())
+						ip, _, err := net.SplitHostPort(encryptedConn.RemoteAddr().String())
 						if err != nil {
 							return fmt.Errorf("Parse host error: %v", err)
 						}
@@ -544,7 +546,6 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				if err != nil {
 					log.Println(err)
 				}
-				Close(tcpConn)
 			}()
 		}
 	}()

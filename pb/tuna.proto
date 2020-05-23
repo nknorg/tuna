@@ -15,6 +15,16 @@ option (gogoproto.testgen_all) = true;
 option (gogoproto.equal_all) = true;
 option (gogoproto.populate_all) = true;
 
+enum EncryptionAlgo {
+  ENCRYPTION_NONE = 0;
+  ENCRYPTION_XSALSA20_POLY1305 = 1;
+}
+
+message ConnectionMetadata {
+  EncryptionAlgo encryption_algo = 1;
+  bytes public_key = 2;
+}
+
 message ServiceMetadata {
   string ip = 1;
   uint32 tcp_port = 2;

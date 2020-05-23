@@ -23,14 +23,14 @@ import (
 	"github.com/gogo/protobuf/proto"
 	nkn "github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
-	"github.com/nknorg/nkn/program"
+	"github.com/nknorg/nkn/crypto/ed25519"
 	"github.com/nknorg/nkn/transaction"
 	"github.com/nknorg/nkn/util"
-	"github.com/nknorg/nkn/util/address"
 	"github.com/nknorg/nkn/util/config"
 	"github.com/nknorg/nkn/vault"
 	"github.com/nknorg/tuna/pb"
 	"github.com/xtaci/smux"
+	"golang.org/x/crypto/nacl/box"
 )
 
 type Protocol string
@@ -47,6 +47,7 @@ const (
 	TrafficUnit                            = 1024 * 1024
 	MinTrafficCoverage                     = 0.9
 	getSubscribersBatchSize                = 32
+	DefaultEncryptionAlgo                  = pb.ENCRYPTION_XSALSA20_POLY1305
 )
 
 type ServiceInfo struct {
@@ -63,17 +64,18 @@ type Service struct {
 
 type Common struct {
 	Service            *Service
+	ServiceInfo        *ServiceInfo
 	Wallet             *nkn.Wallet
 	DialTimeout        int32
 	SubscriptionPrefix string
 	Reverse            bool
 	ReverseMetadata    *pb.ServiceMetadata
-	ServiceInfo        *ServiceInfo
 
-	udpReadChan  chan []byte
-	udpWriteChan chan []byte
-	udpCloseChan chan struct{}
-	tcpListener  *net.TCPListener
+	udpReadChan    chan []byte
+	udpWriteChan   chan []byte
+	udpCloseChan   chan struct{}
+	tcpListener    *net.TCPListener
+	curveSecretKey *[sharedKeySize]byte
 
 	sync.RWMutex
 	paymentReceiver  string
@@ -84,6 +86,25 @@ type Common struct {
 	tcpConn          net.Conn
 	udpConn          *net.UDPConn
 	isClosed         bool
+	sharedKeys       map[string]*[sharedKeySize]byte
+}
+
+func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse bool, reverseMetadata *pb.ServiceMetadata) *Common {
+	var sk [ed25519.PrivateKeySize]byte
+	copy(sk[:], ed25519.GetPrivateKeyFromSeed(wallet.Seed()))
+	curveSecretKey := ed25519.PrivateKeyToCurve25519PrivateKey(&sk)
+
+	return &Common{
+		Service:            service,
+		ServiceInfo:        serviceInfo,
+		Wallet:             wallet,
+		DialTimeout:        dialTimeout,
+		SubscriptionPrefix: subscriptionPrefix,
+		Reverse:            reverse,
+		ReverseMetadata:    reverseMetadata,
+		sharedKeys:         make(map[string]*[sharedKeySize]byte),
+		curveSecretKey:     curveSecretKey,
+	}
 }
 
 func (c *Common) GetTCPConn() net.Conn {
@@ -238,7 +259,80 @@ func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
 	}()
 }
 
-func (c *Common) UpdateServerConn() bool {
+func (c *Common) getOrComputeSharedKey(remotePublicKey []byte) (*[sharedKeySize]byte, error) {
+	c.RLock()
+	sharedKey, ok := c.sharedKeys[string(remotePublicKey)]
+	c.RUnlock()
+	if ok && sharedKey != nil {
+		return sharedKey, nil
+	}
+
+	var pk [ed25519.PublicKeySize]byte
+	copy(pk[:], remotePublicKey)
+	curve25519PublicKey, ok := ed25519.PublicKeyToCurve25519PublicKey(&pk)
+	if !ok {
+		return nil, errors.New("invalid public key")
+	}
+
+	sharedKey = new([sharedKeySize]byte)
+	box.Precompute(sharedKey, curve25519PublicKey, c.curveSecretKey)
+
+	c.Lock()
+	c.sharedKeys[string(remotePublicKey)] = sharedKey
+	c.Unlock()
+
+	return sharedKey, nil
+}
+
+func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, error) {
+	var connMetadata *pb.ConnectionMetadata
+	if len(remotePublicKey) > 0 {
+		connMetadata = &pb.ConnectionMetadata{
+			EncryptionAlgo: DefaultEncryptionAlgo,
+			PublicKey:      c.Wallet.PubKey(),
+		}
+
+		b, err := proto.Marshal(connMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		err = WriteVarBytes(conn, b)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		b, err := ReadVarBytes(conn)
+		if err != nil {
+			return nil, err
+		}
+
+		connMetadata = &pb.ConnectionMetadata{}
+		err = proto.Unmarshal(b, connMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(connMetadata.PublicKey) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("invalid pubkey size %d", len(connMetadata.PublicKey))
+		}
+
+		remotePublicKey = connMetadata.PublicKey
+	}
+
+	if connMetadata.EncryptionAlgo != pb.ENCRYPTION_NONE {
+		sharedKey, err := c.getOrComputeSharedKey(remotePublicKey)
+		if err != nil {
+			return nil, err
+		}
+
+		return encryptConn(conn, sharedKey, connMetadata.EncryptionAlgo)
+	}
+
+	return conn, nil
+}
+
+func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 	hasTCP := len(c.Service.TCP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceTcp) > 0)
 	hasUDP := len(c.Service.UDP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceUdp) > 0)
 	metadata := c.GetMetadata()
@@ -253,10 +347,17 @@ func (c *Common) UpdateServerConn() bool {
 			time.Duration(c.DialTimeout)*time.Second,
 		)
 		if err != nil {
-			log.Println("Couldn't connect to TCP address", address, "because:", err)
-			return false
+			return err
 		}
-		c.SetServerTCPConn(tcpConn)
+
+		encryptedConn, err := c.encryptConn(tcpConn, remotePublicKey)
+		if err != nil {
+			Close(tcpConn)
+			return err
+		}
+
+		c.SetServerTCPConn(encryptedConn)
+
 		log.Println("Connected to TCP at", address)
 	}
 	if hasUDP {
@@ -270,17 +371,17 @@ func (c *Common) UpdateServerConn() bool {
 			&address,
 		)
 		if err != nil {
-			log.Println("Couldn't connect to UDP address", address, "because:", err)
-			return false
+			return err
 		}
 		c.SetServerUDPConn(udpConn)
 		log.Println("Connected to UDP at", address.String())
 
 		c.StartUDPReaderWriter(udpConn)
 	}
+
 	c.SetConnected(true)
 
-	return true
+	return nil
 }
 
 func (c *Common) CreateServerConn(force bool) error {
@@ -325,19 +426,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				if len(metadata.BeneficiaryAddr) > 0 {
 					c.SetPaymentReceiver(metadata.BeneficiaryAddr)
 				} else {
-					_, publicKey, _, err := address.ParseClientAddress(subscriber)
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-
-					programHash, err := program.CreateProgramHash(publicKey)
-					if err != nil {
-						log.Println(err)
-						continue RandomSubscriber
-					}
-
-					address, err := programHash.ToAddress()
+					address, err := nkn.ClientAddrToWalletAddr(subscriber)
 					if err != nil {
 						log.Println(err)
 						continue RandomSubscriber
@@ -368,7 +457,15 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 				c.Unlock()
 
-				if !c.UpdateServerConn() {
+				remotePublicKey, err := nkn.ClientAddrToPubKey(subscriber)
+				if err != nil {
+					log.Println(err)
+					continue RandomSubscriber
+				}
+
+				err = c.UpdateServerConn(remotePublicKey)
+				if err != nil {
+					log.Println(err)
 					continue RandomSubscriber
 				}
 

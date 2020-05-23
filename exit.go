@@ -63,12 +63,7 @@ type TunaExit struct {
 
 func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) *TunaExit {
 	return &TunaExit{
-		Common: &Common{
-			Wallet:             wallet,
-			DialTimeout:        config.DialTimeout,
-			SubscriptionPrefix: config.SubscriptionPrefix,
-			Reverse:            config.Reverse,
-		},
+		Common:      NewCommon(nil, nil, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil),
 		config:      config,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
@@ -219,7 +214,15 @@ func (te *TunaExit) listenTCP(port int) error {
 			go func() {
 				defer Close(conn)
 
-				session, err := smux.Server(conn, nil)
+				encryptedConn, err := te.Common.encryptConn(conn, nil)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				defer Close(encryptedConn)
+
+				session, err := smux.Server(encryptedConn, nil)
 				if err != nil {
 					log.Println(err)
 					return
@@ -384,14 +387,15 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 		reverseServiceName = DefaultReverseServiceName
 	}
 
-	te.Common = &Common{
-		Service:            &Service{Name: reverseServiceName},
-		Wallet:             te.Wallet,
-		ServiceInfo:        &ServiceInfo{MaxPrice: te.config.ReverseMaxPrice, IPFilter: &te.config.ReverseIPFilter},
-		DialTimeout:        te.config.DialTimeout,
-		ReverseMetadata:    reverseMetadata,
-		SubscriptionPrefix: te.config.ReverseSubscriptionPrefix,
-	}
+	te.Common = NewCommon(
+		&Service{Name: reverseServiceName},
+		&ServiceInfo{MaxPrice: te.config.ReverseMaxPrice, IPFilter: &te.config.ReverseIPFilter},
+		te.Wallet,
+		te.config.DialTimeout,
+		te.config.ReverseSubscriptionPrefix,
+		false,
+		reverseMetadata,
+	)
 
 	go func() {
 		var tcpConn net.Conn
