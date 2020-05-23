@@ -46,20 +46,14 @@ func WriteVarBytes(writer io.Writer, b []byte) error {
 	lenBuf := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBuf, uint32(len(b)))
 
-	n, err := writer.Write(lenBuf)
+	_, err := writer.Write(lenBuf)
 	if err != nil {
 		return err
-	}
-	if n != len(lenBuf) {
-		return io.ErrShortWrite
 	}
 
-	n, err = writer.Write(b)
+	_, err = writer.Write(b)
 	if err != nil {
 		return err
-	}
-	if n != len(b) {
-		return io.ErrShortWrite
 	}
 
 	return nil
