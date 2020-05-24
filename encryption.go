@@ -13,14 +13,21 @@ const (
 )
 
 func encryptConn(conn net.Conn, sharedKey *[sharedKeySize]byte, encryptionAlgo pb.EncryptionAlgo) (net.Conn, error) {
-	var config *stream.Config
+	var cipher stream.Cipher
+	var err error
 	switch encryptionAlgo {
 	case pb.ENCRYPTION_XSALSA20_POLY1305:
-		config = &stream.Config{
-			Cipher: stream.NewXSalsa20Poly1305Cipher(sharedKey),
+		cipher = stream.NewXSalsa20Poly1305Cipher(sharedKey)
+	case pb.ENCRYPTION_AES_GCM:
+		cipher, err = stream.NewAESGCMCipher(sharedKey[:])
+		if err != nil {
+			return nil, err
 		}
 	default:
 		return nil, fmt.Errorf("unsupported encryption algo %v", encryptionAlgo)
+	}
+	config := &stream.Config{
+		Cipher: cipher,
 	}
 	return stream.NewEncryptedStream(conn, config)
 }

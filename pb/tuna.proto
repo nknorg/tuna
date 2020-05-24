@@ -18,6 +18,7 @@ option (gogoproto.populate_all) = true;
 enum EncryptionAlgo {
   ENCRYPTION_NONE = 0;
   ENCRYPTION_XSALSA20_POLY1305 = 1;
+  ENCRYPTION_AES_GCM = 2;
 }
 
 message ConnectionMetadata {
