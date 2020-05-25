@@ -79,7 +79,7 @@ func (te *TunaEntry) Start() {
 		listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
 		tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
 		if err != nil {
-			te.close()
+			te.Close()
 			return
 		}
 		if len(tcpPorts) > 0 {
@@ -88,7 +88,7 @@ func (te *TunaEntry) Start() {
 
 		udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
 		if err != nil {
-			te.close()
+			te.Close()
 			return
 		}
 		if len(udpPorts) > 0 {
@@ -128,19 +128,19 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
 	tcpPorts, err := te.listenTCP(listenIP, metadata.ServiceTcp)
 	if err != nil {
-		te.close()
+		te.Close()
 		return err
 	}
 	udpPorts, err := te.listenUDP(listenIP, metadata.ServiceUdp)
 	if err != nil {
-		te.close()
+		te.Close()
 		return err
 	}
 
 	serviceMetadata := CreateRawMetadata(0, tcpPorts, udpPorts, "", 0, 0, "", te.config.ReverseBeneficiaryAddr)
 	err = WriteVarBytes(stream, serviceMetadata)
 	if err != nil {
-		te.close()
+		te.Close()
 		return err
 	}
 
@@ -158,14 +158,14 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		entryToExitPrice, exitToEntryPrice, err := ParsePrice(te.config.ReversePrice)
 		if err != nil {
 			log.Println("parse reverse price error:", err)
-			te.close()
+			te.Close()
 			return
 		}
 
 		npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
 		if err != nil {
 			log.Println(err)
-			te.close()
+			te.Close()
 			return
 		}
 
@@ -212,7 +212,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	return nil
 }
 
-func (te *TunaEntry) close() {
+func (te *TunaEntry) Close() {
 	te.Lock()
 	defer te.Unlock()
 	if !te.isClosed {
@@ -229,7 +229,7 @@ func (te *TunaEntry) close() {
 
 func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
 	if te.Reverse && force {
-		te.close()
+		te.Close()
 		return nil, errors.New("reverse connection to service is dead")
 	}
 
@@ -310,7 +310,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 				if err != nil {
 					log.Println("Couldn't accept connection:", err)
 					if strings.Contains(err.Error(), "use of closed network connection") {
-						te.close()
+						te.Close()
 						return
 					}
 					time.Sleep(time.Second)

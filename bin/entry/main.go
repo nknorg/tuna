@@ -82,6 +82,7 @@ func main() {
 				if service.Name == serviceName {
 					e := tuna.NewTunaEntry(&service, &serviceInfo, config, wallet)
 					go e.Start()
+					defer e.Close()
 					continue service
 				}
 			}
