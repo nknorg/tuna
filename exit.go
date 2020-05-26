@@ -40,6 +40,7 @@ type ExitConfiguration struct {
 	ReverseNanoPayFee         string                     `json:"reverseNanopayfee"`
 	ReverseServiceName        string                     `json:"reverseServiceName"`
 	ReverseSubscriptionPrefix string                     `json:"reverseSubscriptionPrefix"`
+	ReverseEncryption         string                     `json:"reverseEncryption"`
 	ReverseIPFilter           IPFilter                   `json:"reverseIPFilter"`
 }
 
@@ -61,14 +62,21 @@ type TunaExit struct {
 	reverseBytesOutPaid uint64
 }
 
-func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) *TunaExit {
-	return &TunaExit{
-		Common:      NewCommon(nil, nil, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil),
+func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) (*TunaExit, error) {
+	common, err := NewCommon(nil, nil, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	te := &TunaExit{
+		Common:      common,
 		config:      config,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
 		closeChan:   make(chan struct{}, 0),
 	}
+
+	return te, nil
 }
 
 func (te *TunaExit) getServiceID(serviceName string) (byte, error) {
@@ -373,6 +381,7 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 	if err != nil {
 		return err
 	}
+
 	service, err := te.getService(serviceID)
 	if err != nil {
 		return err
@@ -387,15 +396,24 @@ func (te *TunaExit) StartReverse(serviceName string) error {
 		reverseServiceName = DefaultReverseServiceName
 	}
 
-	te.Common = NewCommon(
-		&Service{Name: reverseServiceName},
-		&ServiceInfo{MaxPrice: te.config.ReverseMaxPrice, IPFilter: &te.config.ReverseIPFilter},
+	te.Common, err = NewCommon(
+		&Service{
+			Name:       reverseServiceName,
+			Encryption: service.Encryption,
+		},
+		&ServiceInfo{
+			MaxPrice: te.config.ReverseMaxPrice,
+			IPFilter: &te.config.ReverseIPFilter,
+		},
 		te.Wallet,
 		te.config.DialTimeout,
 		te.config.ReverseSubscriptionPrefix,
 		false,
 		reverseMetadata,
 	)
+	if err != nil {
+		return err
+	}
 
 	go func() {
 		var tcpConn net.Conn

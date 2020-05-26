@@ -16,6 +16,8 @@ func encryptConn(conn net.Conn, sharedKey *[sharedKeySize]byte, encryptionAlgo p
 	var cipher stream.Cipher
 	var err error
 	switch encryptionAlgo {
+	case pb.ENCRYPTION_NONE:
+		return conn, nil
 	case pb.ENCRYPTION_XSALSA20_POLY1305:
 		cipher = stream.NewXSalsa20Poly1305Cipher(sharedKey)
 	case pb.ENCRYPTION_AES_GCM:

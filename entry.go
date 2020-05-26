@@ -55,18 +55,25 @@ type TunaEntry struct {
 	reverseBeneficiary common.Uint160
 }
 
-func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) *TunaEntry {
+func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) (*TunaEntry, error) {
+	common, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	te := &TunaEntry{
-		Common:       NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil),
+		Common:       common,
 		config:       config,
 		tcpListeners: make(map[byte]*net.TCPListener),
 		serviceConn:  make(map[byte]*net.UDPConn),
 		clientAddr:   cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
 		closeChan:    make(chan struct{}),
 	}
+
 	te.SetServerUDPReadChan(make(chan []byte))
 	te.SetServerUDPWriteChan(make(chan []byte))
-	return te
+
+	return te, nil
 }
 
 func (te *TunaEntry) Start() {
@@ -480,7 +487,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				err := func() error {
 					defer Close(tcpConn)
 
-					te := NewTunaEntry(&Service{}, &ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
+					te, err := NewTunaEntry(&Service{}, &ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
+					if err != nil {
+						return err
+					}
 
 					encryptedConn, err := te.Common.encryptConn(tcpConn, nil)
 					if err != nil {

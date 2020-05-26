@@ -1,11 +1,7 @@
 [
   {
     "name": "httpproxy",
-    "tcp": [30080]
-  },
-  {
-    "name": "moonlight",
-    "tcp": [47984, 47989, 48010],
-    "udp": [47998, 47999, 48000, 48002, 48010]
+    "tcp": [30080],
+    "encryption": "xsalsa20-poly1305"
   }
 ]
