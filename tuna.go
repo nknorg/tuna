@@ -47,7 +47,7 @@ const (
 	TrafficUnit                            = 1024 * 1024
 	MinTrafficCoverage                     = 0.9
 	getSubscribersBatchSize                = 32
-	DefaultEncryptionAlgo                  = pb.ENCRYPTION_XSALSA20_POLY1305
+	DefaultEncryptionAlgo                  = pb.ENCRYPTION_NONE
 )
 
 type ServiceInfo struct {
@@ -57,9 +57,10 @@ type ServiceInfo struct {
 }
 
 type Service struct {
-	Name string   `json:"name"`
-	TCP  []uint32 `json:"tcp"`
-	UDP  []uint32 `json:"udp"`
+	Name       string   `json:"name"`
+	TCP        []uint32 `json:"tcp"`
+	UDP        []uint32 `json:"udp"`
+	Encryption string   `json:"encryption"`
 }
 
 type Common struct {
@@ -76,6 +77,7 @@ type Common struct {
 	udpCloseChan   chan struct{}
 	tcpListener    *net.TCPListener
 	curveSecretKey *[sharedKeySize]byte
+	encryptionAlgo pb.EncryptionAlgo
 
 	sync.RWMutex
 	paymentReceiver  string
@@ -89,12 +91,21 @@ type Common struct {
 	sharedKeys       map[string]*[sharedKeySize]byte
 }
 
-func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse bool, reverseMetadata *pb.ServiceMetadata) *Common {
+func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse bool, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
+	encryptionAlgo := DefaultEncryptionAlgo
+	var err error
+	if service != nil && len(service.Encryption) > 0 {
+		encryptionAlgo, err = ParseEncryptionAlgo(service.Encryption)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var sk [ed25519.PrivateKeySize]byte
 	copy(sk[:], ed25519.GetPrivateKeyFromSeed(wallet.Seed()))
 	curveSecretKey := ed25519.PrivateKeyToCurve25519PrivateKey(&sk)
 
-	return &Common{
+	common := &Common{
 		Service:            service,
 		ServiceInfo:        serviceInfo,
 		Wallet:             wallet,
@@ -104,7 +115,10 @@ func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, d
 		ReverseMetadata:    reverseMetadata,
 		sharedKeys:         make(map[string]*[sharedKeySize]byte),
 		curveSecretKey:     curveSecretKey,
+		encryptionAlgo:     encryptionAlgo,
 	}
+
+	return common, nil
 }
 
 func (c *Common) GetTCPConn() net.Conn {
@@ -288,7 +302,7 @@ func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, e
 	var connMetadata *pb.ConnectionMetadata
 	if len(remotePublicKey) > 0 {
 		connMetadata = &pb.ConnectionMetadata{
-			EncryptionAlgo: DefaultEncryptionAlgo,
+			EncryptionAlgo: c.encryptionAlgo,
 			PublicKey:      c.Wallet.PubKey(),
 		}
 
@@ -320,16 +334,16 @@ func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, e
 		remotePublicKey = connMetadata.PublicKey
 	}
 
-	if connMetadata.EncryptionAlgo != pb.ENCRYPTION_NONE {
-		sharedKey, err := c.getOrComputeSharedKey(remotePublicKey)
-		if err != nil {
-			return nil, err
-		}
-
-		return encryptConn(conn, sharedKey, connMetadata.EncryptionAlgo)
+	if connMetadata.EncryptionAlgo == pb.ENCRYPTION_NONE {
+		return conn, nil
 	}
 
-	return conn, nil
+	sharedKey, err := c.getOrComputeSharedKey(remotePublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return encryptConn(conn, sharedKey, connMetadata.EncryptionAlgo)
 }
 
 func (c *Common) UpdateServerConn(remotePublicKey []byte) error {

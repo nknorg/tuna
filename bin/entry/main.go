@@ -80,9 +80,12 @@ func main() {
 
 			for _, service := range services {
 				if service.Name == serviceName {
-					e := tuna.NewTunaEntry(&service, &serviceInfo, config, wallet)
-					go e.Start()
-					defer e.Close()
+					te, err := tuna.NewTunaEntry(&service, &serviceInfo, config, wallet)
+					if err != nil {
+						log.Fatalln(err)
+					}
+					go te.Start()
+					defer te.Close()
 					continue service
 				}
 			}

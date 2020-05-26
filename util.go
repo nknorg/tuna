@@ -2,11 +2,26 @@ package tuna
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"strings"
 
 	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/tuna/pb"
 )
+
+var encryptionAlgoMap = map[string]pb.EncryptionAlgo{
+	"none":              pb.ENCRYPTION_NONE,
+	"xsalsa20-poly1305": pb.ENCRYPTION_XSALSA20_POLY1305,
+	"aes-gcm":           pb.ENCRYPTION_AES_GCM,
+}
+
+func ParseEncryptionAlgo(encryptionAlgoStr string) (pb.EncryptionAlgo, error) {
+	if encryptionAlgo, ok := encryptionAlgoMap[strings.ToLower(encryptionAlgoStr)]; ok {
+		return encryptionAlgo, nil
+	}
+	return 0, fmt.Errorf("unknown encryption algo %v", encryptionAlgoStr)
+}
 
 func ParsePrice(priceStr string) (common.Fixed64, common.Fixed64, error) {
 	price := strings.Split(priceStr, ",")
