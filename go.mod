@@ -9,7 +9,7 @@ require (
 	github.com/jackpal/gateway v1.0.6 // indirect
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/klauspost/reedsolomon v1.9.6 // indirect
-	github.com/nknorg/encrypted-stream v0.0.0-20200524021055-3af4c28db0e6
+	github.com/nknorg/encrypted-stream v0.0.0-20200527140853-72d113d9d023
 	github.com/nknorg/ncp-go v0.0.0-20200406215949-844c0615f43e // indirect
 	github.com/nknorg/nkn v1.1.7-beta.0.20200508191852-5f3b0f1ddca2
 	github.com/nknorg/nkn-sdk-go v1.2.6
