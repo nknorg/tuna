@@ -96,8 +96,8 @@ github.com/nknorg/consequential v0.0.0-20190823093205-a45aff4a218a h1:DXTCQnVV2E
 github.com/nknorg/consequential v0.0.0-20190823093205-a45aff4a218a/go.mod h1:H7XeI/XOPpWVmqM+ScT75RLMn7jWnlZDwHRahSxNxo0=
 github.com/nknorg/consequential v0.0.0-20191113113929-5fd13b7f5984 h1:VY7EXvgxCKlL2A6jF+qQspZtFBZo7PWiPY+YGDaCDlo=
 github.com/nknorg/consequential v0.0.0-20191113113929-5fd13b7f5984/go.mod h1:H7XeI/XOPpWVmqM+ScT75RLMn7jWnlZDwHRahSxNxo0=
-github.com/nknorg/encrypted-stream v0.0.0-20200524021055-3af4c28db0e6 h1:VeS5k/UMw7TNEiycWp+XGRTWYeJNqToaMt3YjVZpY1I=
-github.com/nknorg/encrypted-stream v0.0.0-20200524021055-3af4c28db0e6/go.mod h1:VXJDhlUoF3uJSFLwIWnRLkiX5QPFB3E8oe2EUBwPoU0=
+github.com/nknorg/encrypted-stream v0.0.0-20200527140853-72d113d9d023 h1:tm7sIllKavTj5ov446To87sGUNo7goeyhZw71mw45Ic=
+github.com/nknorg/encrypted-stream v0.0.0-20200527140853-72d113d9d023/go.mod h1:VXJDhlUoF3uJSFLwIWnRLkiX5QPFB3E8oe2EUBwPoU0=
 github.com/nknorg/go-nat v1.0.1 h1:4dFK0oDyqkIE0it03Y4pMgBQpl1Y0mrYHEp+j/nZ910=
 github.com/nknorg/go-nat v1.0.1/go.mod h1:dblX1Ac2j08rTUGs5CKCAfjHGN5eDFhbeqt2rccSP3Y=
 github.com/nknorg/go-portscanner v0.0.0-20181002101859-8493ef01db79 h1:AT5YRim0696HFnGSvFg0uOmSuo1X11roGBQhKB25PHE=
