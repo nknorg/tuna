@@ -262,6 +262,9 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connID []byte, serviceID b
 			log.Println(err)
 			return nil, err
 		}
+		if int(portID) >= len(service.UDP) {
+			return nil, fmt.Errorf("UDP portID %v out of range", portID)
+		}
 		port := service.UDP[portID]
 		conn, err = net.DialUDP("udp", nil, &net.UDPAddr{Port: int(port)})
 		if err != nil {
