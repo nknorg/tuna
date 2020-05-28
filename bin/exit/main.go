@@ -71,9 +71,11 @@ func main() {
 				log.Fatalln(err)
 			}
 
-			te.OnEntryConnected(func() {
-				log.Printf("Service: %s, Address: %v:%v\n", serviceName, te.GetReverseIP(), te.GetReverseTCPPorts())
-			})
+			go func() {
+				for range te.OnConnect.C {
+					log.Printf("Service: %s, Address: %v:%v\n", serviceName, te.GetReverseIP(), te.GetReverseTCPPorts())
+				}
+			}()
 
 			err = te.StartReverse(serviceName)
 			if err != nil {
