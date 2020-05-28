@@ -71,6 +71,7 @@ type Common struct {
 	SubscriptionPrefix string
 	Reverse            bool
 	ReverseMetadata    *pb.ServiceMetadata
+	OnConnect          *OnConnect
 
 	udpReadChan    chan []byte
 	udpWriteChan   chan []byte
@@ -113,6 +114,7 @@ func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, d
 		SubscriptionPrefix: subscriptionPrefix,
 		Reverse:            reverse,
 		ReverseMetadata:    reverseMetadata,
+		OnConnect:          NewOnConnect(1, nil),
 		sharedKeys:         make(map[string]*[sharedKeySize]byte),
 		curveSecretKey:     curveSecretKey,
 		encryptionAlgo:     encryptionAlgo,

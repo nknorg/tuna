@@ -78,11 +78,13 @@ func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfi
 
 func (te *TunaEntry) Start() {
 	for {
-		if err := te.CreateServerConn(true); err != nil {
+		err := te.CreateServerConn(true)
+		if err != nil {
 			log.Println("Couldn't connect to node:", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
+
 		listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
 		tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
 		if err != nil {
@@ -101,6 +103,8 @@ func (te *TunaEntry) Start() {
 		if len(udpPorts) > 0 {
 			log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
 		}
+
+		te.OnConnect.receive()
 
 		go func() {
 			session, err := te.getSession(false)
@@ -231,6 +235,7 @@ func (te *TunaEntry) Close() {
 		for _, conn := range te.serviceConn {
 			Close(conn)
 		}
+		te.OnConnect.close()
 	}
 }
 

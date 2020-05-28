@@ -16,6 +16,45 @@ var encryptionAlgoMap = map[string]pb.EncryptionAlgo{
 	"aes-gcm":           pb.ENCRYPTION_AES_GCM,
 }
 
+// OnConnectFunc is a wrapper type for gomobile compatibility.
+type OnConnectFunc interface{ OnConnect() }
+
+// OnConnect is a wrapper type for gomobile compatibility.
+type OnConnect struct {
+	C        chan struct{}
+	Callback OnConnectFunc
+}
+
+// NewOnConnect creates an OnConnect channel with a channel size and callback
+// function.
+func NewOnConnect(size int, cb OnConnectFunc) *OnConnect {
+	return &OnConnect{
+		C:        make(chan struct{}, size),
+		Callback: cb,
+	}
+}
+
+// Next waits and returns the next element from the channel.
+func (c *OnConnect) Next() {
+	<-c.C
+	return
+}
+
+func (c *OnConnect) receive() {
+	if c.Callback != nil {
+		c.Callback.OnConnect()
+	} else {
+		select {
+		case c.C <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (c *OnConnect) close() {
+	close(c.C)
+}
+
 func ParseEncryptionAlgo(encryptionAlgoStr string) (pb.EncryptionAlgo, error) {
 	if encryptionAlgo, ok := encryptionAlgoMap[strings.ToLower(encryptionAlgoStr)]; ok {
 		return encryptionAlgo, nil
