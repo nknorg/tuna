@@ -17,21 +17,18 @@ go build -o entry bin/entry/main.go
 
 Edit `config.entry.json` with your data:
 
-* `Services` services you want to use
-* `DialTimeout` timeout for NKN node connection
-* `UDPTimeout` timeout for UDP connections
-* `NanoPayFee` fee used for nano pay transaction
-* `SubscriptionPrefix` prefix appended to topics for subscription
-* `Reverse` should be used to provide reverse tunnel for those who don't have public IP
-* `ReverseBeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
-* `ReverseTCP` TCP port to listen for connections
-* `ReverseUDP` UDP port to listen for connections
-* `ReverseServiceListenIP` reverse service listen IP
-* `ReversePrice` price for reverse connections
-* `ReverseSubscriptionPrefix` prefix appended to topics for reverse subscription
-* `ReverseSubscriptionDuration` duration for subscription in blocks
-* `ReverseSubscriptionFee` fee used for subscription
-* `ReverseClaimInterval` payment claim interval for reverse connections
+* `services` services you want to use
+* `dialTimeout` timeout for NKN node connection
+* `udpTimeout` timeout for UDP connections
+* `nanoPayFee` fee used for nano pay transaction
+* `reverse` should be used to provide reverse tunnel for those who don't have public IP
+* `reverseBeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
+* `reverseTCP` TCP port to listen for connections
+* `reverseUDP` UDP port to listen for connections
+* `reversePrice` price for reverse connections
+* `reverseClaimInterval` payment claim interval for reverse connections
+* `reverseSubscriptionDuration` duration for subscription in blocks
+* `reverseSubscriptionFee` fee used for subscription
 
 Start tuna entry:
 ```shell
@@ -53,18 +50,20 @@ go build -o exit bin/exit/main.go
 
 Edit `config.exit.json` with your data:
 
-* `BeneficiaryAddr` Beneficiary address (NKN wallet address to receive rewards)
-* `ListenTCP` TCP port to listen for connections
-* `ListenUDP` UDP port to listen for connections
-* `Reverse` should be used if you don't have public IP and want to use another `server` for accepting clients
-* `ReverseRandomPorts` meaning reverse entry can use random ports instead of specified ones (useful when service has dynamic ports)
-* `DialTimeout` timeout for connections to services
-* `UDPTimeout`  timeout for UDP connections
-* `SubscriptionPrefix` prefix appended to topics for subscription
-* `SubscriptionDuration` duration for subscription in blocks
-* `SubscriptionFee` fee used for subscription
-* `ClaimInterval` payment claim interval for connections
-* `Services` services you want to provide
+* `beneficiaryAddr` beneficiary address (NKN wallet address to receive rewards)
+* `listenTCP` TCP port to listen for connections
+* `listenUDP` UDP port to listen for connections
+* `dialTimeout` timeout for connections to services
+* `udpTimeout`  timeout for UDP connections
+* `claimInterval` payment claim interval for connections
+* `subscriptionDuration` duration for subscription in blocks
+* `subscriptionFee` fee used for subscription
+* `services` services you want to provide
+* `reverse` should be used if you don't have public IP and want to use another `server` for accepting clients
+* `reverseRandomPorts` meaning reverse entry can use random ports instead of specified ones (useful when service has dynamic ports)
+* `reverseMaxPrice` max accepted price for reverse service, unit is NKN per MB traffic
+* `reverseNanoPayFee` nanoPay transaction fee for reverse service
+* `reverseIPFilter` reverse service IP address filter
 
 Start tuna exit:
 ```shell
@@ -73,38 +72,60 @@ Start tuna exit:
 
 Then users can connect to your services over NKN through their *tuna* client
 
-### Specifying service ports programmatically
+## Use as library
 
-In case you're running services with dynamic ports it may be inconvenient to specify port in the `services.json` before each launch.  
-Instead you can run TUNA's exit programmatically, launch your service and then provide it's port to TUNA.
+Most of them times you just need to run tuna entry/exit as a separate program
+together with the services, but you can also use tuna as a library. See
+[bin/entry/main.go](bin/entry/main.go) and [bin/exit/main.go](bin/exit/main.go)
+for examples.
 
-```go
-...
-// read/prepare config
-// init wallet sdk
-// launch your service
-port := ... // port of the newly launched service
-...
-serviceName := "proxy"
-services := []tuna.Service{{
-    Name: serviceName,
-    TCP:  []int{port},
-}}
-exit := tuna.NewTunaExit(config, services, wallet) // can be used only once-per-service
-exit.StartReverse(serviceName)
+## Compiling to iOS/Android native library
 
-select {} // prevent TUNA from exiting
+This library is designed to work with
+[gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) and run natively
+on iOS/Android without any modification. You can use `gomobile bind` to compile
+it to Objective-C framework for iOS:
+
+```shell
+gomobile bind -target=ios -ldflags "-s -w" github.com/nknorg/tuna github.com/nknorg/nkn-sdk-go
 ```
 
-### Getting dynamic ports
+and Java AAR for Android:
 
-When some of the ports of the service is specified as 0, then entry will use random ports for them, here's how you can check which ports it's actually using:
-```go
-exit.OnEntryConnected(func() {
-    ip := exit.GetReverseIP()
-    tcpPorts := exit.GetReverseTCPPorts()
-    udpPorts := exit.GetReverseUDPPorts()
-})
+```shell
+gomobile bind -target=android -ldflags "-s -w" github.com/nknorg/tuna github.com/nknorg/nkn-sdk-go
 ```
-Returned ports will correspond to local ports specified in the same order.  
-This information will only be available after connection with the reverse entry has been made.
+
+More likely you might want to write a simple wrapper uses tuna and compile it
+using gomobile.
+
+It's recommended to use the latest version of gomobile that supports go modules.
+
+## Contributing
+
+**Can I submit a bug, suggestion or feature request?**
+
+Yes. Please open an issue for that.
+
+**Can I contribute patches?**
+
+Yes, we appreciate your help! To make contributions, please fork the repo, push
+your changes to the forked repo with signed-off commits, and open a pull request
+here.
+
+Please sign off your commit. This means adding a line "Signed-off-by: Name
+<email>" at the end of each commit, indicating that you wrote the code and have
+the right to pass it on as an open source patch. This can be done automatically
+by adding -s when committing:
+
+```shell
+git commit -s
+```
+
+## Community
+
+- [Forum](https://forum.nkn.org/)
+- [Discord](https://discord.gg/c7mTynX)
+- [Telegram](https://t.me/nknorg)
+- [Reddit](https://www.reddit.com/r/nknblockchain/)
+- [Twitter](https://twitter.com/NKN_ORG)
