@@ -270,7 +270,11 @@ func (te *TunaEntry) getPaymentStream() (*smux.Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	return te.paymentStream, nil
+	paymentStream := te.paymentStream
+	if paymentStream == nil {
+		return nil, errors.New("nil payment stream")
+	}
+	return paymentStream, nil
 }
 
 func (te *TunaEntry) openServiceStream(portID byte, force bool) (*smux.Stream, error) {
