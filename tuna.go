@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	nkn "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/nkn/crypto/ed25519"
 	"github.com/nknorg/nkn/transaction"
@@ -45,9 +45,10 @@ const (
 	DefaultServiceListenIP                 = "127.0.0.1"
 	DefaultReverseServiceListenIP          = "0.0.0.0"
 	TrafficUnit                            = 1024 * 1024
-	MinTrafficCoverage                     = 0.9
+	MaxTrafficOwned                        = 32 * 1024 * 1024
 	getSubscribersBatchSize                = 32
 	DefaultEncryptionAlgo                  = pb.ENCRYPTION_NONE
+	MaxNanoPayDelay                        = 30 * time.Second
 )
 
 type ServiceInfo struct {
@@ -503,20 +504,28 @@ func (c *Common) startPayment(
 ) {
 	var np *nkn.NanoPay
 	lastCost := common.Fixed64(0)
+	var bytesIn, bytesOut uint64
 	entryToExitPrice, exitToEntryPrice := c.GetPrice()
+	cost := common.Fixed64(0)
 
-	time.Sleep(DefaultNanoPayUpdateInterval)
-
+	paymentTimer := time.After(DefaultNanoPayUpdateInterval)
 	for {
 		select {
 		case <-closeChan:
 			return
-		default:
+		case <-time.After(100 * time.Millisecond):
+			bytesIn = atomic.LoadUint64(bytesInUsed)
+			bytesOut = atomic.LoadUint64(bytesOutUsed)
+			if (bytesIn+bytesOut)-(*bytesInPaid+*bytesOutPaid) <= uint64(MaxTrafficOwned) {
+				continue
+			}
+		case <-paymentTimer:
+			paymentTimer = time.After(2 * time.Second)
 		}
 
-		bytesIn := atomic.LoadUint64(bytesInUsed)
-		bytesOut := atomic.LoadUint64(bytesOutUsed)
-		cost := exitToEntryPrice*common.Fixed64(bytesIn-*bytesInPaid)/TrafficUnit + entryToExitPrice*common.Fixed64(bytesOut-*bytesOutPaid)/TrafficUnit
+		bytesIn = atomic.LoadUint64(bytesInUsed)
+		bytesOut = atomic.LoadUint64(bytesOutUsed)
+		cost = exitToEntryPrice*common.Fixed64(bytesIn-*bytesInPaid)/TrafficUnit + entryToExitPrice*common.Fixed64(bytesOut-*bytesOutPaid)/TrafficUnit
 		if cost == lastCost {
 			time.Sleep(DefaultNanoPayUpdateInterval / 10)
 			continue
@@ -546,11 +555,9 @@ func (c *Common) startPayment(
 			time.Sleep(time.Second)
 			continue
 		}
-
 		*bytesInPaid = bytesIn
 		*bytesOutPaid = bytesOut
-
-		time.Sleep(DefaultNanoPayUpdateInterval)
+		paymentTimer = time.After(DefaultNanoPayUpdateInterval)
 	}
 }
 
@@ -820,27 +827,33 @@ func checkNanoPayClaim(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nk
 	}
 }
 
-func checkPaymentTimeout(session *smux.Session, updateTimeout time.Duration, lastUpdate *time.Time, isClosed *bool, getTotalCost func() common.Fixed64) {
-	totalCost := getTotalCost()
+func checkPayment(session *smux.Session, lastUpdate *time.Time, bytesPaid *common.Fixed64, lastClaimed *common.Fixed64, isClosed *bool, getTotalCost func() (common.Fixed64, common.Fixed64)) {
 	lastCost := common.Fixed64(0)
 	for {
-		time.Sleep(5 * time.Second)
-
-		if *isClosed {
-			break
+		for {
+			time.Sleep(time.Second)
+			if *isClosed {
+				return
+			}
+			totalCost, totalBytes := getTotalCost()
+			if totalCost.GetData() == lastCost.GetData() {
+				continue
+			}
+			lastCost = totalCost
+			if time.Since(*lastUpdate) > DefaultNanoPayUpdateInterval {
+				break
+			}
+			unpaidTraffic := totalBytes - *bytesPaid
+			if unpaidTraffic > MaxTrafficOwned {
+				break
+			}
 		}
-
-		totalCost = getTotalCost()
-		if totalCost.GetData() == lastCost.GetData() {
-			continue
-		}
-		lastCost = totalCost
-
-		if time.Since(*lastUpdate) > updateTimeout {
-			log.Println("Didn't update nano pay for more than", updateTimeout.String())
+		time.Sleep(MaxNanoPayDelay)
+		if time.Since(*lastUpdate) > DefaultNanoPayUpdateInterval || *lastClaimed < lastCost {
 			Close(session)
 			*isClosed = true
-			break
+			log.Printf("Didn't update nano pay for more than %s or %d cost", (DefaultNanoPayUpdateInterval).String(), lastCost.GetData())
+			return
 		}
 	}
 }
@@ -875,13 +888,12 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 }
 
 func handlePaymentStream(
-	session *smux.Session,
 	stream *smux.Stream,
 	npc *nkn.NanoPayClaimer,
 	lastClaimed *common.Fixed64,
-	getTotalCost func() common.Fixed64,
 	lastUpdate *time.Time,
-	isClosed *bool,
+	bytesPaid *common.Fixed64,
+	getTotalCost func() (common.Fixed64, common.Fixed64),
 ) error {
 	for {
 		tx, err := ReadVarBytes(stream)
@@ -889,19 +901,14 @@ func handlePaymentStream(
 			return fmt.Errorf("couldn't read payment stream: %v", err)
 		}
 
+		_, totalBytes := getTotalCost()
+
 		err = nanoPayClaim(tx, npc, lastClaimed)
 		if err != nil {
 			log.Println("Couldn't claim nanoPay:", err)
 			continue
 		}
-
-		totalCost := getTotalCost()
+		*bytesPaid = totalBytes
 		*lastUpdate = time.Now()
-
-		if float64(*lastClaimed) < float64(totalCost)*MinTrafficCoverage {
-			Close(session)
-			*isClosed = true
-			return fmt.Errorf("Nano pay amount covers less than %f%% of total cost (%d/%d)", MinTrafficCoverage*100, lastClaimed, totalCost)
-		}
 	}
 }
