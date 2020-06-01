@@ -411,152 +411,155 @@ func (te *TunaExit) Start() error {
 	return te.updateAllMetadata(ip, uint32(te.config.ListenTCP), uint32(te.config.ListenUDP))
 }
 
-func (te *TunaExit) StartReverse() error {
+func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 	serviceID := byte(0)
 	service, err := te.getService(serviceID)
 	if err != nil {
 		return err
 	}
 
-	go func() {
-		var tcpConn net.Conn
-		for {
-			err := te.Common.CreateServerConn(true)
+	var tcpConn net.Conn
+	for {
+		err := te.Common.CreateServerConn(true)
+		if err != nil {
+			log.Println("Couldn't connect to reverse entry:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		udpPort := 0
+		var udpConn *net.UDPConn
+		if len(service.UDP) > 0 {
+			udpConn, err = te.Common.GetServerUDPConn(false)
 			if err != nil {
-				log.Println("Couldn't connect to reverse entry:", err)
+				log.Println(err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
-
-			udpPort := 0
-			var udpConn *net.UDPConn
-			if len(service.UDP) > 0 {
-				udpConn, err = te.Common.GetServerUDPConn(false)
+			if udpConn != nil {
+				_, udpPortString, err := net.SplitHostPort(udpConn.LocalAddr().String())
 				if err != nil {
 					log.Println(err)
 					time.Sleep(1 * time.Second)
 					continue
 				}
-				if udpConn != nil {
-					_, udpPortString, err := net.SplitHostPort(udpConn.LocalAddr().String())
-					if err != nil {
-						log.Println(err)
-						time.Sleep(1 * time.Second)
-						continue
-					}
-					udpPort, err = strconv.Atoi(udpPortString)
-					if err != nil {
-						log.Println(err)
-						time.Sleep(1 * time.Second)
-						continue
-					}
+				udpPort, err = strconv.Atoi(udpPortString)
+				if err != nil {
+					log.Println(err)
+					time.Sleep(1 * time.Second)
+					continue
 				}
-			}
-
-			var tcpPorts []uint32
-			var udpPorts []uint32
-			if te.config.ReverseRandomPorts {
-				tcpPorts = make([]uint32, len(service.TCP))
-				udpPorts = make([]uint32, len(service.UDP))
-			} else {
-				tcpPorts = service.TCP
-				udpPorts = service.UDP
-			}
-
-			serviceMetadata := CreateRawMetadata(
-				serviceID,
-				tcpPorts,
-				udpPorts,
-				"",
-				0,
-				uint32(udpPort),
-				"",
-				te.config.BeneficiaryAddr,
-			)
-
-			tcpConn, err = te.Common.GetServerTCPConn(false)
-			if err != nil {
-				log.Println(err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			session, err := smux.Client(tcpConn, nil)
-			if err != nil {
-				log.Println(err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			stream, err := session.OpenStream()
-			if err != nil {
-				log.Println("Couldn't open stream to reverse entry:", err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			err = WriteVarBytes(stream, serviceMetadata)
-			if err != nil {
-				log.Println("Couldn't send metadata to reverse entry:", err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			buf, err := ReadVarBytes(stream)
-			if err != nil {
-				log.Println("Couldn't read reverse metadata:", err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			reverseMetadata, err := ReadMetadata(string(buf))
-			if err != nil {
-				log.Println("Couldn't unmarshal metadata:", err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			paymentStream, err := openPaymentStream(session)
-			if err != nil {
-				log.Println("Couldn't open payment stream:", err)
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
-			te.reverseIP = tcpConn.RemoteAddr().(*net.TCPAddr).IP
-			te.reverseTCP = reverseMetadata.ServiceTcp
-			te.reverseUDP = reverseMetadata.ServiceUdp
-			te.OnConnect.receive()
-
-			if udpConn != nil {
-				te.udpConn = udpConn
-				te.readUDP()
-			}
-
-			getPaymentStream := func() (*smux.Stream, error) {
-				return paymentStream, nil
-			}
-
-			go te.Common.startPayment(
-				&te.reverseBytesIn, &te.reverseBytesOut, &te.reverseBytesInPaid, &te.reverseBytesOutPaid,
-				te.config.ReverseNanoPayFee,
-				getPaymentStream,
-				te.closeChan,
-			)
-
-			te.handleSession(session)
-
-			Close(tcpConn)
-
-			select {
-			case _, ok := <-te.closeChan:
-				if !ok {
-					return
-				}
-			default:
 			}
 		}
-	}()
+
+		var tcpPorts []uint32
+		var udpPorts []uint32
+		if te.config.ReverseRandomPorts {
+			tcpPorts = make([]uint32, len(service.TCP))
+			udpPorts = make([]uint32, len(service.UDP))
+		} else {
+			tcpPorts = service.TCP
+			udpPorts = service.UDP
+		}
+
+		serviceMetadata := CreateRawMetadata(
+			serviceID,
+			tcpPorts,
+			udpPorts,
+			"",
+			0,
+			uint32(udpPort),
+			"",
+			te.config.BeneficiaryAddr,
+		)
+
+		tcpConn, err = te.Common.GetServerTCPConn(false)
+		if err != nil {
+			log.Println(err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		session, err := smux.Client(tcpConn, nil)
+		if err != nil {
+			log.Println(err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		stream, err := session.OpenStream()
+		if err != nil {
+			log.Println("Couldn't open stream to reverse entry:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		err = WriteVarBytes(stream, serviceMetadata)
+		if err != nil {
+			log.Println("Couldn't send metadata to reverse entry:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		buf, err := ReadVarBytes(stream)
+		if err != nil {
+			log.Println("Couldn't read reverse metadata:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		reverseMetadata, err := ReadMetadata(string(buf))
+		if err != nil {
+			log.Println("Couldn't unmarshal metadata:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		paymentStream, err := openPaymentStream(session)
+		if err != nil {
+			log.Println("Couldn't open payment stream:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		te.reverseIP = tcpConn.RemoteAddr().(*net.TCPAddr).IP
+		te.reverseTCP = reverseMetadata.ServiceTcp
+		te.reverseUDP = reverseMetadata.ServiceUdp
+		te.OnConnect.receive()
+
+		if udpConn != nil {
+			te.udpConn = udpConn
+			te.readUDP()
+		}
+
+		getPaymentStream := func() (*smux.Stream, error) {
+			return paymentStream, nil
+		}
+
+		go te.Common.startPayment(
+			&te.reverseBytesIn, &te.reverseBytesOut, &te.reverseBytesInPaid, &te.reverseBytesOutPaid,
+			te.config.ReverseNanoPayFee,
+			getPaymentStream,
+			te.closeChan,
+		)
+
+		te.handleSession(session)
+
+		Close(tcpConn)
+
+		if !shouldReconnect {
+			te.Close()
+			break
+		}
+
+		select {
+		case _, ok := <-te.closeChan:
+			if !ok {
+				return nil
+			}
+		default:
+		}
+	}
 
 	return nil
 }

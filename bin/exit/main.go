@@ -72,18 +72,19 @@ func main() {
 					log.Fatalln(err)
 				}
 
+				go func() {
+					defer te.Close()
+					err := te.StartReverse(true)
+					if err != nil {
+						log.Fatalln(err)
+					}
+				}()
+
 				go func(service tuna.Service) {
 					for range te.OnConnect.C {
 						log.Printf("Service: %s, Address: %v:%v\n", service.Name, te.GetReverseIP(), te.GetReverseTCPPorts())
 					}
 				}(service)
-
-				err = te.StartReverse()
-				if err != nil {
-					log.Fatalln(err)
-				}
-
-				defer te.Close()
 			}
 		}
 	} else {

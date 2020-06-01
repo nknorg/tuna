@@ -84,8 +84,13 @@ func main() {
 					if err != nil {
 						log.Fatalln(err)
 					}
-					go te.Start()
-					defer te.Close()
+					go func() {
+						defer te.Close()
+						err := te.Start(true)
+						if err != nil {
+							log.Fatalln(err)
+						}
+					}()
 					continue service
 				}
 			}
