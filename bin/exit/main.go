@@ -65,24 +65,26 @@ func main() {
 	}
 
 	if config.Reverse {
-		for serviceName := range config.Services {
-			te, err := tuna.NewTunaExit(config, services, wallet)
-			if err != nil {
-				log.Fatalln(err)
-			}
-
-			go func() {
-				for range te.OnConnect.C {
-					log.Printf("Service: %s, Address: %v:%v\n", serviceName, te.GetReverseIP(), te.GetReverseTCPPorts())
+		for _, service := range services {
+			if _, ok := config.Services[service.Name]; ok {
+				te, err := tuna.NewTunaExit(config, []tuna.Service{service}, wallet)
+				if err != nil {
+					log.Fatalln(err)
 				}
-			}()
 
-			err = te.StartReverse(serviceName)
-			if err != nil {
-				log.Fatalln(err)
+				go func(service tuna.Service) {
+					for range te.OnConnect.C {
+						log.Printf("Service: %s, Address: %v:%v\n", service.Name, te.GetReverseIP(), te.GetReverseTCPPorts())
+					}
+				}(service)
+
+				err = te.StartReverse()
+				if err != nil {
+					log.Fatalln(err)
+				}
+
+				defer te.Close()
 			}
-
-			defer te.Close()
 		}
 	} else {
 		te, err := tuna.NewTunaExit(config, services, wallet)

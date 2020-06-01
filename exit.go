@@ -62,7 +62,40 @@ type TunaExit struct {
 }
 
 func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) (*TunaExit, error) {
-	common, err := NewCommon(nil, nil, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil)
+	var service *Service
+	var serviceInfo *ServiceInfo
+	var subscriptionPrefix string
+	var reverseMetadata *pb.ServiceMetadata
+	if config.Reverse {
+		if len(services) != 1 {
+			return nil, errors.New("services should have length 1")
+		}
+
+		reverseServiceName := config.ReverseServiceName
+		if len(reverseServiceName) == 0 {
+			reverseServiceName = DefaultReverseServiceName
+		}
+
+		service = &Service{
+			Name:       reverseServiceName,
+			Encryption: services[0].Encryption,
+		}
+
+		serviceInfo = &ServiceInfo{
+			MaxPrice: config.ReverseMaxPrice,
+			IPFilter: &config.ReverseIPFilter,
+		}
+
+		subscriptionPrefix = config.ReverseSubscriptionPrefix
+
+		reverseMetadata = &pb.ServiceMetadata{}
+		reverseMetadata.ServiceTcp = services[0].TCP
+		reverseMetadata.ServiceUdp = services[0].UDP
+	} else {
+		subscriptionPrefix = config.SubscriptionPrefix
+	}
+
+	common, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, reverseMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -378,41 +411,9 @@ func (te *TunaExit) Start() error {
 	return te.updateAllMetadata(ip, uint32(te.config.ListenTCP), uint32(te.config.ListenUDP))
 }
 
-func (te *TunaExit) StartReverse(serviceName string) error {
-	serviceID, err := te.getServiceID(serviceName)
-	if err != nil {
-		return err
-	}
-
+func (te *TunaExit) StartReverse() error {
+	serviceID := byte(0)
 	service, err := te.getService(serviceID)
-	if err != nil {
-		return err
-	}
-
-	reverseMetadata := &pb.ServiceMetadata{}
-	reverseMetadata.ServiceTcp = service.TCP
-	reverseMetadata.ServiceUdp = service.UDP
-
-	reverseServiceName := te.config.ReverseServiceName
-	if len(reverseServiceName) == 0 {
-		reverseServiceName = DefaultReverseServiceName
-	}
-
-	te.Common, err = NewCommon(
-		&Service{
-			Name:       reverseServiceName,
-			Encryption: service.Encryption,
-		},
-		&ServiceInfo{
-			MaxPrice: te.config.ReverseMaxPrice,
-			IPFilter: &te.config.ReverseIPFilter,
-		},
-		te.Wallet,
-		te.config.DialTimeout,
-		te.config.ReverseSubscriptionPrefix,
-		false,
-		reverseMetadata,
-	)
 	if err != nil {
 		return err
 	}
