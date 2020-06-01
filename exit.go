@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	nkn "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna/pb"
 	"github.com/patrickmn/go-cache"
@@ -95,13 +95,13 @@ func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wall
 		subscriptionPrefix = config.SubscriptionPrefix
 	}
 
-	common, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, reverseMetadata)
+	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, reverseMetadata)
 	if err != nil {
 		return nil, err
 	}
 
 	te := &TunaExit{
-		Common:      common,
+		Common:      c,
 		config:      config,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
@@ -130,11 +130,13 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	var npc *nkn.NanoPayClaimer
 	var err error
 	lastClaimed := common.Fixed64(0)
+	bytesPaid := common.Fixed64(0)
 	lastUpdate := time.Now()
 	isClosed := false
 
-	getTotalCost := func() common.Fixed64 {
+	getTotalCost := func() (common.Fixed64, common.Fixed64) {
 		cost := common.Fixed64(0)
+		totalBytes := common.Fixed64(0)
 		for i := range bytesIn {
 			in := atomic.LoadUint64(&bytesIn[i])
 			out := atomic.LoadUint64(&bytesOut[i])
@@ -151,8 +153,9 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				continue
 			}
 			cost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
+			totalBytes += common.Fixed64(in) + common.Fixed64(out)
 		}
-		return cost
+		return cost, totalBytes
 	}
 
 	if !te.config.Reverse {
@@ -163,7 +166,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 
 		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, getTotalCost)
+		go checkPayment(session, &lastUpdate, &bytesPaid, &lastClaimed, &isClosed, getTotalCost)
 	}
 
 	for {
@@ -177,11 +180,11 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			err := func() error {
 				streamMetadata, err := readStreamMetadata(stream)
 				if err != nil {
-					return fmt.Errorf("Read stream metadata error: %v", err)
+					return fmt.Errorf("read stream metadata error: %v", err)
 				}
 
 				if streamMetadata.IsPayment {
-					return handlePaymentStream(session, stream, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
+					return handlePaymentStream(stream, npc, &lastClaimed, &lastUpdate, &bytesPaid, getTotalCost)
 				}
 
 				serviceID := byte(streamMetadata.ServiceId)
@@ -395,7 +398,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort, udpPort uint32) error 
 func (te *TunaExit) Start() error {
 	ip, err := ipify.GetIp()
 	if err != nil {
-		return fmt.Errorf("Couldn't get IP: %v", err)
+		return fmt.Errorf("couldn't get IP: %v", err)
 	}
 
 	err = te.listenTCP(int(te.config.ListenTCP))

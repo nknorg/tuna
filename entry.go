@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	nkn "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna/pb"
 	"github.com/patrickmn/go-cache"
@@ -56,13 +56,13 @@ type TunaEntry struct {
 }
 
 func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) (*TunaEntry, error) {
-	common, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, nil)
+	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	te := &TunaEntry{
-		Common:       common,
+		Common:       c,
 		config:       config,
 		tcpListeners: make(map[byte]*net.TCPListener),
 		serviceConn:  make(map[byte]*net.UDPConn),
@@ -164,6 +164,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
+	bytesPaid := common.Fixed64(0)
 	lastClaimed := common.Fixed64(0)
 	lastUpdate := time.Now()
 	claimInterval := time.Duration(te.config.ReverseClaimInterval) * time.Second
@@ -179,15 +180,15 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	getTotalCost := func() common.Fixed64 {
-		in := atomic.LoadUint64(&te.reverseBytesIn)
-		out := atomic.LoadUint64(&te.reverseBytesOut)
-		return entryToExitPrice*common.Fixed64(out)/TrafficUnit + exitToEntryPrice*common.Fixed64(in)/TrafficUnit
+	getTotalCost := func() (common.Fixed64, common.Fixed64) {
+		in := common.Fixed64(atomic.LoadUint64(&te.reverseBytesIn))
+		out := common.Fixed64(atomic.LoadUint64(&te.reverseBytesOut))
+		return entryToExitPrice*out/TrafficUnit + exitToEntryPrice*in/TrafficUnit, in + out
 	}
 
 	go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-	go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, getTotalCost)
+	go checkPayment(session, &lastUpdate, &lastClaimed, &bytesPaid, &isClosed, getTotalCost)
 
 	for {
 		stream, err := session.AcceptStream()
@@ -200,11 +201,11 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 			err := func() error {
 				streamMetadata, err := readStreamMetadata(stream)
 				if err != nil {
-					return fmt.Errorf("Read stream metadata error: %v", err)
+					return fmt.Errorf("read stream metadata error: %v", err)
 				}
 
 				if streamMetadata.IsPayment {
-					return handlePaymentStream(session, stream, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
+					return handlePaymentStream(stream, npc, &lastClaimed, &lastUpdate, &bytesPaid, getTotalCost)
 				}
 
 				return nil
