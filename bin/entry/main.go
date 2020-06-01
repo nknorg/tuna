@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/jessevdk/go-flags"
-	nkn "github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 )
