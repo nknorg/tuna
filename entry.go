@@ -76,7 +76,9 @@ func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfi
 	return te, nil
 }
 
-func (te *TunaEntry) Start() {
+func (te *TunaEntry) Start(shouldReconnect bool) error {
+	defer te.Close()
+
 	for {
 		err := te.CreateServerConn(true)
 		if err != nil {
@@ -88,8 +90,7 @@ func (te *TunaEntry) Start() {
 		listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
 		tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
 		if err != nil {
-			te.Close()
-			return
+			return err
 		}
 		if len(tcpPorts) > 0 {
 			log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
@@ -97,8 +98,7 @@ func (te *TunaEntry) Start() {
 
 		udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
 		if err != nil {
-			te.Close()
-			return
+			return err
 		}
 		if len(udpPorts) > 0 {
 			log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
@@ -116,6 +116,9 @@ func (te *TunaEntry) Start() {
 				_, err = session.AcceptStream()
 				if err != nil {
 					log.Println("Close connection:", err)
+					if !shouldReconnect {
+						te.Close()
+					}
 					return
 				}
 			}
@@ -132,91 +135,86 @@ func (te *TunaEntry) Start() {
 	}
 
 	<-te.closeChan
+
+	return nil
 }
 
 func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
+	defer te.Close()
+
 	metadata := te.GetMetadata()
 	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
 	tcpPorts, err := te.listenTCP(listenIP, metadata.ServiceTcp)
 	if err != nil {
-		te.Close()
 		return err
 	}
 	udpPorts, err := te.listenUDP(listenIP, metadata.ServiceUdp)
 	if err != nil {
-		te.Close()
 		return err
 	}
 
 	serviceMetadata := CreateRawMetadata(0, tcpPorts, udpPorts, "", 0, 0, "", te.config.ReverseBeneficiaryAddr)
 	err = WriteVarBytes(stream, serviceMetadata)
 	if err != nil {
-		te.Close()
 		return err
 	}
 
-	go func() {
-		session, err := te.getSession(false)
+	session, err := te.getSession(false)
+	if err != nil {
+		return err
+	}
+
+	lastClaimed := common.Fixed64(0)
+	lastUpdate := time.Now()
+	claimInterval := time.Duration(te.config.ReverseClaimInterval) * time.Second
+	onErr := nkn.NewOnError(1, nil)
+	isClosed := false
+	entryToExitPrice, exitToEntryPrice, err := ParsePrice(te.config.ReversePrice)
+	if err != nil {
+		return err
+	}
+
+	npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
+	if err != nil {
+		return err
+	}
+
+	getTotalCost := func() common.Fixed64 {
+		in := atomic.LoadUint64(&te.reverseBytesIn)
+		out := atomic.LoadUint64(&te.reverseBytesOut)
+		return entryToExitPrice*common.Fixed64(out)/TrafficUnit + exitToEntryPrice*common.Fixed64(in)/TrafficUnit
+	}
+
+	go checkNanoPayClaim(session, npc, onErr, &isClosed)
+
+	go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, getTotalCost)
+
+	for {
+		stream, err := session.AcceptStream()
 		if err != nil {
-			return
+			log.Println("Couldn't accept stream:", err)
+			break
 		}
 
-		lastClaimed := common.Fixed64(0)
-		lastUpdate := time.Now()
-		claimInterval := time.Duration(te.config.ReverseClaimInterval) * time.Second
-		onErr := nkn.NewOnError(1, nil)
-		isClosed := false
-		entryToExitPrice, exitToEntryPrice, err := ParsePrice(te.config.ReversePrice)
-		if err != nil {
-			log.Println("parse reverse price error:", err)
-			te.Close()
-			return
-		}
-
-		npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
-		if err != nil {
-			log.Println(err)
-			te.Close()
-			return
-		}
-
-		getTotalCost := func() common.Fixed64 {
-			in := atomic.LoadUint64(&te.reverseBytesIn)
-			out := atomic.LoadUint64(&te.reverseBytesOut)
-			return entryToExitPrice*common.Fixed64(out)/TrafficUnit + exitToEntryPrice*common.Fixed64(in)/TrafficUnit
-		}
-
-		go checkNanoPayClaim(session, npc, onErr, &isClosed)
-
-		go checkPaymentTimeout(session, 2*DefaultNanoPayUpdateInterval, &lastUpdate, &isClosed, getTotalCost)
-
-		for {
-			stream, err := session.AcceptStream()
-			if err != nil {
-				log.Println("Couldn't accept stream:", err)
-				break
-			}
-
-			go func() {
-				err := func() error {
-					streamMetadata, err := readStreamMetadata(stream)
-					if err != nil {
-						return fmt.Errorf("Read stream metadata error: %v", err)
-					}
-
-					if streamMetadata.IsPayment {
-						return handlePaymentStream(session, stream, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
-					}
-
-					return nil
-				}()
+		go func() {
+			err := func() error {
+				streamMetadata, err := readStreamMetadata(stream)
 				if err != nil {
-					log.Println(err)
-					Close(stream)
+					return fmt.Errorf("Read stream metadata error: %v", err)
 				}
+
+				if streamMetadata.IsPayment {
+					return handlePaymentStream(session, stream, npc, &lastClaimed, getTotalCost, &lastUpdate, &isClosed)
+				}
+
+				return nil
 			}()
-		}
-	}()
+			if err != nil {
+				log.Println(err)
+				Close(stream)
+			}
+		}()
+	}
 
 	<-te.closeChan
 
@@ -558,7 +556,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 						te.SetServerUDPWriteChan(udpWriteChan)
 					}
 
-					te.StartReverse(stream)
+					err = te.StartReverse(stream)
+					if err != nil {
+						log.Println(err)
+					}
 
 					return nil
 				}()
