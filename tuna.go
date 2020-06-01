@@ -72,6 +72,7 @@ type Common struct {
 	Reverse            bool
 	ReverseMetadata    *pb.ServiceMetadata
 	OnConnect          *OnConnect
+	IsServer           bool
 
 	udpReadChan    chan []byte
 	udpWriteChan   chan []byte
@@ -92,7 +93,7 @@ type Common struct {
 	sharedKeys       map[string]*[sharedKeySize]byte
 }
 
-func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse bool, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
+func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse, isServer bool, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
 	encryptionAlgo := DefaultEncryptionAlgo
 	var err error
 	if service != nil && len(service.Encryption) > 0 {
@@ -115,6 +116,7 @@ func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, d
 		Reverse:            reverse,
 		ReverseMetadata:    reverseMetadata,
 		OnConnect:          NewOnConnect(1, nil),
+		IsServer:           isServer,
 		sharedKeys:         make(map[string]*[sharedKeySize]byte),
 		curveSecretKey:     curveSecretKey,
 		encryptionAlgo:     encryptionAlgo,
@@ -405,7 +407,7 @@ func (c *Common) CreateServerConn(force bool) error {
 	if err != nil {
 		log.Fatalf("Parse price of service error: %v", err)
 	}
-	if !c.Reverse && (c.GetConnected() == false || force) {
+	if !c.IsServer && (c.GetConnected() == false || force) {
 		topic := c.SubscriptionPrefix + c.Service.Name
 	RandomSubscriber:
 		for {

@@ -56,7 +56,7 @@ type TunaEntry struct {
 }
 
 func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) (*TunaEntry, error) {
-	common, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, nil)
+	common, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, nil)
 	if err != nil {
 		return nil, err
 	}
