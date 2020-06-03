@@ -104,7 +104,9 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
 		}
 
-		te.OnConnect.receive()
+		if !te.isClosed {
+			te.OnConnect.receive()
+		}
 
 		go func() {
 			session, err := te.getSession(false)
