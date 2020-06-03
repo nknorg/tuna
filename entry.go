@@ -104,9 +104,13 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
 		}
 
-		if !te.isClosed {
-			te.OnConnect.receive()
+		te.RLock()
+		if te.isClosed {
+			te.RUnlock()
+			return nil
 		}
+		te.OnConnect.receive()
+		te.RUnlock()
 
 		go func() {
 			session, err := te.getSession(false)
@@ -238,6 +242,12 @@ func (te *TunaEntry) Close() {
 		}
 		te.OnConnect.close()
 	}
+}
+
+func (te *TunaEntry) IsClosed() bool {
+	te.RLock()
+	defer te.RUnlock()
+	return te.isClosed
 }
 
 func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
