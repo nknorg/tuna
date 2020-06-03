@@ -4,14 +4,11 @@ TUNA (Tunnel Using NKN for any Application) allows anyone to tunnel any network
 based services through NKN. Node will receive payment for tunneled traffic
 directly from user.
 
+## Build
+
+Simply run `make` will do the work. The output binary name will be `tuna`.
+
 ## Tuna Entry
-
-### Build
-
-Simply run:
-```shell
-go build -o entry bin/entry/main.go
-```
 
 ### How to use
 
@@ -32,19 +29,12 @@ Edit `config.entry.json` with your data:
 
 Start tuna entry:
 ```shell
-./entry
+./tuna entry
 ```
 
 Then you can start using configured services as if they're on your local machine (e.g. `127.0.0.1:30080` for HTTP proxy)
 
 ## Tuna Exit
-
-### Build
-
-Simply run:
-```shell
-go build -o exit bin/exit/main.go
-```
 
 ### How to use
 
@@ -67,7 +57,7 @@ Edit `config.exit.json` with your data:
 
 Start tuna exit:
 ```shell
-./exit
+./tuna exit
 ```
 
 Then users can connect to your services over NKN through their *tuna* client
@@ -76,8 +66,7 @@ Then users can connect to your services over NKN through their *tuna* client
 
 Most of them times you just need to run tuna entry/exit as a separate program
 together with the services, but you can also use tuna as a library. See
-[bin/entry/main.go](bin/entry/main.go) and [bin/exit/main.go](bin/exit/main.go)
-for examples.
+[cmd/entry.go](cmd/entry.go) and [cmd/exit.go](cmd/exit.go) for examples.
 
 ## Compiling to iOS/Android native library
 
