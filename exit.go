@@ -46,19 +46,19 @@ type ExitConfiguration struct {
 
 type TunaExit struct {
 	*Common
-	config              *ExitConfiguration
-	services            []Service
-	serviceConn         *cache.Cache
-	tcpListener         net.Listener
-	udpConn             *net.UDPConn
-	reverseIP           net.IP
-	reverseTCP          []uint32
-	reverseUDP          []uint32
-	closeChan           chan struct{}
-	reverseBytesIn      uint64
-	reverseBytesOut     uint64
-	reverseBytesInPaid  uint64
-	reverseBytesOutPaid uint64
+	config                      *ExitConfiguration
+	services                    []Service
+	serviceConn                 *cache.Cache
+	tcpListener                 net.Listener
+	udpConn                     *net.UDPConn
+	reverseIP                   net.IP
+	reverseTCP                  []uint32
+	reverseUDP                  []uint32
+	closeChan                   chan struct{}
+	reverseBytesEntryToExit     uint64
+	reverseBytesExitToEntry     uint64
+	reverseBytesEntryToExitPaid uint64
+	reverseBytesExitToEntryPaid uint64
 }
 
 func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) (*TunaExit, error) {
@@ -122,25 +122,24 @@ func (te *TunaExit) getServiceID(serviceName string) (byte, error) {
 }
 
 func (te *TunaExit) handleSession(session *smux.Session) {
-	bytesIn := make([]uint64, 256)
-	bytesOut := make([]uint64, 256)
+	bytesEntryToExit := make([]uint64, 256)
+	bytesExitToEntry := make([]uint64, 256)
 
+	var npc *nkn.NanoPayClaimer
+	var lastPaymentAmount, bytesPaid common.Fixed64
+	var err error
 	claimInterval := time.Duration(te.config.ClaimInterval) * time.Second
 	onErr := nkn.NewOnError(1, nil)
-	var npc *nkn.NanoPayClaimer
-	var err error
-	lastClaimed := common.Fixed64(0)
-	bytesPaid := common.Fixed64(0)
-	lastUpdate := time.Now()
+	lastPaymentTime := time.Now()
 	isClosed := false
 
 	getTotalCost := func() (common.Fixed64, common.Fixed64) {
 		cost := common.Fixed64(0)
 		totalBytes := common.Fixed64(0)
-		for i := range bytesIn {
-			in := atomic.LoadUint64(&bytesIn[i])
-			out := atomic.LoadUint64(&bytesOut[i])
-			if in == 0 && out == 0 {
+		for i := range bytesEntryToExit {
+			entryToExit := common.Fixed64(atomic.LoadUint64(&bytesEntryToExit[i]))
+			exitToEntry := common.Fixed64(atomic.LoadUint64(&bytesExitToEntry[i]))
+			if entryToExit == 0 && exitToEntry == 0 {
 				continue
 			}
 			service, err := te.getService(byte(i))
@@ -152,8 +151,8 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			if err != nil {
 				continue
 			}
-			cost += entryToExitPrice*common.Fixed64(in)/TrafficUnit + exitToEntryPrice*common.Fixed64(out)/TrafficUnit
-			totalBytes += common.Fixed64(in) + common.Fixed64(out)
+			cost += entryToExitPrice*entryToExit/TrafficUnit + exitToEntryPrice*exitToEntry/TrafficUnit
+			totalBytes += entryToExit + exitToEntry
 		}
 		return cost, totalBytes
 	}
@@ -166,7 +165,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 
 		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-		go checkPayment(session, &lastUpdate, &bytesPaid, &lastClaimed, &isClosed, getTotalCost)
+		go checkPayment(session, &lastPaymentTime, &lastPaymentAmount, &bytesPaid, &isClosed, getTotalCost)
 	}
 
 	for {
@@ -184,7 +183,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				}
 
 				if streamMetadata.IsPayment {
-					return handlePaymentStream(stream, npc, &lastClaimed, &lastUpdate, &bytesPaid, getTotalCost)
+					return handlePaymentStream(stream, npc, &lastPaymentTime, &lastPaymentAmount, &bytesPaid, getTotalCost)
 				}
 
 				serviceID := byte(streamMetadata.ServiceId)
@@ -218,11 +217,11 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				}
 
 				if te.config.Reverse {
-					go Pipe(conn, stream, &te.reverseBytesIn)
-					go Pipe(stream, conn, &te.reverseBytesOut)
+					go Pipe(conn, stream, &te.reverseBytesEntryToExit)
+					go Pipe(stream, conn, &te.reverseBytesExitToEntry)
 				} else {
-					go Pipe(conn, stream, &bytesIn[serviceID])
-					go Pipe(stream, conn, &bytesOut[serviceID])
+					go Pipe(conn, stream, &bytesEntryToExit[serviceID])
+					go Pipe(stream, conn, &bytesExitToEntry[serviceID])
 				}
 
 				return nil
@@ -546,7 +545,8 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		}
 
 		go te.Common.startPayment(
-			&te.reverseBytesIn, &te.reverseBytesOut, &te.reverseBytesInPaid, &te.reverseBytesOutPaid,
+			&te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry,
+			&te.reverseBytesEntryToExitPaid, &te.reverseBytesExitToEntryPaid,
 			te.config.ReverseNanoPayFee,
 			getPaymentStream,
 			te.closeChan,
