@@ -39,8 +39,10 @@ zip:
 
 .PHONY: all
 all:
-	${MAKE} build GOOS=darwin GOARCH=amd64
 	${MAKE} build GOOS=linux GOARCH=amd64
+	${MAKE} build GOOS=linux GOARCH=arm
+	${MAKE} build GOOS=linux GOARCH=arm64
+	${MAKE} build GOOS=darwin GOARCH=amd64
 	${MAKE} build GOOS=windows GOARCH=amd64 EXT=.exe
 
 .PHONY: pb
