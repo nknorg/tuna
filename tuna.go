@@ -304,30 +304,37 @@ func (c *Common) getOrComputeSharedKey(remotePublicKey []byte) (*[sharedKeySize]
 }
 
 func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, error) {
-	var connMetadata *pb.ConnectionMetadata
+	var connNonce []byte
+	var encryptionAlgo pb.EncryptionAlgo
+
 	if len(remotePublicKey) > 0 {
-		connMetadata = &pb.ConnectionMetadata{
-			EncryptionAlgo: c.encryptionAlgo,
+		encryptionAlgo = c.encryptionAlgo
+
+		err := writeConnMetadata(conn, &pb.ConnectionMetadata{
+			EncryptionAlgo: encryptionAlgo,
 			PublicKey:      c.Wallet.PubKey(),
-		}
-
-		b, err := proto.Marshal(connMetadata)
+		})
 		if err != nil {
 			return nil, err
 		}
 
-		err = WriteVarBytes(conn, b)
+		connMetadata, err := readConnMetadata(conn)
 		if err != nil {
 			return nil, err
 		}
+
+		connNonce = connMetadata.Nonce
 	} else {
-		b, err := ReadVarBytes(conn)
+		connNonce = util.RandomBytes(connNonceSize)
+
+		err := writeConnMetadata(conn, &pb.ConnectionMetadata{
+			Nonce: connNonce,
+		})
 		if err != nil {
 			return nil, err
 		}
 
-		connMetadata = &pb.ConnectionMetadata{}
-		err = proto.Unmarshal(b, connMetadata)
+		connMetadata, err := readConnMetadata(conn)
 		if err != nil {
 			return nil, err
 		}
@@ -336,10 +343,11 @@ func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, e
 			return nil, fmt.Errorf("invalid pubkey size %d", len(connMetadata.PublicKey))
 		}
 
+		encryptionAlgo = connMetadata.EncryptionAlgo
 		remotePublicKey = connMetadata.PublicKey
 	}
 
-	if connMetadata.EncryptionAlgo == pb.ENCRYPTION_NONE {
+	if encryptionAlgo == pb.ENCRYPTION_NONE {
 		return conn, nil
 	}
 
@@ -348,7 +356,9 @@ func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, e
 		return nil, err
 	}
 
-	return encryptConn(conn, sharedKey, connMetadata.EncryptionAlgo)
+	encryptKey := computeEncryptKey(connNonce, sharedKey[:])
+
+	return encryptConn(conn, encryptKey, encryptionAlgo)
 }
 
 func (c *Common) UpdateServerConn(remotePublicKey []byte) error {

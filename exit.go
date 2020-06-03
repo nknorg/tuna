@@ -257,7 +257,7 @@ func (te *TunaExit) listenTCP(port int) error {
 			go func() {
 				defer Close(conn)
 
-				encryptedConn, err := te.Common.encryptConn(conn, nil)
+				encryptedConn, err := te.encryptConn(conn, nil)
 				if err != nil {
 					log.Println(err)
 					return
