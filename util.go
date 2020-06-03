@@ -10,6 +10,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna/pb"
+	"github.com/xtaci/smux"
 )
 
 var encryptionAlgoMap = map[string]pb.EncryptionAlgo{
@@ -137,4 +138,33 @@ func writeConnMetadata(conn net.Conn, connMetadata *pb.ConnectionMetadata) error
 	}
 
 	return WriteVarBytes(conn, b)
+}
+
+func readStreamMetadata(stream *smux.Stream) (*pb.StreamMetadata, error) {
+	b, err := ReadVarBytes(stream)
+	if err != nil {
+		return nil, err
+	}
+
+	streamMetadata := &pb.StreamMetadata{}
+	err = proto.Unmarshal(b, streamMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	return streamMetadata, nil
+}
+
+func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata) error {
+	b, err := proto.Marshal(streamMetadata)
+	if err != nil {
+		return err
+	}
+
+	err = WriteVarBytes(stream, b)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

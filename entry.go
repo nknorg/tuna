@@ -39,20 +39,20 @@ type EntryConfiguration struct {
 
 type TunaEntry struct {
 	*Common
-	config             *EntryConfiguration
-	tcpListeners       map[byte]*net.TCPListener
-	serviceConn        map[byte]*net.UDPConn
-	clientAddr         *cache.Cache
-	session            *smux.Session
-	paymentStream      *smux.Stream
-	closeChan          chan struct{}
-	bytesIn            uint64
-	bytesInPaid        uint64
-	bytesOut           uint64
-	bytesOutPaid       uint64
-	reverseBytesIn     uint64
-	reverseBytesOut    uint64
-	reverseBeneficiary common.Uint160
+	config                  *EntryConfiguration
+	tcpListeners            map[byte]*net.TCPListener
+	serviceConn             map[byte]*net.UDPConn
+	clientAddr              *cache.Cache
+	session                 *smux.Session
+	paymentStream           *smux.Stream
+	closeChan               chan struct{}
+	bytesEntryToExit        uint64
+	bytesEntryToExitPaid    uint64
+	bytesExitToEntry        uint64
+	bytesExitToEntryPaid    uint64
+	reverseBytesEntryToExit uint64
+	reverseBytesExitToEntry uint64
+	reverseBeneficiary      common.Uint160
 }
 
 func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) (*TunaEntry, error) {
@@ -130,8 +130,9 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			}
 		}()
 
-		go te.Common.startPayment(
-			&te.bytesIn, &te.bytesOut, &te.bytesInPaid, &te.bytesOutPaid,
+		go te.startPayment(
+			&te.bytesEntryToExit, &te.bytesExitToEntry,
+			&te.bytesEntryToExitPaid, &te.bytesExitToEntryPaid,
 			te.config.NanoPayFee,
 			te.getPaymentStream,
 			te.closeChan,
@@ -170,12 +171,12 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	bytesPaid := common.Fixed64(0)
-	lastClaimed := common.Fixed64(0)
-	lastUpdate := time.Now()
+	var bytesPaid, lastPaymentAmount common.Fixed64
+	lastPaymentTime := time.Now()
 	claimInterval := time.Duration(te.config.ReverseClaimInterval) * time.Second
 	onErr := nkn.NewOnError(1, nil)
 	isClosed := false
+
 	entryToExitPrice, exitToEntryPrice, err := ParsePrice(te.config.ReversePrice)
 	if err != nil {
 		return err
@@ -187,14 +188,16 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	}
 
 	getTotalCost := func() (common.Fixed64, common.Fixed64) {
-		in := common.Fixed64(atomic.LoadUint64(&te.reverseBytesIn))
-		out := common.Fixed64(atomic.LoadUint64(&te.reverseBytesOut))
-		return entryToExitPrice*out/TrafficUnit + exitToEntryPrice*in/TrafficUnit, in + out
+		bytesEntryToExit := common.Fixed64(atomic.LoadUint64(&te.reverseBytesEntryToExit))
+		bytesExitToEntry := common.Fixed64(atomic.LoadUint64(&te.reverseBytesExitToEntry))
+		cost := entryToExitPrice*bytesEntryToExit/TrafficUnit + exitToEntryPrice*bytesExitToEntry/TrafficUnit
+		totalBytes := bytesEntryToExit + bytesExitToEntry
+		return cost, totalBytes
 	}
 
 	go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
-	go checkPayment(session, &lastUpdate, &lastClaimed, &bytesPaid, &isClosed, getTotalCost)
+	go checkPayment(session, &lastPaymentTime, &lastPaymentAmount, &bytesPaid, &isClosed, getTotalCost)
 
 	for {
 		stream, err := session.AcceptStream()
@@ -211,7 +214,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 				}
 
 				if streamMetadata.IsPayment {
-					return handlePaymentStream(stream, npc, &lastClaimed, &lastUpdate, &bytesPaid, getTotalCost)
+					return handlePaymentStream(stream, npc, &lastPaymentTime, &lastPaymentAmount, &bytesPaid, getTotalCost)
 				}
 
 				return nil
@@ -353,11 +356,11 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 					}
 
 					if te.config.Reverse {
-						go Pipe(stream, conn, &te.reverseBytesIn)
-						go Pipe(conn, stream, &te.reverseBytesOut)
+						go Pipe(stream, conn, &te.reverseBytesEntryToExit)
+						go Pipe(conn, stream, &te.reverseBytesExitToEntry)
 					} else {
-						go Pipe(stream, conn, &te.bytesOut)
-						go Pipe(conn, stream, &te.bytesIn)
+						go Pipe(stream, conn, &te.bytesEntryToExit)
+						go Pipe(conn, stream, &te.bytesExitToEntry)
 					}
 				}()
 			}
