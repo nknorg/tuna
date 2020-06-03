@@ -232,10 +232,16 @@ func (c *Common) GetPaymentReceiver() string {
 	return c.paymentReceiver
 }
 
-func (c *Common) SetPaymentReceiver(paymentReceiver string) {
+func (c *Common) SetPaymentReceiver(paymentReceiver string) error {
+	if len(paymentReceiver) > 0 {
+		if err := nkn.VerifyWalletAddress(paymentReceiver); err != nil {
+			return err
+		}
+	}
 	c.Lock()
 	defer c.Unlock()
 	c.paymentReceiver = paymentReceiver
+	return nil
 }
 
 func (c *Common) GetPrice() (common.Fixed64, common.Fixed64) {
@@ -418,11 +424,15 @@ func (c *Common) CreateServerConn(force bool) error {
 	if err != nil {
 		log.Fatalf("Parse price of service error: %v", err)
 	}
+
 	if !c.IsServer && (c.GetConnected() == false || force) {
 		topic := c.SubscriptionPrefix + c.Service.Name
-	RandomSubscriber:
 		for {
-			c.SetPaymentReceiver("")
+			err = c.SetPaymentReceiver("")
+			if err != nil {
+				return err
+			}
+
 			subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
 			if err != nil {
 				return err
@@ -439,10 +449,20 @@ func (c *Common) CreateServerConn(force bool) error {
 
 			for subscriber, metadataString := range subscribers.Subscribers.Map {
 				if !c.SetMetadata(metadataString) {
-					continue RandomSubscriber
+					continue
 				}
 
 				metadata := c.GetMetadata()
+
+				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+
+				if entryToExitPrice > entryToExitMaxPrice || exitToEntryPrice > exitToEntryMaxPrice {
+					continue
+				}
 
 				res, err := c.ServiceInfo.IPFilter.GeoCheck(metadata.Ip)
 				if err != nil {
@@ -453,28 +473,23 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 
 				if len(metadata.BeneficiaryAddr) > 0 {
-					c.SetPaymentReceiver(metadata.BeneficiaryAddr)
+					err = c.SetPaymentReceiver(metadata.BeneficiaryAddr)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
 				} else {
 					address, err := nkn.ClientAddrToWalletAddr(subscriber)
 					if err != nil {
 						log.Println(err)
-						continue RandomSubscriber
+						continue
 					}
 
-					c.SetPaymentReceiver(address)
-				}
-
-				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
-				if err != nil {
-					log.Println(err)
-					continue RandomSubscriber
-				}
-
-				if entryToExitPrice > entryToExitMaxPrice {
-					continue RandomSubscriber
-				}
-				if exitToEntryPrice > exitToEntryMaxPrice {
-					continue RandomSubscriber
+					err = c.SetPaymentReceiver(address)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
 				}
 
 				c.Lock()
@@ -489,16 +504,16 @@ func (c *Common) CreateServerConn(force bool) error {
 				remotePublicKey, err := nkn.ClientAddrToPubKey(subscriber)
 				if err != nil {
 					log.Println(err)
-					continue RandomSubscriber
+					continue
 				}
 
 				err = c.UpdateServerConn(remotePublicKey)
 				if err != nil {
 					log.Println(err)
-					continue RandomSubscriber
+					continue
 				}
 
-				break RandomSubscriber
+				return nil
 			}
 		}
 	}
@@ -542,7 +557,7 @@ func (c *Common) startPayment(
 
 		paymentStream, err := getPaymentStream()
 		if err != nil {
-			log.Printf("get payment stream err: %v", err)
+			log.Printf("Get payment stream err: %v", err)
 			continue
 		}
 
@@ -550,14 +565,14 @@ func (c *Common) startPayment(
 		if np == nil || np.Recipient() != paymentReceiver {
 			np, err = c.Wallet.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
 			if err != nil {
-				log.Printf("create nano payment err: %v", err)
+				log.Printf("Create nanopay err: %v", err)
 				continue
 			}
 		}
 
 		err = sendNanoPay(np, paymentStream, cost)
 		if err != nil {
-			log.Printf("send nano payment err: %v", err)
+			log.Printf("Send nanopay err: %v", err)
 			continue
 		}
 
