@@ -4,8 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna/pb"
 )
@@ -56,7 +58,7 @@ func (c *OnConnect) close() {
 }
 
 func ParseEncryptionAlgo(encryptionAlgoStr string) (pb.EncryptionAlgo, error) {
-	if encryptionAlgo, ok := encryptionAlgoMap[strings.ToLower(encryptionAlgoStr)]; ok {
+	if encryptionAlgo, ok := encryptionAlgoMap[strings.ToLower(strings.TrimSpace(encryptionAlgoStr))]; ok {
 		return encryptionAlgo, nil
 	}
 	return 0, fmt.Errorf("unknown encryption algo %v", encryptionAlgoStr)
@@ -111,4 +113,28 @@ func WriteVarBytes(writer io.Writer, b []byte) error {
 	}
 
 	return nil
+}
+
+func readConnMetadata(conn net.Conn) (*pb.ConnectionMetadata, error) {
+	b, err := ReadVarBytes(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	connMetadata := &pb.ConnectionMetadata{}
+	err = proto.Unmarshal(b, connMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	return connMetadata, nil
+}
+
+func writeConnMetadata(conn net.Conn, connMetadata *pb.ConnectionMetadata) error {
+	b, err := proto.Marshal(connMetadata)
+	if err != nil {
+		return err
+	}
+
+	return WriteVarBytes(conn, b)
 }

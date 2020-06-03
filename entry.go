@@ -502,7 +502,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 						return err
 					}
 
-					encryptedConn, err := te.Common.encryptConn(tcpConn, nil)
+					encryptedConn, err := te.encryptConn(tcpConn, nil)
 					if err != nil {
 						return err
 					}
