@@ -3,36 +3,24 @@ package main
 import (
 	"log"
 	"net"
-	"os"
 
-	"github.com/jessevdk/go-flags"
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 )
 
-var opts struct {
-	BeneficiaryAddr string `short:"b" long:"beneficiary-addr" description:"Beneficiary address (NKN wallet address to receive rewards)"`
-	ConfigFile      string `short:"c" long:"config" description:"Config file path" default:"config.entry.json"`
-	ServicesFile    string `short:"s" long:"services" description:"Services file path" default:"services.json"`
-	WalletFile      string `short:"w" long:"wallet" description:"Wallet file path" default:"wallet.json"`
-	PasswordFile    string `short:"p" long:"password-file" description:"Wallet password file path" default:"wallet.pswd"`
+type EntryCommand struct {
+	ConfigFile string `short:"c" long:"config" description:"Config file path" default:"config.entry.json"`
 }
 
-func main() {
-	_, err := flags.Parse(&opts)
-	if err != nil {
-		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
-			os.Exit(0)
-		}
-		log.Fatalln(err)
-	}
+var entryCommand EntryCommand
 
+func (e *EntryCommand) Execute(args []string) error {
 	config := &tuna.EntryConfiguration{
 		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
 		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
 	}
-	err = tuna.ReadJSON(opts.ConfigFile, config)
+	err := tuna.ReadJSON(e.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config error:", err)
 	}
@@ -99,4 +87,8 @@ func main() {
 	}
 
 	select {}
+}
+
+func init() {
+	parser.AddCommand("entry", "Tuna entry mode", "Start tuna in entry mode", &entryCommand)
 }

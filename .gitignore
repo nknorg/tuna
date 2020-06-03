@@ -2,10 +2,7 @@
 vendor
 *~
 .DS_Store
-entry
-exit
-!bin/entry
-!bin/exit
+tuna
 wallet.json
 wallet.pswd
 build

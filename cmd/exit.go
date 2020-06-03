@@ -2,36 +2,24 @@ package main
 
 import (
 	"log"
-	"os"
 
-	"github.com/jessevdk/go-flags"
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 )
 
-var opts struct {
-	BeneficiaryAddr string `short:"b" long:"beneficiary-addr" description:"Beneficiary address (NKN wallet address to receive rewards)"`
-	ConfigFile      string `short:"c" long:"config" description:"Config file path" default:"config.exit.json"`
-	ServicesFile    string `short:"s" long:"services" description:"Services file path" default:"services.json"`
-	WalletFile      string `short:"w" long:"wallet" description:"Wallet file path" default:"wallet.json"`
-	PasswordFile    string `short:"p" long:"password-file" description:"Wallet password file path" default:"wallet.pswd"`
+type ExitCommand struct {
+	ConfigFile string `short:"c" long:"config" description:"Config file path" default:"config.exit.json"`
 }
 
-func main() {
-	_, err := flags.Parse(&opts)
-	if err != nil {
-		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
-			os.Exit(0)
-		}
-		log.Fatalln(err)
-	}
+var exitCommand ExitCommand
 
+func (e *ExitCommand) Execute(args []string) error {
 	config := &tuna.ExitConfiguration{
 		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
 		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
 	}
-	err = tuna.ReadJSON(opts.ConfigFile, config)
+	err := tuna.ReadJSON(e.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config file error:", err)
 	}
@@ -102,4 +90,8 @@ func main() {
 	}
 
 	select {}
+}
+
+func init() {
+	parser.AddCommand("exit", "Tuna exit mode", "Start tuna in exit mode", &exitCommand)
 }

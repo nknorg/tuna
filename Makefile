@@ -5,23 +5,17 @@ BUILD=go build -ldflags "-s -w"
 BUILD_DIR=build
 BIN_DIR=$(GOOS)-$(GOARCH)
 
-.PHONY: entry
-entry:
-	$(BUILD) $(BUILD_PARAMS) bin/entry/main.go
-
-.PHONY: exit
-exit:
-	$(BUILD) $(BUILD_PARAMS) bin/exit/main.go
+.PHONY: tuna
+tuna:
+	$(BUILD) $(BUILD_PARAMS) ./cmd
 
 .PHONY: local
 local:
-	${MAKE} entry BUILD_PARAMS="-o entry"
-	${MAKE} exit BUILD_PARAMS="-o exit"
+	${MAKE} tuna BUILD_PARAMS="-o tuna"
 
 .PHONY: local_with_proxy
 local_with_proxy:
-	$(USE_PROXY) ${MAKE} entry BUILD_PARAMS="-o entry"
-	$(USE_PROXY) ${MAKE} exit BUILD_PARAMS="-o exit"
+	$(USE_PROXY) ${MAKE} tuna BUILD_PARAMS="-o tuna"
 
 .PHONY: local_or_with_proxy
 local_or_with_proxy:
@@ -30,8 +24,7 @@ local_or_with_proxy:
 .PHONY: build
 build:
 	mkdir -p $(BUILD_DIR)/$(BIN_DIR)
-	${MAKE} entry BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/entry$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
-	${MAKE} exit BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/exit$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
+	${MAKE} tuna BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/tuna$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
 	cp config.entry.json config.exit.json services.json $(BUILD_DIR)/$(BIN_DIR)/
 	${MAKE} zip
 
