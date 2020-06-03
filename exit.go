@@ -525,10 +525,16 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			continue
 		}
 
+		te.RLock()
+		if te.isClosed {
+			te.RUnlock()
+			return nil
+		}
 		te.reverseIP = tcpConn.RemoteAddr().(*net.TCPAddr).IP
 		te.reverseTCP = reverseMetadata.ServiceTcp
 		te.reverseUDP = reverseMetadata.ServiceUdp
 		te.OnConnect.receive()
+		te.RUnlock()
 
 		if udpConn != nil {
 			te.udpConn = udpConn
@@ -591,4 +597,10 @@ func (te *TunaExit) Close() {
 		Close(te.Common.udpConn)
 		te.OnConnect.close()
 	}
+}
+
+func (te *TunaExit) IsClosed() bool {
+	te.RLock()
+	defer te.RUnlock()
+	return te.isClosed
 }
