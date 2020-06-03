@@ -4,7 +4,6 @@ import (
 	"log"
 
 	"github.com/nknorg/nkn-sdk-go"
-	"github.com/nknorg/nkn/common"
 	"github.com/nknorg/tuna"
 )
 
@@ -28,7 +27,7 @@ func (e *ExitCommand) Execute(args []string) error {
 	}
 
 	if len(config.BeneficiaryAddr) > 0 {
-		_, err = common.ToScriptHash(config.BeneficiaryAddr)
+		err = nkn.VerifyWalletAddress(config.BeneficiaryAddr)
 		if err != nil {
 			log.Fatalln("Invalid beneficiary address:", err)
 		}
