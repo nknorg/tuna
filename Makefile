@@ -26,7 +26,9 @@ local_or_with_proxy:
 build:
 	mkdir -p $(BUILD_DIR)/$(BIN_DIR)
 	${MAKE} tuna BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/tuna$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
-	cp config.entry.json config.exit.json services.json $(BUILD_DIR)/$(BIN_DIR)/
+	cp config.entry.json.example $(BUILD_DIR)/$(BIN_DIR)/config.entry.json
+	cp config.exit.json.example $(BUILD_DIR)/$(BIN_DIR)/config.exit.json
+	cp services.json.example $(BUILD_DIR)/$(BIN_DIR)/services.json
 	${MAKE} zip
 
 .PHONY: tar
