@@ -8,11 +8,56 @@ directly from user.
 
 Simply run `make` will do the work. The output binary name will be `tuna`.
 
-## Tuna Entry
+## Get Started
 
-### How to use
+Either entry mode or exit mode will need a service definition file
+`services.json`. You can start by using `services.json.example` as template. The
+service file defines what services to use or provide, which ports a service
+uses, and various configurations like encryption.
 
-Edit `config.entry.json` with your data:
+### Entry Mode
+
+You will need a config file `config.entry.json`. You can start by using
+`config.entry.json.example` as template.
+
+Start tuna in entry mode:
+
+```
+./tuna entry
+```
+
+Then you can start using configured services as if they're on your local machine
+(e.g. `127.0.0.1:30080` for HTTP proxy).
+
+### Exit Mode
+
+You will need a config file `config.exit.json`. You can start by using
+`config.exit.json.example` as template.
+
+Start tuna in exit mode:
+
+```
+./tuna exit
+```
+
+Then users can connect to your services through their tuna entry and pay you NKN
+based on bandwidth comsumption.
+
+### Reverse Entry Mode
+
+Set `reverse` to `true` in `config.entry.json` and start tuna in entry mode.
+Then users can use your node as reverse proxy and pay you NKN based on bandwidth
+comsumption.
+
+### Reverse Exit Mode
+
+Set `reverse` to `true` in `config.exit.json` and start tuna in exit mode. Then
+your service will be exposed to public network by reverse entry. Your node does
+not need to have public IP address or open port at all.
+
+### Config
+
+Entry mode config `config.entry.json`:
 
 * `services` services you want to use
 * `dialTimeout` timeout for NKN node connection
@@ -27,18 +72,7 @@ Edit `config.entry.json` with your data:
 * `reverseSubscriptionDuration` duration for subscription in blocks
 * `reverseSubscriptionFee` fee used for subscription
 
-Start tuna entry:
-```shell
-./tuna entry
-```
-
-Then you can start using configured services as if they're on your local machine (e.g. `127.0.0.1:30080` for HTTP proxy)
-
-## Tuna Exit
-
-### How to use
-
-Edit `config.exit.json` with your data:
+Exit mode config `config.exit.json`:
 
 * `beneficiaryAddr` beneficiary address (NKN wallet address to receive rewards)
 * `listenTCP` TCP port to listen for connections
@@ -54,13 +88,6 @@ Edit `config.exit.json` with your data:
 * `reverseMaxPrice` max accepted price for reverse service, unit is NKN per MB traffic
 * `reverseNanoPayFee` nanoPay transaction fee for reverse service
 * `reverseIPFilter` reverse service IP address filter
-
-Start tuna exit:
-```shell
-./tuna exit
-```
-
-Then users can connect to your services over NKN through their *tuna* client
 
 ## Use as library
 
