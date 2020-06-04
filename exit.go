@@ -61,7 +61,7 @@ type TunaExit struct {
 	reverseBytesExitToEntryPaid uint64
 }
 
-func NewTunaExit(config *ExitConfiguration, services []Service, wallet *nkn.Wallet) (*TunaExit, error) {
+func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfiguration) (*TunaExit, error) {
 	var service *Service
 	var serviceInfo *ServiceInfo
 	var subscriptionPrefix string

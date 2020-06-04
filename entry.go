@@ -55,8 +55,8 @@ type TunaEntry struct {
 	reverseBeneficiary      common.Uint160
 }
 
-func NewTunaEntry(service *Service, serviceInfo *ServiceInfo, config *EntryConfiguration, wallet *nkn.Wallet) (*TunaEntry, error) {
-	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, nil)
+func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, config *EntryConfiguration) (*TunaEntry, error) {
+	c, err := NewCommon(&service, &serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -510,7 +510,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				err := func() error {
 					defer Close(tcpConn)
 
-					te, err := NewTunaEntry(&Service{}, &ServiceInfo{ListenIP: serviceListenIP}, config, wallet)
+					te, err := NewTunaEntry(Service{}, ServiceInfo{ListenIP: serviceListenIP}, wallet, config)
 					if err != nil {
 						return err
 					}
