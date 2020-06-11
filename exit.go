@@ -172,6 +172,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 		stream, err := session.AcceptStream()
 		if err != nil {
 			log.Println("Couldn't accept stream:", err)
+			session.Close()
 			break
 		}
 
