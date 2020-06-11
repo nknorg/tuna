@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -53,6 +54,7 @@ type TunaEntry struct {
 	reverseBytesEntryToExit uint64
 	reverseBytesExitToEntry uint64
 	reverseBeneficiary      common.Uint160
+	sessionLock             sync.Mutex
 }
 
 func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, config *EntryConfiguration) (*TunaEntry, error) {
@@ -113,19 +115,20 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 		te.RUnlock()
 
 		go func() {
-			session, err := te.getSession(false)
-			if err != nil {
-				return
-			}
-
 			for {
+				session, err := te.getSession()
+				if err != nil {
+					return
+				}
+
 				_, err = session.AcceptStream()
 				if err != nil {
 					log.Println("Close connection:", err)
+					session.Close()
 					if !shouldReconnect {
 						te.Close()
+						return
 					}
-					return
 				}
 			}
 		}()
@@ -166,7 +169,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	session, err := te.getSession(false)
+	session, err := te.getSession()
 	if err != nil {
 		return err
 	}
@@ -203,6 +206,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		stream, err := session.AcceptStream()
 		if err != nil {
 			log.Println("Couldn't accept stream:", err)
+			session.Close()
 			break
 		}
 
@@ -253,34 +257,51 @@ func (te *TunaEntry) IsClosed() bool {
 	return te.isClosed
 }
 
-func (te *TunaEntry) getSession(force bool) (*smux.Session, error) {
-	if te.Reverse && force {
-		te.Close()
-		return nil, errors.New("reverse connection to service is dead")
+func (te *TunaEntry) createSession(force bool) (*smux.Session, *smux.Stream, error) {
+	conn, err := te.GetServerTCPConn(force)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if te.session == nil || te.session.IsClosed() || force {
-		conn, err := te.GetServerTCPConn(force)
-		if err != nil {
-			return nil, err
+	session, err := smux.Client(conn, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	paymentStream, err := openPaymentStream(session)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return session, paymentStream, nil
+}
+
+func (te *TunaEntry) getSession() (*smux.Session, error) {
+	te.sessionLock.Lock()
+	defer te.sessionLock.Unlock()
+
+	if te.session == nil || te.session.IsClosed() {
+		if te.Reverse {
+			return nil, errors.New("reverse connection to exit is dead")
 		}
 
-		te.session, err = smux.Client(conn, nil)
+		session, paymentStream, err := te.createSession(false)
 		if err != nil {
-			return nil, err
+			session, paymentStream, err = te.createSession(true)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		te.paymentStream, err = openPaymentStream(te.session)
-		if err != nil {
-			return nil, err
-		}
+		te.session = session
+		te.paymentStream = paymentStream
 	}
 
 	return te.session, nil
 }
 
 func (te *TunaEntry) getPaymentStream() (*smux.Stream, error) {
-	_, err := te.getSession(false)
+	_, err := te.getSession()
 	if err != nil {
 		return nil, err
 	}
@@ -291,17 +312,15 @@ func (te *TunaEntry) getPaymentStream() (*smux.Stream, error) {
 	return paymentStream, nil
 }
 
-func (te *TunaEntry) openServiceStream(portID byte, force bool) (*smux.Stream, error) {
-	session, err := te.getSession(force)
+func (te *TunaEntry) openServiceStream(portID byte) (*smux.Stream, error) {
+	session, err := te.getSession()
 	if err != nil {
 		return nil, err
 	}
 
 	stream, err := session.OpenStream()
 	if err != nil {
-		if !force {
-			return te.openServiceStream(portID, true)
-		}
+		session.Close()
 		return nil, err
 	}
 
@@ -348,7 +367,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 				}
 
 				go func() {
-					stream, err := te.openServiceStream(portID, false)
+					stream, err := te.openServiceStream(portID)
 					if err != nil {
 						log.Println("Couldn't open stream:", err)
 						Close(conn)
@@ -529,6 +548,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 					stream, err := te.session.AcceptStream()
 					if err != nil {
+						te.session.Close()
 						return fmt.Errorf("couldn't accept stream: %v", err)
 					}
 

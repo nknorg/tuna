@@ -425,7 +425,7 @@ func (c *Common) CreateServerConn(force bool) error {
 		log.Fatalf("Parse price of service error: %v", err)
 	}
 
-	if !c.IsServer && (c.GetConnected() == false || force) {
+	if !c.IsServer && (!c.GetConnected() || force) {
 		topic := c.SubscriptionPrefix + c.Service.Name
 		for {
 			err = c.SetPaymentReceiver("")
@@ -786,6 +786,7 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 func openPaymentStream(session *smux.Session) (*smux.Stream, error) {
 	stream, err := session.OpenStream()
 	if err != nil {
+		session.Close()
 		return nil, err
 	}
 
