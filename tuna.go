@@ -46,9 +46,11 @@ const (
 	DefaultReverseServiceListenIP          = "0.0.0.0"
 	TrafficUnit                            = 1024 * 1024
 	MaxTrafficOwned                        = 32
+	MinTrafficCoverage                     = 0.9
+	TrafficDelay                           = 10 * time.Second
+	MaxNanoPayDelay                        = 20 * time.Second
 	getSubscribersBatchSize                = 32
 	DefaultEncryptionAlgo                  = pb.ENCRYPTION_NONE
-	MaxNanoPayDelay                        = 30 * time.Second
 )
 
 type ServiceInfo struct {
@@ -845,17 +847,31 @@ func checkNanoPayClaim(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nk
 }
 
 func checkPayment(session *smux.Session, lastPaymentTime *time.Time, lastPaymentAmount, bytesPaid *common.Fixed64, isClosed *bool, getTotalCost func() (common.Fixed64, common.Fixed64)) {
-	var totalCost, totalBytes common.Fixed64
-	for {
+	var totalCost, totalBytes, totalCostDelayed, totalBytesDelayed common.Fixed64
+
+	go func() {
 		for {
 			time.Sleep(time.Second)
+			if *isClosed {
+				return
+			}
+			totalCostNow, totalBytesNow := getTotalCost()
+			time.AfterFunc(TrafficDelay, func() {
+				totalCostDelayed, totalBytesDelayed = totalCostNow, totalBytesNow
+			})
+		}
+	}()
+
+	for {
+		for {
+			time.Sleep(100 * time.Millisecond)
 
 			if *isClosed {
 				return
 			}
 
-			totalCost, totalBytes = getTotalCost()
-			if totalCost == *lastPaymentAmount {
+			totalCost, totalBytes = totalCostDelayed, totalBytesDelayed
+			if totalCost <= *lastPaymentAmount {
 				continue
 			}
 
@@ -870,7 +886,7 @@ func checkPayment(session *smux.Session, lastPaymentTime *time.Time, lastPayment
 
 		time.Sleep(MaxNanoPayDelay)
 
-		if time.Since(*lastPaymentTime) > DefaultNanoPayUpdateInterval || *lastPaymentAmount < totalCost {
+		if time.Since(*lastPaymentTime) > DefaultNanoPayUpdateInterval || *lastPaymentAmount < common.Fixed64(MinTrafficCoverage*float64(totalCost)) {
 			Close(session)
 			*isClosed = true
 			log.Printf("Not enough payment. Since last payment: %s. Last claimed: %v, expected: %v", time.Since(*lastPaymentTime).String(), *lastPaymentAmount, totalCost)
