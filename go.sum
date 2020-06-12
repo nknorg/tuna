@@ -114,8 +114,8 @@ github.com/nknorg/ncp-go v0.0.0-20200406215949-844c0615f43e h1:GXrF3mGlyteQHkjDC
 github.com/nknorg/ncp-go v0.0.0-20200406215949-844c0615f43e/go.mod h1:LfiwrFlKZAAoMwhCBA959jSzVD8E9RGOH9nyfXkQSfY=
 github.com/nknorg/nkn v1.1.7-beta.0.20200508191852-5f3b0f1ddca2 h1:9ag+UBR8QzJQgP5xg7zwAeqV3KAOrCae4CqH6zmue+o=
 github.com/nknorg/nkn v1.1.7-beta.0.20200508191852-5f3b0f1ddca2/go.mod h1:ucbvc8OwUzCJVe0tTvYvU5NGxj2qyCSjwFUrJVkWTMI=
-github.com/nknorg/nkn-sdk-go v1.2.9 h1:RZY6SfmaZeFDpkK9l/OCZFSB7S8MT+yoXk2eqn2QfSY=
-github.com/nknorg/nkn-sdk-go v1.2.9/go.mod h1:KckZs8XrvUqzEbsLUfxfDdtoMD2N9h+m8QAHXZR0WVs=
+github.com/nknorg/nkn-sdk-go v1.2.10-0.20200612091815-02469924ab44 h1:FlWYV5sAEitDSmO1bu47Jl70BdDwMOMQNB5yT05AsI8=
+github.com/nknorg/nkn-sdk-go v1.2.10-0.20200612091815-02469924ab44/go.mod h1:KckZs8XrvUqzEbsLUfxfDdtoMD2N9h+m8QAHXZR0WVs=
 github.com/nknorg/nnet v0.0.0-20200410235204-23cc169e8564 h1:ti9VeFaELvkk9mO2oUgm6SN+jUM1JJLblN+qetJMzmk=
 github.com/nknorg/nnet v0.0.0-20200410235204-23cc169e8564/go.mod h1:4DHEQEMhlRGIKGSyhATdjeusdqaHafDatadtpeHBpvI=
 github.com/nknorg/nnet v0.0.0-20200521002812-357d1b11179f h1:JvDKr6D9LdnsdScND+8NcZ9UjXq9qi+Y1ZXbdQiXxkk=
