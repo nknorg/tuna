@@ -190,6 +190,8 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
+	defer npc.Close()
+
 	getTotalCost := func() (common.Fixed64, common.Fixed64) {
 		bytesEntryToExit := common.Fixed64(atomic.LoadUint64(&te.reverseBytesEntryToExit))
 		bytesExitToEntry := common.Fixed64(atomic.LoadUint64(&te.reverseBytesExitToEntry))
