@@ -824,9 +824,17 @@ func sendNanoPay(np *nkn.NanoPay, paymentStream *smux.Stream, cost common.Fixed6
 }
 
 func nanoPayClaim(txBytes []byte, npc *nkn.NanoPayClaimer) (*nkn.Amount, error) {
+	if len(txBytes) == 0 {
+		return nil, errors.New("empty txn bytes")
+	}
+
 	tx := &transaction.Transaction{}
 	if err := tx.Unmarshal(txBytes); err != nil {
 		return nil, fmt.Errorf("couldn't unmarshal payment stream data: %v", err)
+	}
+
+	if tx.UnsignedTx == nil {
+		return nil, errors.New("nil txn body")
 	}
 
 	return npc.Claim(tx)
