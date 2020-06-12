@@ -163,6 +163,8 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 			log.Fatalln(err)
 		}
 
+		defer npc.Close()
+
 		go checkNanoPayClaim(session, npc, onErr, &isClosed)
 
 		go checkPayment(session, &lastPaymentTime, &lastPaymentAmount, &bytesPaid, &isClosed, getTotalCost)
