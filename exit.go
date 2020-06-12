@@ -54,7 +54,6 @@ type TunaExit struct {
 	reverseIP                   net.IP
 	reverseTCP                  []uint32
 	reverseUDP                  []uint32
-	closeChan                   chan struct{}
 	reverseBytesEntryToExit     uint64
 	reverseBytesExitToEntry     uint64
 	reverseBytesEntryToExitPaid uint64
@@ -105,7 +104,6 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		config:      config,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
-		closeChan:   make(chan struct{}, 0),
 	}
 
 	return te, nil
@@ -392,6 +390,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort, udpPort uint32) error 
 			uint32(te.config.SubscriptionDuration),
 			te.config.SubscriptionFee,
 			te.Wallet,
+			te.closeChan,
 		)
 	}
 	return nil
@@ -552,7 +551,6 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			&te.reverseBytesEntryToExitPaid, &te.reverseBytesExitToEntryPaid,
 			te.config.ReverseNanoPayFee,
 			getPaymentStream,
-			te.closeChan,
 		)
 
 		te.handleSession(session)
