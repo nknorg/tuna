@@ -644,28 +644,19 @@ func UpdateMetadata(
 ) {
 	metadataRaw := CreateRawMetadata(serviceID, serviceTCP, serviceUDP, ip, tcpPort, udpPort, price, beneficiaryAddr)
 	topic := subscriptionPrefix + serviceName
-	waitTime := config.ConsensusDuration
+	subInterval := config.ConsensusDuration
 	if subscriptionDuration > 3 {
-		waitTime = time.Duration(subscriptionDuration-3) * config.ConsensusDuration
+		subInterval = time.Duration(subscriptionDuration-3) * config.ConsensusDuration
 	}
 
 	go func() {
 		for {
+			addToSubscribeQueue(wallet, "", topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
 			select {
+			case <-time.After(subInterval):
 			case <-closeChan:
 				return
-			default:
 			}
-
-			txid, err := wallet.Subscribe("", topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
-			if err != nil {
-				log.Println("Couldn't subscribe to topic", topic, "because:", err)
-				time.Sleep(time.Second)
-				continue
-			}
-
-			log.Println("Subscribed to topic", topic, "successfully:", txid)
-			time.Sleep(waitTime)
 		}
 	}()
 }
