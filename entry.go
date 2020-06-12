@@ -46,7 +46,6 @@ type TunaEntry struct {
 	clientAddr              *cache.Cache
 	session                 *smux.Session
 	paymentStream           *smux.Stream
-	closeChan               chan struct{}
 	bytesEntryToExit        uint64
 	bytesEntryToExitPaid    uint64
 	bytesExitToEntry        uint64
@@ -69,7 +68,6 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		tcpListeners: make(map[byte]*net.TCPListener),
 		serviceConn:  make(map[byte]*net.UDPConn),
 		clientAddr:   cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
-		closeChan:    make(chan struct{}),
 	}
 
 	te.SetServerUDPReadChan(make(chan []byte))
@@ -138,7 +136,6 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			&te.bytesEntryToExitPaid, &te.bytesExitToEntryPaid,
 			te.config.NanoPayFee,
 			te.getPaymentStream,
-			te.closeChan,
 		)
 
 		break
@@ -399,6 +396,10 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 
 	go func() {
 		for {
+			if te.IsClosed() {
+				return
+			}
+
 			serverReadChan, err := te.GetServerUDPReadChan(false)
 			if err != nil {
 				log.Println("Couldn't get server connection:", err)
@@ -447,10 +448,15 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 		go func() {
 			localBuffer := make([]byte, 2048)
 			for {
+				if te.IsClosed() {
+					return
+				}
+
 				n, addr, err := localConn.ReadFromUDP(localBuffer)
 				if err != nil {
 					log.Println("Couldn't receive data from local:", err)
-					continue
+					te.Close()
+					return
 				}
 
 				connKey := strconv.Itoa(addr.Port)
@@ -627,6 +633,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		uint32(config.ReverseSubscriptionDuration),
 		config.ReverseSubscriptionFee,
 		wallet,
+		make(chan struct{}),
 	)
 
 	return nil

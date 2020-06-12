@@ -83,6 +83,7 @@ type Common struct {
 	tcpListener    *net.TCPListener
 	curveSecretKey *[sharedKeySize]byte
 	encryptionAlgo pb.EncryptionAlgo
+	closeChan      chan struct{}
 
 	sync.RWMutex
 	paymentReceiver  string
@@ -123,6 +124,7 @@ func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, d
 		sharedKeys:         make(map[string]*[sharedKeySize]byte),
 		curveSecretKey:     curveSecretKey,
 		encryptionAlgo:     encryptionAlgo,
+		closeChan:          make(chan struct{}),
 	}
 
 	return common, nil
@@ -528,7 +530,6 @@ func (c *Common) startPayment(
 	bytesEntryToExitPaid, bytesExitToEntryPaid *uint64,
 	nanoPayFee string,
 	getPaymentStream func() (*smux.Stream, error),
-	closeChan chan struct{},
 ) {
 	var np *nkn.NanoPay
 	var bytesEntryToExit, bytesExitToEntry uint64
@@ -538,7 +539,7 @@ func (c *Common) startPayment(
 	paymentTimer := time.After(DefaultNanoPayUpdateInterval)
 	for {
 		select {
-		case <-closeChan:
+		case <-c.closeChan:
 			return
 		case <-time.After(100 * time.Millisecond):
 			bytesEntryToExit = atomic.LoadUint64(bytesEntryToExitUsed)
@@ -639,40 +640,31 @@ func UpdateMetadata(
 	subscriptionDuration uint32,
 	subscriptionFee string,
 	wallet *nkn.Wallet,
+	closeChan chan struct{},
 ) {
-	metadataRaw := CreateRawMetadata(
-		serviceID,
-		serviceTCP,
-		serviceUDP,
-		ip,
-		tcpPort,
-		udpPort,
-		price,
-		beneficiaryAddr,
-	)
+	metadataRaw := CreateRawMetadata(serviceID, serviceTCP, serviceUDP, ip, tcpPort, udpPort, price, beneficiaryAddr)
 	topic := subscriptionPrefix + serviceName
+	waitTime := config.ConsensusDuration
+	if subscriptionDuration > 3 {
+		waitTime = time.Duration(subscriptionDuration-3) * config.ConsensusDuration
+	}
+
 	go func() {
-		var waitTime time.Duration
 		for {
-			txid, err := wallet.Subscribe(
-				"",
-				topic,
-				int(subscriptionDuration),
-				string(metadataRaw),
-				&nkn.TransactionConfig{Fee: subscriptionFee},
-			)
-			if err != nil {
-				waitTime = time.Second
-				log.Println("Couldn't subscribe to topic", topic, "because:", err)
-			} else {
-				if subscriptionDuration > 3 {
-					waitTime = time.Duration(subscriptionDuration-3) * config.ConsensusDuration
-				} else {
-					waitTime = config.ConsensusDuration
-				}
-				log.Println("Subscribed to topic", topic, "successfully:", txid)
+			select {
+			case <-closeChan:
+				return
+			default:
 			}
 
+			txid, err := wallet.Subscribe("", topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
+			if err != nil {
+				log.Println("Couldn't subscribe to topic", topic, "because:", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			log.Println("Subscribed to topic", topic, "successfully:", txid)
 			time.Sleep(waitTime)
 		}
 	}()
