@@ -5,7 +5,7 @@
   "dialTimeout": 10,
   "udpTimeout": 60,
   "claimInterval": 3600,
-  "subscriptionDuration": 180,
+  "subscriptionDuration": 4320,
   "subscriptionFee": "0",
   "services": {
     "httpproxy": {

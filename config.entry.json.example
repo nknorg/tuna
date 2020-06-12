@@ -21,6 +21,6 @@
   "reverseUDP": 30021,
   "reversePrice": "0.001",
   "reverseClaimInterval": 3600,
-  "reverseSubscriptionDuration": 180,
+  "reverseSubscriptionDuration": 4320,
   "reverseSubscriptionFee": "0"
 }
