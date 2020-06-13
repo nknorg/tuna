@@ -45,19 +45,22 @@ type ExitConfiguration struct {
 }
 
 type TunaExit struct {
-	*Common
-	config                      *ExitConfiguration
-	services                    []Service
-	serviceConn                 *cache.Cache
-	tcpListener                 net.Listener
-	udpConn                     *net.UDPConn
-	reverseIP                   net.IP
-	reverseTCP                  []uint32
-	reverseUDP                  []uint32
+	// It's important to keep these uint64 field on top to avoid panic on arm32
+	// architecture: https://github.com/golang/go/issues/23345
 	reverseBytesEntryToExit     uint64
 	reverseBytesExitToEntry     uint64
 	reverseBytesEntryToExitPaid uint64
 	reverseBytesExitToEntryPaid uint64
+
+	*Common
+	config      *ExitConfiguration
+	services    []Service
+	serviceConn *cache.Cache
+	tcpListener net.Listener
+	udpConn     *net.UDPConn
+	reverseIP   net.IP
+	reverseTCP  []uint32
+	reverseUDP  []uint32
 }
 
 func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfiguration) (*TunaExit, error) {

@@ -39,21 +39,24 @@ type EntryConfiguration struct {
 }
 
 type TunaEntry struct {
-	*Common
-	config                  *EntryConfiguration
-	tcpListeners            map[byte]*net.TCPListener
-	serviceConn             map[byte]*net.UDPConn
-	clientAddr              *cache.Cache
-	session                 *smux.Session
-	paymentStream           *smux.Stream
+	// It's important to keep these uint64 field on top to avoid panic on arm32
+	// architecture: https://github.com/golang/go/issues/23345
 	bytesEntryToExit        uint64
 	bytesEntryToExitPaid    uint64
 	bytesExitToEntry        uint64
 	bytesExitToEntryPaid    uint64
 	reverseBytesEntryToExit uint64
 	reverseBytesExitToEntry uint64
-	reverseBeneficiary      common.Uint160
-	sessionLock             sync.Mutex
+
+	*Common
+	config             *EntryConfiguration
+	tcpListeners       map[byte]*net.TCPListener
+	serviceConn        map[byte]*net.UDPConn
+	clientAddr         *cache.Cache
+	session            *smux.Session
+	paymentStream      *smux.Stream
+	reverseBeneficiary common.Uint160
+	sessionLock        sync.Mutex
 }
 
 func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, config *EntryConfiguration) (*TunaEntry, error) {
