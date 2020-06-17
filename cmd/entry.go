@@ -67,7 +67,7 @@ func (e *EntryCommand) Execute(args []string) error {
 
 			for _, service := range services {
 				if service.Name == serviceName {
-					go func(service tuna.Service) {
+					go func(service tuna.Service, serviceInfo tuna.ServiceInfo) {
 						for {
 							te, err := tuna.NewTunaEntry(service, serviceInfo, wallet, config)
 							if err != nil {
@@ -80,7 +80,7 @@ func (e *EntryCommand) Execute(args []string) error {
 							}
 							te.Close()
 						}
-					}(service)
+					}(service, serviceInfo)
 					continue service
 				}
 			}
