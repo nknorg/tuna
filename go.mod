@@ -15,7 +15,7 @@ require (
 	github.com/nknorg/encrypted-stream v0.0.0-20200527140853-72d113d9d023
 	github.com/nknorg/ncp-go v0.0.0-20200406215949-844c0615f43e // indirect
 	github.com/nknorg/nkn v1.1.7-beta.0.20200508191852-5f3b0f1ddca2
-	github.com/nknorg/nkn-sdk-go v1.2.10-0.20200612200950-9a479d53530d
+	github.com/nknorg/nkn-sdk-go v1.2.10-0.20200619203022-cf029a37e2d0
 	github.com/nknorg/nnet v0.0.0-20200521002812-357d1b11179f // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/rdegges/go-ipify v0.0.0-20150526035502-2d94a6a86c40
@@ -24,7 +24,8 @@ require (
 	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9
 	golang.org/x/mod v0.3.0 // indirect
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9 // indirect
-	golang.org/x/sys v0.0.0-20200610111108-226ff32320da // indirect
+	golang.org/x/sys v0.0.0-20200615200032-f1bc736245b1 // indirect
+	golang.org/x/text v0.3.3 // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
-	golang.org/x/tools v0.0.0-20200612184736-e8084ff2bf72 // indirect
+	golang.org/x/tools v0.0.0-20200619180055-7c47624df98f // indirect
 )
