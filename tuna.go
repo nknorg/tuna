@@ -898,6 +898,9 @@ func handlePaymentStream(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastPayme
 		amount, err := nanoPayClaim(tx, npc)
 		if err != nil {
 			log.Println("Couldn't claim nanoPay:", err)
+			if npc.IsClosed() {
+				return fmt.Errorf("nanopayclaimer closed: %v", err)
+			}
 			continue
 		}
 
