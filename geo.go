@@ -48,7 +48,6 @@ func (f *IPFilter) Empty() bool {
 	if f == nil {
 		return true
 	}
-
 	for _, loc := range f.Allow {
 		if !loc.Empty() {
 			return false
@@ -60,6 +59,66 @@ func (f *IPFilter) Empty() bool {
 		}
 	}
 	return true
+}
+
+func (f *IPFilter) NeedGeoInfo() bool {
+	if f.Empty() {
+		return false
+	}
+	for _, loc := range f.Allow {
+		if len(loc.CountryCode) > 0 || len(loc.Country) > 0 || len(loc.City) > 0 {
+			return true
+		}
+	}
+	for _, loc := range f.Disallow {
+		if len(loc.CountryCode) > 0 || len(loc.Country) > 0 || len(loc.City) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *IPFilter) AllowIP(ip string) (bool, error) {
+	if f.Empty() {
+		return true, nil
+	}
+
+	var loc *Location
+	var err error
+	if f.NeedGeoInfo() {
+		loc, err = getLocationFromIP2C(ip, GeoIPRetry)
+		if err != nil {
+			return true, err
+		}
+	} else {
+		loc = &Location{IP: ip}
+	}
+
+	return f.AllowLocation(loc), nil
+}
+
+func (f *IPFilter) AllowLocation(loc *Location) bool {
+	if loc.Empty() {
+		return true
+	}
+
+	for _, l := range f.Disallow {
+		if l.Match(loc) {
+			return false
+		}
+	}
+
+	empty := true
+	for _, l := range f.Allow {
+		if l.Match(loc) {
+			return true
+		}
+		if !l.Empty() {
+			empty = false
+		}
+	}
+
+	return empty
 }
 
 func getLocationFromIP2C(ip string, retry int) (*Location, error) {
@@ -82,18 +141,22 @@ func getLocationFromIP2C(ip string, retry int) (*Location, error) {
 	if i == retry {
 		return &emptyLocation, err
 	}
+
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return &emptyLocation, err
 	}
+
 	loc, err := parseIP2C(string(body))
 	if err != nil {
 		log.Println(err)
 		return &Location{CountryCode: "UNKNOWN"}, nil
 	}
+
 	loc.IP = ip
+
 	return loc, nil
 }
 
@@ -101,9 +164,11 @@ func parseIP2C(body string) (*Location, error) {
 	if len(body) == 0 {
 		return nil, nil
 	}
+
 	if body[0] != byte('1') {
 		return nil, errors.New("get ip2c result err")
 	}
+
 	res := strings.Split(body, ";")
 	if len(res) != 4 {
 		return nil, errors.New("invalid response from ip2c service")
@@ -112,40 +177,6 @@ func parseIP2C(body string) (*Location, error) {
 	l := &Location{}
 	l.CountryCode = res[1]
 	l.Country = res[3]
+
 	return l, nil
-}
-
-func (f *IPFilter) GeoCheck(ip string) (bool, error) {
-	if f.Empty() {
-		return true, nil
-	}
-	loc, err := getLocationFromIP2C(ip, GeoIPRetry)
-	if err != nil {
-		return true, err
-	}
-
-	valid := f.ValidCheck(loc)
-	return valid, nil
-}
-
-func (f *IPFilter) ValidCheck(loc *Location) bool {
-	if loc.Empty() {
-		return true
-	}
-	for _, l := range f.Disallow {
-		if l.Match(loc) {
-			return false
-		}
-	}
-	empty := true
-	for _, l := range f.Allow {
-		if l.Match(loc) {
-			return true
-		}
-		if !l.Empty() {
-			empty = false
-		}
-	}
-
-	return empty
 }
