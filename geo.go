@@ -122,7 +122,7 @@ func (f *IPFilter) AllowLocation(loc *Location) bool {
 }
 
 func getLocationFromIP2C(ip string, retry int) (*Location, error) {
-	queryURL := "https://ip2c.org/" + ip
+	queryURL := "https://ip2c.nkn.org/" + ip
 	client := http.Client{
 		Timeout: 10 * time.Second,
 	}
