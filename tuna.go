@@ -468,7 +468,7 @@ func (c *Common) CreateServerConn(force bool) error {
 					continue
 				}
 
-				res, err := c.ServiceInfo.IPFilter.GeoCheck(metadata.Ip)
+				res, err := c.ServiceInfo.IPFilter.AllowIP(metadata.Ip)
 				if err != nil {
 					log.Println(err)
 				}
