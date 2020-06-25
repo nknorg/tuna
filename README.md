@@ -4,6 +4,8 @@ TUNA (Tunnel Using NKN for any Application) allows anyone to tunnel any network
 based services through NKN. Node will receive payment for tunneled traffic
 directly from user.
 
+Note: UDP mode is still work in progress. Please use TCP-only services for now.
+
 ## Build
 
 Simply run `make` will do the work. The output binary name will be `tuna`.
