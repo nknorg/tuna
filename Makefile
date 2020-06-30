@@ -4,7 +4,11 @@ USE_PROXY=GOPROXY=https://goproxy.io
 VERSION:=$(shell git describe --abbrev=7 --dirty --always --tags)
 BUILD=go build -ldflags "-s -w -X main.Version=$(VERSION)"
 BUILD_DIR=build
+ifdef GOARM
+BIN_DIR=$(GOOS)-$(GOARCH)v$(GOARM)
+else
 BIN_DIR=$(GOOS)-$(GOARCH)
+endif
 
 .PHONY: tuna
 tuna:
@@ -25,7 +29,7 @@ local_or_with_proxy:
 .PHONY: build
 build:
 	mkdir -p $(BUILD_DIR)/$(BIN_DIR)
-	${MAKE} tuna BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/tuna$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH)
+	${MAKE} tuna BUILD_PARAMS="-o $(BUILD_DIR)/$(BIN_DIR)/tuna$(EXT)" GOOS=$(GOOS) GOARCH=$(GOARCH) GOARM=$(GOARM)
 	cp config.entry.json.example $(BUILD_DIR)/$(BIN_DIR)/config.entry.json
 	cp config.exit.json.example $(BUILD_DIR)/$(BIN_DIR)/config.exit.json
 	cp services.json.example $(BUILD_DIR)/$(BIN_DIR)/services.json
@@ -42,7 +46,9 @@ zip:
 .PHONY: all
 all:
 	${MAKE} build GOOS=linux GOARCH=amd64
-	${MAKE} build GOOS=linux GOARCH=arm
+	${MAKE} build GOOS=linux GOARCH=arm GOARM=5
+	${MAKE} build GOOS=linux GOARCH=arm GOARM=6
+	${MAKE} build GOOS=linux GOARCH=arm GOARM=7
 	${MAKE} build GOOS=linux GOARCH=arm64
 	${MAKE} build GOOS=darwin GOARCH=amd64
 	${MAKE} build GOOS=windows GOARCH=amd64 EXT=.exe
