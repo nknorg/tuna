@@ -9,6 +9,7 @@ import (
 
 type ExitCommand struct {
 	ConfigFile string `short:"c" long:"config" description:"Config file path" default:"config.exit.json"`
+	Reverse    bool   `long:"reverse" description:"Reverse mode"`
 }
 
 var exitCommand ExitCommand
@@ -22,8 +23,13 @@ func (e *ExitCommand) Execute(args []string) error {
 	if err != nil {
 		log.Fatalln("Load config file error:", err)
 	}
+
 	if len(opts.BeneficiaryAddr) > 0 {
 		config.BeneficiaryAddr = opts.BeneficiaryAddr
+	}
+
+	if exitCommand.Reverse {
+		config.Reverse = true
 	}
 
 	if len(config.BeneficiaryAddr) > 0 {

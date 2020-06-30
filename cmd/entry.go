@@ -10,6 +10,7 @@ import (
 
 type EntryCommand struct {
 	ConfigFile string `short:"c" long:"config" description:"Config file path" default:"config.entry.json"`
+	Reverse    bool   `long:"reverse" description:"Reverse mode"`
 }
 
 var entryCommand EntryCommand
@@ -23,8 +24,13 @@ func (e *EntryCommand) Execute(args []string) error {
 	if err != nil {
 		log.Fatalln("Load config error:", err)
 	}
+
 	if len(opts.BeneficiaryAddr) > 0 {
 		config.ReverseBeneficiaryAddr = opts.BeneficiaryAddr
+	}
+
+	if entryCommand.Reverse {
+		config.Reverse = true
 	}
 
 	if len(config.ReverseBeneficiaryAddr) > 0 {
