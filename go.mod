@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/jessevdk/go-flags v1.4.0
-	github.com/nknorg/encrypted-stream v0.0.0-20200527140853-72d113d9d023
+	github.com/nknorg/encrypted-stream v1.0.0
 	github.com/nknorg/nkn-sdk-go v1.3.0
 	github.com/nknorg/nkn/v2 v2.0.0-20200703083743-f83cde273fe2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
