@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/pb"
 	"github.com/xtaci/smux"
 )

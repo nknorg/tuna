@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/nknorg/nkn-sdk-go"
-	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/pb"
 	"github.com/patrickmn/go-cache"
 	"github.com/rdegges/go-ipify"
@@ -83,6 +83,10 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 	defer te.Close()
 
 	for {
+		if te.IsClosed() {
+			return nil
+		}
+
 		err := te.CreateServerConn(true)
 		if err != nil {
 			log.Println("Couldn't connect to node:", err)

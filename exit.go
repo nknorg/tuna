@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/nknorg/nkn-sdk-go"
-	"github.com/nknorg/nkn/common"
+	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/pb"
 	"github.com/patrickmn/go-cache"
 	"github.com/rdegges/go-ipify"
