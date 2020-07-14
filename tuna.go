@@ -26,6 +26,7 @@ import (
 	"github.com/nknorg/nkn/v2/crypto/ed25519"
 	"github.com/nknorg/nkn/v2/transaction"
 	"github.com/nknorg/nkn/v2/util"
+	"github.com/nknorg/nkn/v2/util/address"
 	"github.com/nknorg/nkn/v2/util/config"
 	"github.com/nknorg/nkn/v2/vault"
 	"github.com/nknorg/tuna/pb"
@@ -51,6 +52,7 @@ const (
 	MaxNanoPayDelay                        = 20 * time.Second
 	getSubscribersBatchSize                = 32
 	DefaultEncryptionAlgo                  = pb.ENCRYPTION_NONE
+	subscribeDurationRandomFactor          = 0.1
 )
 
 type ServiceInfo struct {
@@ -644,19 +646,55 @@ func UpdateMetadata(
 ) {
 	metadataRaw := CreateRawMetadata(serviceID, serviceTCP, serviceUDP, ip, tcpPort, udpPort, price, beneficiaryAddr)
 	topic := subscriptionPrefix + serviceName
+	identifier := ""
 	subInterval := config.ConsensusDuration
 	if subscriptionDuration > 3 {
 		subInterval = time.Duration(subscriptionDuration-3) * config.ConsensusDuration
 	}
+	nextSub := time.After(0)
 
 	go func() {
+		func() {
+			sub, err := wallet.GetSubscription(topic, address.MakeAddressString(wallet.PubKey(), identifier))
+			if err != nil {
+				log.Println("Get existing subscription error:", err)
+				return
+			}
+
+			if len(sub.Meta) == 0 && sub.ExpiresAt == 0 {
+				return
+			}
+
+			if sub.Meta != string(metadataRaw) {
+				log.Println("Existing subscription meta need update.")
+				return
+			}
+
+			height, err := wallet.GetHeight()
+			if err != nil {
+				log.Println("Get current height error:", err)
+				return
+			}
+
+			if sub.ExpiresAt-height < 3 {
+				log.Println("Existing subscription is expiring")
+				return
+			}
+
+			log.Println("Existing subscription expires after", sub.ExpiresAt-height, "blocks")
+
+			maxSubDuration := float64(sub.ExpiresAt-height) * float64(config.ConsensusDuration)
+			nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * maxSubDuration))
+		}()
+
 		for {
-			addToSubscribeQueue(wallet, "", topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
 			select {
-			case <-time.After(subInterval):
+			case <-nextSub:
 			case <-closeChan:
 				return
 			}
+			addToSubscribeQueue(wallet, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
+			nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * float64(subInterval)))
 		}
 	}()
 }

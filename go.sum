@@ -80,6 +80,8 @@ github.com/nknorg/nkn-sdk-go v1.3.0 h1:iT/MqUx7VyqVo3ivz3VIBbB+VvaByld0YrQiVIlfd
 github.com/nknorg/nkn-sdk-go v1.3.0/go.mod h1:SeHZ25YcKIXDauhPw/v4XZjprWd+DtLDPNs3/U9/5qE=
 github.com/nknorg/nkn/v2 v2.0.0-20200703083743-f83cde273fe2 h1:YJL1RuRWLXcjRjm52aPn9JYryS41HBgfQvIVd5kGxZE=
 github.com/nknorg/nkn/v2 v2.0.0-20200703083743-f83cde273fe2/go.mod h1:LxKZTpn5VZTAbjsACSFL5nlQAQ4+WQKyIpVZUYopXm4=
+github.com/nknorg/nkn/v2 v2.0.2 h1:0bwUFFYkeVO6z+Odi52zHQ6IFs254D8GQfX5pfdfe+E=
+github.com/nknorg/nkn/v2 v2.0.2/go.mod h1:LxKZTpn5VZTAbjsACSFL5nlQAQ4+WQKyIpVZUYopXm4=
 github.com/nknorg/nnet v0.0.0-20200521002812-357d1b11179f h1:JvDKr6D9LdnsdScND+8NcZ9UjXq9qi+Y1ZXbdQiXxkk=
 github.com/nknorg/nnet v0.0.0-20200521002812-357d1b11179f/go.mod h1:4DHEQEMhlRGIKGSyhATdjeusdqaHafDatadtpeHBpvI=
 github.com/nknorg/portmapper v0.0.0-20200114081049-1c03cdccc283 h1:uS3/DvxCbi0zZau66ggQAgEjyGmql2mj77UQFgumq1I=
