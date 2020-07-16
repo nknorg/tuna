@@ -69,6 +69,7 @@ func (c *OnConnect) receive() {
 func (c *OnConnect) close() {
 	c.closeLock.Lock()
 	close(c.C)
+	c.isClosed = true
 	c.closeLock.Unlock()
 }
 
