@@ -53,6 +53,7 @@ type TunaExit struct {
 	reverseBytesExitToEntryPaid uint64
 
 	*Common
+	OnConnect   *OnConnect // override Common.OnConnect
 	config      *ExitConfiguration
 	services    []Service
 	serviceConn *cache.Cache
@@ -104,6 +105,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 
 	te := &TunaExit{
 		Common:      c,
+		OnConnect:   NewOnConnect(1, nil),
 		config:      config,
 		services:    services,
 		serviceConn: cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),

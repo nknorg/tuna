@@ -82,6 +82,23 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 func (te *TunaEntry) Start(shouldReconnect bool) error {
 	defer te.Close()
 
+	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
+	tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
+	if err != nil {
+		return err
+	}
+	if len(tcpPorts) > 0 {
+		log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
+	}
+
+	udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
+	if err != nil {
+		return err
+	}
+	if len(udpPorts) > 0 {
+		log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
+	}
+
 	for {
 		if te.IsClosed() {
 			return nil
@@ -93,31 +110,6 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
-		listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
-		tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
-		if err != nil {
-			return err
-		}
-		if len(tcpPorts) > 0 {
-			log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
-		}
-
-		udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
-		if err != nil {
-			return err
-		}
-		if len(udpPorts) > 0 {
-			log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
-		}
-
-		te.RLock()
-		if te.isClosed {
-			te.RUnlock()
-			return nil
-		}
-		te.OnConnect.receive()
-		te.RUnlock()
 
 		go func() {
 			for {

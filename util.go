@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/nknorg/nkn/v2/common"
@@ -26,6 +27,9 @@ type OnConnectFunc interface{ OnConnect() }
 type OnConnect struct {
 	C        chan struct{}
 	Callback OnConnectFunc
+
+	closeLock sync.RWMutex
+	isClosed  bool
 }
 
 // NewOnConnect creates an OnConnect channel with a channel size and callback
@@ -44,18 +48,28 @@ func (c *OnConnect) Next() {
 }
 
 func (c *OnConnect) receive() {
+	c.closeLock.RLock()
+	if c.isClosed {
+		c.closeLock.RUnlock()
+		return
+	}
 	if c.Callback != nil {
+		// RUnlock is called first to prevent OnConnect callback takeing long time
+		c.closeLock.RUnlock()
 		c.Callback.OnConnect()
 	} else {
 		select {
 		case c.C <- struct{}{}:
 		default:
 		}
+		c.closeLock.RUnlock()
 	}
 }
 
 func (c *OnConnect) close() {
+	c.closeLock.Lock()
 	close(c.C)
+	c.closeLock.Unlock()
 }
 
 func ParseEncryptionAlgo(encryptionAlgoStr string) (pb.EncryptionAlgo, error) {
