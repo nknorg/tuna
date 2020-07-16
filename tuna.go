@@ -422,6 +422,8 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 
 	c.SetConnected(true)
 
+	c.OnConnect.receive()
+
 	return nil
 }
 
