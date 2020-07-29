@@ -455,7 +455,17 @@ func (c *Common) CreateServerConn(force bool) error {
 				return err
 			}
 
-			for subscriber, metadataString := range subscribers.Subscribers.Map {
+			allSubscribers := make([]string, 0, len(subscribers.Subscribers.Map))
+			for subscriber := range subscribers.Subscribers.Map {
+				allSubscribers = append(allSubscribers, subscriber)
+			}
+
+			rand.Shuffle(len(allSubscribers), func(i, j int) {
+				allSubscribers[i], allSubscribers[j] = allSubscribers[j], allSubscribers[i]
+			})
+
+			for _, subscriber := range allSubscribers {
+				metadataString := subscribers.Subscribers.Map[subscriber]
 				if !c.SetMetadata(metadataString) {
 					continue
 				}
