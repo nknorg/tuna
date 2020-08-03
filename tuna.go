@@ -590,7 +590,7 @@ func (c *Common) startPayment(
 		err = sendNanoPay(np, paymentStream, cost)
 		if err != nil {
 			log.Printf("Send nanopay err: %v", err)
-			continue
+			return
 		}
 
 		*bytesEntryToExitPaid = bytesEntryToExit
