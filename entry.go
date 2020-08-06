@@ -201,6 +201,9 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	go checkPayment(session, &lastPaymentTime, &lastPaymentAmount, &bytesPaid, &isClosed, getTotalCost)
 
 	for {
+		if te.IsClosed() {
+			return nil
+		}
 		stream, err := session.AcceptStream()
 		if err != nil {
 			log.Println("Couldn't accept stream:", err)
@@ -365,6 +368,9 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 				}
 
 				go func() {
+					if te.IsClosed() {
+						return
+					}
 					stream, err := te.openServiceStream(portID)
 					if err != nil {
 						log.Println("Couldn't open stream:", err)
