@@ -47,7 +47,7 @@ const (
 	DefaultReverseServiceListenIP          = "0.0.0.0"
 	TrafficUnit                            = 1024 * 1024
 	MaxTrafficOwned                        = 32
-	MinTrafficCoverage                     = 0.9
+	MinTrafficCoverage                     = 0.8
 	TrafficDelay                           = 10 * time.Second
 	MaxNanoPayDelay                        = 20 * time.Second
 	getSubscribersBatchSize                = 32
@@ -582,6 +582,7 @@ func (c *Common) startPayment(
 			log.Printf("Send nanopay err: %v", err)
 			continue
 		}
+		log.Printf("send nanopay success: %s", cost.String())
 
 		*bytesEntryToExitPaid = bytesEntryToExit
 		*bytesExitToEntryPaid = bytesExitToEntry
@@ -828,9 +829,23 @@ func openPaymentStream(session *smux.Session) (*smux.Stream, error) {
 }
 
 func sendNanoPay(np *nkn.NanoPay, paymentStream *smux.Stream, cost common.Fixed64) error {
-	tx, err := np.IncrementAmount(cost.String())
-	if err != nil {
-		return err
+	var tx *transaction.Transaction
+	var err error
+	maxRetry := 3
+	for i := 0; ; i++ {
+		t, e := np.IncrementAmount(cost.String())
+		if e == nil {
+			tx = t
+			break
+		}
+		err = e
+		if i >= (maxRetry - 1) {
+			break
+		}
+		time.Sleep(time.Second * 3)
+	}
+	if tx == nil || tx.GetSize() == 0 {
+		return fmt.Errorf("send nanopay tx failed: %v", err)
 	}
 
 	txBytes, err := tx.Marshal()
@@ -917,7 +932,7 @@ func checkPayment(session *smux.Session, lastPaymentTime *time.Time, lastPayment
 
 		time.Sleep(MaxNanoPayDelay)
 
-		if time.Since(*lastPaymentTime) > DefaultNanoPayUpdateInterval || *lastPaymentAmount < common.Fixed64(MinTrafficCoverage*float64(totalCost)) {
+		if (time.Since(*lastPaymentTime) > DefaultNanoPayUpdateInterval && totalCost-*lastPaymentAmount > TrafficUnit) || *lastPaymentAmount < common.Fixed64(MinTrafficCoverage*float64(totalCost)) {
 			Close(session)
 			*isClosed = true
 			log.Printf("Not enough payment. Since last payment: %s. Last claimed: %v, expected: %v", time.Since(*lastPaymentTime).String(), *lastPaymentAmount, totalCost)
@@ -935,8 +950,21 @@ func handlePaymentStream(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastPayme
 
 		_, totalBytes := getTotalCost()
 
-		amount, err := nanoPayClaim(tx, npc)
-		if err != nil {
+		var amount *nkn.Amount
+		maxRetry := 3
+		for i := 0; ; i++ {
+			a, e := nanoPayClaim(tx, npc)
+			if e == nil {
+				amount = a
+				break
+			}
+			err = e
+			if i >= (maxRetry - 1) {
+				break
+			}
+			time.Sleep(time.Second * 3)
+		}
+		if amount == nil {
 			log.Println("Couldn't claim nanoPay:", err)
 			if npc.IsClosed() {
 				return fmt.Errorf("nanopayclaimer closed: %v", err)
