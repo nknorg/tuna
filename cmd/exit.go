@@ -77,7 +77,6 @@ func (e *ExitCommand) Execute(args []string) error {
 						if err != nil {
 							log.Println(err)
 						}
-						te.Close()
 					}
 				}(service)
 			}
