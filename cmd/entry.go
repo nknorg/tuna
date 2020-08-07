@@ -84,7 +84,6 @@ func (e *EntryCommand) Execute(args []string) error {
 							if err != nil {
 								log.Println(err)
 							}
-							te.Close()
 						}
 					}(service, serviceInfo)
 					continue service

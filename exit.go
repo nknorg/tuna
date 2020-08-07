@@ -421,6 +421,8 @@ func (te *TunaExit) Start() error {
 }
 
 func (te *TunaExit) StartReverse(shouldReconnect bool) error {
+	defer te.Close()
+
 	serviceID := byte(0)
 	service, err := te.getService(serviceID)
 	if err != nil {
@@ -563,7 +565,6 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		Close(tcpConn)
 
 		if !shouldReconnect {
-			te.Close()
 			break
 		}
 

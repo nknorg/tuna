@@ -231,8 +231,6 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		}()
 	}
 
-	<-te.closeChan
-
 	return nil
 }
 
