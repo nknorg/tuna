@@ -46,7 +46,8 @@ const (
 	DefaultServiceListenIP                 = "127.0.0.1"
 	DefaultReverseServiceListenIP          = "0.0.0.0"
 	TrafficUnit                            = 1024 * 1024
-	MaxTrafficOwned                        = 32
+	TrafficPaymentThreshold                = 32
+	MaxTrafficUnpaid                       = 1
 	MinTrafficCoverage                     = 0.9
 	TrafficDelay                           = 10 * time.Second
 	MaxNanoPayDelay                        = 20 * time.Second
@@ -558,7 +559,7 @@ func (c *Common) startPayment(
 		case <-time.After(100 * time.Millisecond):
 			bytesEntryToExit = atomic.LoadUint64(bytesEntryToExitUsed)
 			bytesExitToEntry = atomic.LoadUint64(bytesExitToEntryUsed)
-			if (bytesEntryToExit+bytesExitToEntry)-(*bytesEntryToExitPaid+*bytesExitToEntryPaid) <= MaxTrafficOwned*TrafficUnit {
+			if (bytesEntryToExit+bytesExitToEntry)-(*bytesEntryToExitPaid+*bytesExitToEntryPaid) <= TrafficPaymentThreshold*TrafficUnit {
 				continue
 			}
 		case <-paymentTimer:
@@ -931,14 +932,14 @@ func checkPayment(session *smux.Session, lastPaymentTime *time.Time, lastPayment
 				break
 			}
 
-			if totalBytes-*bytesPaid > MaxTrafficOwned*TrafficUnit {
+			if totalBytes-*bytesPaid > TrafficPaymentThreshold*TrafficUnit {
 				break
 			}
 		}
 
 		time.Sleep(MaxNanoPayDelay)
 
-		if *lastPaymentAmount < common.Fixed64(MinTrafficCoverage*float64(totalCost)) {
+		if *lastPaymentAmount < common.Fixed64(MinTrafficCoverage*float64(totalCost)) && totalCost-*lastPaymentAmount > common.Fixed64(MaxTrafficUnpaid*TrafficUnit*float64(totalCost)/float64(totalBytes)) {
 			Close(session)
 			*isClosed = true
 			log.Printf("Not enough payment. Since last payment: %s. Last claimed: %v, expected: %v", time.Since(*lastPaymentTime).String(), *lastPaymentAmount, totalCost)
