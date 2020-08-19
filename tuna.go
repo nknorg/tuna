@@ -382,10 +382,10 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 	if hasTCP {
 		Close(c.GetTCPConn())
 
-		address := metadata.Ip + ":" + strconv.Itoa(int(metadata.TcpPort))
+		addr := metadata.Ip + ":" + strconv.Itoa(int(metadata.TcpPort))
 		tcpConn, err := net.DialTimeout(
 			string(TCP),
-			address,
+			addr,
 			time.Duration(c.DialTimeout)*time.Second,
 		)
 		if err != nil {
@@ -400,23 +400,23 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 
 		c.SetServerTCPConn(encryptedConn)
 
-		log.Println("Connected to TCP at", address)
+		log.Println("Connected to TCP at", addr)
 	}
 	if hasUDP {
 		udpConn := c.GetUDPConn()
 		Close(udpConn)
 
-		address := net.UDPAddr{IP: net.ParseIP(metadata.Ip), Port: int(metadata.UdpPort)}
+		addr := net.UDPAddr{IP: net.ParseIP(metadata.Ip), Port: int(metadata.UdpPort)}
 		udpConn, err := net.DialUDP(
 			string(UDP),
 			nil,
-			&address,
+			&addr,
 		)
 		if err != nil {
 			return err
 		}
 		c.SetServerUDPConn(udpConn)
-		log.Println("Connected to UDP at", address.String())
+		log.Println("Connected to UDP at", addr.String())
 
 		c.StartUDPReaderWriter(udpConn)
 	}
@@ -498,13 +498,13 @@ func (c *Common) CreateServerConn(force bool) error {
 						continue
 					}
 				} else {
-					address, err := nkn.ClientAddrToWalletAddr(subscriber)
+					addr, err := nkn.ClientAddrToWalletAddr(subscriber)
 					if err != nil {
 						log.Println(err)
 						continue
 					}
 
-					err = c.SetPaymentReceiver(address)
+					err = c.SetPaymentReceiver(addr)
 					if err != nil {
 						log.Println(err)
 						continue
@@ -550,26 +550,28 @@ func (c *Common) startPayment(
 	var bytesEntryToExit, bytesExitToEntry uint64
 	var cost, lastCost common.Fixed64
 	entryToExitPrice, exitToEntryPrice := c.GetPrice()
+	lastPaymentTime := time.Now()
 
-	paymentTimer := time.After(DefaultNanoPayUpdateInterval)
 	for {
-		select {
-		case <-c.closeChan:
-			return
-		case <-time.After(100 * time.Millisecond):
+		for {
+			time.Sleep(100 * time.Millisecond)
+			if c.isClosed {
+				return
+			}
 			bytesEntryToExit = atomic.LoadUint64(bytesEntryToExitUsed)
 			bytesExitToEntry = atomic.LoadUint64(bytesExitToEntryUsed)
-			if (bytesEntryToExit+bytesExitToEntry)-(*bytesEntryToExitPaid+*bytesExitToEntryPaid) <= TrafficPaymentThreshold*TrafficUnit {
-				continue
+			if (bytesEntryToExit+bytesExitToEntry)-(*bytesEntryToExitPaid+*bytesExitToEntryPaid) > TrafficPaymentThreshold*TrafficUnit {
+				break
 			}
-		case <-paymentTimer:
-			paymentTimer = time.After(time.Second)
+			if time.Since(lastPaymentTime) > DefaultNanoPayUpdateInterval {
+				break
+			}
 		}
 
 		bytesEntryToExit = atomic.LoadUint64(bytesEntryToExitUsed)
 		bytesExitToEntry = atomic.LoadUint64(bytesExitToEntryUsed)
 		cost = entryToExitPrice*common.Fixed64(bytesEntryToExit-*bytesEntryToExitPaid)/TrafficUnit + exitToEntryPrice*common.Fixed64(bytesExitToEntry-*bytesExitToEntryPaid)/TrafficUnit
-		if cost == lastCost {
+		if cost == lastCost || cost <= common.Fixed64(0) {
 			continue
 		}
 
@@ -598,7 +600,7 @@ func (c *Common) startPayment(
 		*bytesEntryToExitPaid = bytesEntryToExit
 		*bytesExitToEntryPaid = bytesExitToEntry
 		lastCost = cost
-		paymentTimer = time.After(DefaultNanoPayUpdateInterval)
+		lastPaymentTime = time.Now()
 	}
 }
 
@@ -965,12 +967,14 @@ func handlePaymentStream(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastPayme
 			amount, err = nanoPayClaim(tx, npc)
 			if err == nil {
 				break
+			} else {
+				log.Printf("could't claim nanoPay: %v", err)
 			}
 		}
 		if err != nil || amount == nil {
-			log.Println("Couldn't claim nanoPay:", err)
 			if npc.IsClosed() {
-				return fmt.Errorf("nanopayclaimer closed: %v", err)
+				log.Printf("nanopayclaimer closed: %v", err)
+				return nil
 			}
 			continue
 		}
