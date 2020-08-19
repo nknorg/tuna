@@ -211,7 +211,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 			break
 		}
 
-		go func() {
+		go func(stream *smux.Stream) {
 			err := func() error {
 				streamMetadata, err := readStreamMetadata(stream)
 				if err != nil {
@@ -221,14 +221,13 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 				if streamMetadata.IsPayment {
 					return handlePaymentStream(stream, npc, &lastPaymentTime, &lastPaymentAmount, &bytesPaid, getTotalCost)
 				}
-
 				return nil
 			}()
 			if err != nil {
 				log.Println(err)
 				Close(stream)
 			}
-		}()
+		}(stream)
 	}
 
 	return nil
