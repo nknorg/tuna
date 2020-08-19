@@ -207,7 +207,7 @@ var testData = []testCase{
 
 func TestLocationCheck(t *testing.T) {
 	for num, data := range testData {
-		res := data.f.ValidCheck(&data.location)
+		res := data.f.AllowLocation(&data.location)
 		if res != data.result {
 			t.Fatalf("NO %d testcase failed", num+1)
 		}
