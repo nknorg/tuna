@@ -8,11 +8,12 @@ import (
 )
 
 var opts struct {
-	BeneficiaryAddr string `short:"b" long:"beneficiary-addr" description:"Beneficiary address (NKN wallet address to receive rewards)"`
-	ServicesFile    string `short:"s" long:"services" description:"Services file path" default:"services.json"`
-	WalletFile      string `short:"w" long:"wallet" description:"Wallet file path" default:"wallet.json"`
-	PasswordFile    string `short:"p" long:"password-file" description:"Wallet password file path" default:"wallet.pswd"`
-	Version         bool   `short:"v" long:"version" description:"Print version"`
+	BeneficiaryAddr   string `short:"b" long:"beneficiary-addr" description:"Beneficiary address (NKN wallet address to receive rewards)"`
+	ServicesFile      string `short:"s" long:"services" description:"Services file path" default:"services.json"`
+	WalletFile        string `short:"w" long:"wallet" description:"Wallet file path" default:"wallet.json"`
+	PasswordFile      string `short:"p" long:"password-file" description:"Wallet password file path" default:"wallet.pswd"`
+	SeedRPCServerAddr string `long:"rpc" description:"Seed RPC server address, separated by comma"`
+	Version           bool   `short:"v" long:"version" description:"Print version"`
 }
 
 var (
