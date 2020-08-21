@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strings"
 
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/tuna"
@@ -44,7 +45,16 @@ func (e *ExitCommand) Execute(args []string) error {
 		log.Fatalln("Load or create account error:", err)
 	}
 
-	wallet, err := nkn.NewWallet(&nkn.Account{account}, nil)
+	var seedRPCServerAddr *nkn.StringArray
+	if len(opts.SeedRPCServerAddr) > 0 {
+		seedRPCServerAddr = nkn.NewStringArrayFromString(strings.ReplaceAll(opts.SeedRPCServerAddr, ",", " "))
+	}
+
+	walletConfig := &nkn.WalletConfig{
+		SeedRPCServerAddr: seedRPCServerAddr,
+	}
+
+	wallet, err := nkn.NewWallet(&nkn.Account{account}, walletConfig)
 	if err != nil {
 		log.Fatalln("Create wallet error:", err)
 	}
