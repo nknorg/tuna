@@ -76,8 +76,8 @@ github.com/nknorg/go-portscanner v0.0.0-20181002101859-8493ef01db79 h1:AT5YRim06
 github.com/nknorg/go-portscanner v0.0.0-20181002101859-8493ef01db79/go.mod h1:lTev9/EZpc4U3w/sp95T8UPeaav/0Hk+JjykVDuPaQs=
 github.com/nknorg/ncp-go v1.0.1 h1:oJKmcaAcVC1oCJiJ4tDvot7kved8uUGBYXldDHxc8vM=
 github.com/nknorg/ncp-go v1.0.1/go.mod h1:LfiwrFlKZAAoMwhCBA959jSzVD8E9RGOH9nyfXkQSfY=
-github.com/nknorg/nkn-sdk-go v1.3.1 h1:gDwDnI4vV+7q9q6j2mDqIKyZmXnyn5OnyhtUFNovXJA=
-github.com/nknorg/nkn-sdk-go v1.3.1/go.mod h1:QjUExWVnRlVgxH9YoueWYlwqg957aHxkAwY8YdLdnd0=
+github.com/nknorg/nkn-sdk-go v1.3.2 h1:5YhGujE/udlJdw8AROgsWNFs9rtIyaMFai4v2oYTI5U=
+github.com/nknorg/nkn-sdk-go v1.3.2/go.mod h1:QjUExWVnRlVgxH9YoueWYlwqg957aHxkAwY8YdLdnd0=
 github.com/nknorg/nkn/v2 v2.0.1/go.mod h1:LxKZTpn5VZTAbjsACSFL5nlQAQ4+WQKyIpVZUYopXm4=
 github.com/nknorg/nkn/v2 v2.0.2 h1:0bwUFFYkeVO6z+Odi52zHQ6IFs254D8GQfX5pfdfe+E=
 github.com/nknorg/nkn/v2 v2.0.2/go.mod h1:LxKZTpn5VZTAbjsACSFL5nlQAQ4+WQKyIpVZUYopXm4=
