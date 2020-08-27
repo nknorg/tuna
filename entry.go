@@ -355,11 +355,14 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 			for {
 				conn, err := listener.Accept()
 				if err != nil {
-					log.Println("Couldn't accept connection:", err)
+					if te.IsClosed() {
+						return
+					}
 					if strings.Contains(err.Error(), "use of closed network connection") {
 						te.Close()
 						return
 					}
+					log.Println("Couldn't accept connection:", err)
 					time.Sleep(time.Second)
 					continue
 				}
@@ -530,8 +533,12 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	go func() {
 		for {
 			tcpConn, err := listener.Accept()
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				return
+			}
 			if err != nil {
 				log.Println("Couldn't accept client connection:", err)
+				time.Sleep(time.Second)
 				continue
 			}
 
