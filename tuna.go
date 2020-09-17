@@ -50,7 +50,7 @@ const (
 	MaxTrafficUnpaid                       = 1
 	MinTrafficCoverage                     = 0.9
 	TrafficDelay                           = 10 * time.Second
-	MaxNanoPayDelay                        = 20 * time.Second
+	MaxNanoPayDelay                        = 30 * time.Second
 	getSubscribersBatchSize                = 32
 	DefaultEncryptionAlgo                  = pb.ENCRYPTION_NONE
 	subscribeDurationRandomFactor          = 0.1
@@ -574,6 +574,7 @@ func (c *Common) startPayment(
 		if cost == lastCost || cost <= common.Fixed64(0) {
 			continue
 		}
+		costTimeStamp := time.Now()
 
 		paymentStream, err := getPaymentStream()
 		if err != nil {
@@ -600,7 +601,7 @@ func (c *Common) startPayment(
 		*bytesEntryToExitPaid = bytesEntryToExit
 		*bytesExitToEntryPaid = bytesExitToEntry
 		lastCost = cost
-		lastPaymentTime = time.Now()
+		lastPaymentTime = costTimeStamp
 	}
 }
 
@@ -846,7 +847,7 @@ func sendNanoPay(np *nkn.NanoPay, paymentStream *smux.Stream, cost common.Fixed6
 	var err error
 	for i := 0; i < 3; i++ {
 		if i > 0 {
-			time.Sleep(3 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 		tx, err = np.IncrementAmount(cost.String())
 		if err == nil {
