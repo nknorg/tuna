@@ -55,4 +55,4 @@ all:
 
 .PHONY: pb
 pb:
-	protoc -I=. -I=$(GOPATH)/src -I=$(GOPATH)/src/github.com/gogo/protobuf/protobuf --gogoslick_out=. pb/*.proto
+	protoc --go_out=. pb/*.proto
