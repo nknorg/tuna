@@ -8,16 +8,16 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/pb"
 	"github.com/xtaci/smux"
 )
 
 var encryptionAlgoMap = map[string]pb.EncryptionAlgo{
-	"none":              pb.ENCRYPTION_NONE,
-	"xsalsa20-poly1305": pb.ENCRYPTION_XSALSA20_POLY1305,
-	"aes-gcm":           pb.ENCRYPTION_AES_GCM,
+	"none":              pb.EncryptionAlgo_ENCRYPTION_NONE,
+	"xsalsa20-poly1305": pb.EncryptionAlgo_ENCRYPTION_XSALSA20_POLY1305,
+	"aes-gcm":           pb.EncryptionAlgo_ENCRYPTION_AES_GCM,
 }
 
 // OnConnectFunc is a wrapper type for gomobile compatibility.

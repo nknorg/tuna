@@ -19,17 +19,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nknorg/tuna/geo"
-
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
+	"github.com/nknorg/nkn/v2/config"
 	"github.com/nknorg/nkn/v2/crypto/ed25519"
 	"github.com/nknorg/nkn/v2/transaction"
 	"github.com/nknorg/nkn/v2/util"
 	"github.com/nknorg/nkn/v2/util/address"
-	"github.com/nknorg/nkn/v2/util/config"
 	"github.com/nknorg/nkn/v2/vault"
+	"github.com/nknorg/tuna/geo"
 	"github.com/nknorg/tuna/pb"
 	"github.com/xtaci/smux"
 	"golang.org/x/crypto/nacl/box"
@@ -53,7 +52,7 @@ const (
 	TrafficDelay                           = 10 * time.Second
 	MaxNanoPayDelay                        = 30 * time.Second
 	getSubscribersBatchSize                = 32
-	DefaultEncryptionAlgo                  = pb.ENCRYPTION_NONE
+	DefaultEncryptionAlgo                  = pb.EncryptionAlgo_ENCRYPTION_NONE
 	subscribeDurationRandomFactor          = 0.1
 )
 
@@ -361,7 +360,7 @@ func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, e
 		remotePublicKey = connMetadata.PublicKey
 	}
 
-	if encryptionAlgo == pb.ENCRYPTION_NONE {
+	if encryptionAlgo == pb.EncryptionAlgo_ENCRYPTION_NONE {
 		return conn, nil
 	}
 
