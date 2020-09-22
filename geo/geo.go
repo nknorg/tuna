@@ -1,17 +1,23 @@
-package tuna
+package geo
 
 import (
-	"errors"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
-const (
-	GeoIPRetry = 3
-)
+type GeoProvider interface {
+	GetLocation(ip string) (*Location, error)
+	FileName() string
+	DownloadUrl() string
+	LastUpdate() time.Time
+	NeedUpdate() bool
+	MaybeUpdate() error
+	Ready() bool
+	SetReady(bool)
+	SetFileName(string)
+}
 
 type Location struct {
 	IP          string `json:"ip"`
@@ -21,6 +27,7 @@ type Location struct {
 }
 
 var emptyLocation = Location{}
+var geoLock sync.Mutex
 
 func (l *Location) Empty() bool {
 	if l == nil {
@@ -40,8 +47,11 @@ func (l *Location) Match(location *Location) bool {
 }
 
 type IPFilter struct {
-	Allow    []Location `json:"allow"`
-	Disallow []Location `json:"disallow"`
+	Allow      []Location `json:"allow"`
+	Disallow   []Location `json:"disallow"`
+	providers  []GeoProvider
+	dbPath     string
+	downloadDB bool
 }
 
 func (f *IPFilter) Empty() bool {
@@ -84,17 +94,25 @@ func (f *IPFilter) AllowIP(ip string) (bool, error) {
 	}
 
 	var loc *Location
-	var err error
 	if f.NeedGeoInfo() {
-		loc, err = getLocationFromIP2C(ip, GeoIPRetry)
-		if err != nil {
-			return true, err
-		}
+		loc = f.GetLocation(ip)
 	} else {
 		loc = &Location{IP: ip}
 	}
 
 	return f.AllowLocation(loc), nil
+}
+
+func (f *IPFilter) GetLocation(ip string) *Location {
+	for _, p := range f.providers {
+		if p.Ready() {
+			loc := getLocationFromProvider(ip, p)
+			if !loc.Empty() {
+				return &loc
+			}
+		}
+	}
+	return &Location{CountryCode: "UNKNOWN", IP: ip}
 }
 
 func (f *IPFilter) AllowLocation(loc *Location) bool {
@@ -104,6 +122,7 @@ func (f *IPFilter) AllowLocation(loc *Location) bool {
 
 	for _, l := range f.Disallow {
 		if l.Match(loc) {
+			log.Printf("%s from %s dropped", loc.IP, loc.CountryCode)
 			return false
 		}
 	}
@@ -111,6 +130,7 @@ func (f *IPFilter) AllowLocation(loc *Location) bool {
 	empty := true
 	for _, l := range f.Allow {
 		if l.Match(loc) {
+			log.Printf("%s from %s passed", loc.IP, loc.CountryCode)
 			return true
 		}
 		if !l.Empty() {
@@ -121,62 +141,47 @@ func (f *IPFilter) AllowLocation(loc *Location) bool {
 	return empty
 }
 
-func getLocationFromIP2C(ip string, retry int) (*Location, error) {
-	queryURL := "https://ip2c.nkn.org/" + ip
-	client := http.Client{
-		Timeout: 10 * time.Second,
+func (f *IPFilter) AddProvider(download bool, path string) {
+	f.downloadDB = download
+	f.dbPath = path
+	if f.downloadDB {
+		aws := NewAWSProvider(f.dbPath)
+		gcp := NewGCPProvider(f.dbPath)
+		mm := NewMaxMindProvider(f.dbPath)
+		f.providers = []GeoProvider{aws, gcp, mm}
 	}
 
-	i := 0
-	var resp *http.Response
-	var err error
-	for ; i < retry; i++ {
-		resp, err = client.Get(queryURL)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		break
-	}
-	if i == retry {
-		return &emptyLocation, err
-	}
-
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return &emptyLocation, err
-	}
-
-	loc, err := parseIP2C(string(body))
-	if err != nil {
-		log.Println(err)
-		return &Location{CountryCode: "UNKNOWN"}, nil
-	}
-
-	loc.IP = ip
-
-	return loc, nil
+	ip2c := NewIP2CProvider()
+	f.providers = append(f.providers, ip2c)
 }
 
-func parseIP2C(body string) (*Location, error) {
-	if len(body) == 0 {
-		return nil, nil
+func (f *IPFilter) UpdateDataFile(c chan struct{}) {
+	for {
+		select {
+		case _, ok := <-c:
+			if !ok {
+				return
+			}
+		default:
+			for _, p := range f.providers {
+				if len(p.FileName()) == 0 {
+					continue
+				}
+				err := p.MaybeUpdate()
+				if err != nil {
+					log.Print(err)
+					continue
+				}
+			}
+		}
+		time.Sleep(1 * time.Hour)
 	}
+}
 
-	if body[0] != byte('1') {
-		return nil, errors.New("get ip2c result err")
+func getLocationFromProvider(ip string, p GeoProvider) Location {
+	loc, err := p.GetLocation(ip)
+	if err != nil {
+		log.Println(err)
 	}
-
-	res := strings.Split(body, ";")
-	if len(res) != 4 {
-		return nil, errors.New("invalid response from ip2c service")
-	}
-
-	l := &Location{}
-	l.CountryCode = res[1]
-	l.Country = res[3]
-
-	return l, nil
+	return *loc
 }
