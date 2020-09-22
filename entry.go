@@ -36,6 +36,8 @@ type EntryConfiguration struct {
 	ReverseSubscriptionPrefix   string                 `json:"reverseSubscriptionPrefix"`
 	ReverseSubscriptionDuration int32                  `json:"reverseSubscriptionDuration"`
 	ReverseSubscriptionFee      string                 `json:"reverseSubscriptionFee"`
+	GeoDBPath                   string                 `json:"geoDBPath"`
+	DownloadGeoDB               bool                   `json:"downloadGeoDB"`
 }
 
 type TunaEntry struct {
@@ -97,6 +99,13 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 	}
 	if len(udpPorts) > 0 {
 		log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
+	}
+
+	geoCloseChan := make(chan struct{})
+	defer close(geoCloseChan)
+	if !te.IsServer && te.ServiceInfo.IPFilter.NeedGeoInfo() {
+		te.ServiceInfo.IPFilter.AddProvider(te.config.DownloadGeoDB, te.config.GeoDBPath)
+		go te.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
 	}
 
 	for {

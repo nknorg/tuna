@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +18,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nknorg/tuna/geo"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/nknorg/nkn-sdk-go"
@@ -57,9 +58,9 @@ const (
 )
 
 type ServiceInfo struct {
-	MaxPrice string    `json:"maxPrice"`
-	ListenIP string    `json:"listenIP"`
-	IPFilter *IPFilter `json:"ipFilter"`
+	MaxPrice string        `json:"maxPrice"`
+	ListenIP string        `json:"listenIP"`
+	IPFilter *geo.IPFilter `json:"ipFilter"`
 }
 
 type Service struct {
@@ -757,20 +758,6 @@ func Close(conn io.Closer) {
 	if err != nil {
 		log.Println("Error while closing:", err)
 	}
-}
-
-func ReadJSON(fileName string, value interface{}) error {
-	file, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		return fmt.Errorf("read file error: %v", err)
-	}
-
-	err = json.Unmarshal(file, value)
-	if err != nil {
-		return fmt.Errorf("parse json error: %v", err)
-	}
-
-	return nil
 }
 
 func PortToConnID(port uint16) []byte {

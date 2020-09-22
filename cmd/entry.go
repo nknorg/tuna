@@ -7,6 +7,7 @@ import (
 
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/tuna"
+	"github.com/nknorg/tuna/util"
 )
 
 type EntryCommand struct {
@@ -21,7 +22,7 @@ func (e *EntryCommand) Execute(args []string) error {
 		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
 		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
 	}
-	err := tuna.ReadJSON(e.ConfigFile, config)
+	err := util.ReadJSON(e.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config error:", err)
 	}
@@ -69,7 +70,7 @@ func (e *EntryCommand) Execute(args []string) error {
 		}
 	} else {
 		var services []tuna.Service
-		err = tuna.ReadJSON(opts.ServicesFile, &services)
+		err = util.ReadJSON(opts.ServicesFile, &services)
 		if err != nil {
 			log.Fatalln("Load service file error:", err)
 		}

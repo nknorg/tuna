@@ -12,6 +12,7 @@ import (
 
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
+	"github.com/nknorg/tuna/geo"
 	"github.com/nknorg/tuna/pb"
 	"github.com/patrickmn/go-cache"
 	"github.com/rdegges/go-ipify"
@@ -41,7 +42,9 @@ type ExitConfiguration struct {
 	ReverseServiceName        string                     `json:"reverseServiceName"`
 	ReverseSubscriptionPrefix string                     `json:"reverseSubscriptionPrefix"`
 	ReverseEncryption         string                     `json:"reverseEncryption"`
-	ReverseIPFilter           IPFilter                   `json:"reverseIPFilter"`
+	GeoDBPath                 string                     `json:"geoDBPath"`
+	DownloadGeoDB             bool                       `json:"downloadGeoDB"`
+	ReverseIPFilter           geo.IPFilter               `json:"reverseIPFilter"`
 }
 
 type TunaExit struct {
@@ -430,6 +433,13 @@ func (te *TunaExit) Start() error {
 
 func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 	defer te.Close()
+
+	geoCloseChan := make(chan struct{})
+	defer close(geoCloseChan)
+	if !te.IsServer && te.ServiceInfo.IPFilter.NeedGeoInfo() {
+		te.ServiceInfo.IPFilter.AddProvider(te.config.DownloadGeoDB, te.config.GeoDBPath)
+		go te.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
+	}
 
 	serviceID := byte(0)
 	service, err := te.getService(serviceID)
