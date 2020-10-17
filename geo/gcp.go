@@ -77,6 +77,7 @@ func (p *GCPProvider) MaybeUpdate() error {
 		return nil
 	}
 	if p.NeedUpdate() {
+		log.Println("Updating GCP geo db")
 		tmpFile, err := ioutil.TempFile("", p.fileName+"-*")
 		if err != nil {
 			return err
@@ -96,7 +97,7 @@ func (p *GCPProvider) MaybeUpdate() error {
 	if err != nil {
 		return err
 	}
-	for idx, _ := range p.Info.Prefixes {
+	for idx := range p.Info.Prefixes {
 		if len(p.Info.Prefixes[idx].Ipv4Prefix) == 0 {
 			continue
 		}
@@ -159,12 +160,7 @@ func (p *GCPProvider) DownloadUrl() string {
 }
 
 func (p *GCPProvider) LastUpdate() time.Time {
-	fs, err := os.Stat(p.fileName)
-	if err != nil {
-		log.Print(err)
-		return time.Time{}
-	}
-	return fs.ModTime()
+	return getModTime(p.fileName)
 }
 
 func (p *GCPProvider) NeedUpdate() bool {

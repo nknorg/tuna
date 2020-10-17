@@ -2,6 +2,7 @@ package geo
 
 import (
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -184,4 +185,15 @@ func getLocationFromProvider(ip string, p GeoProvider) Location {
 		log.Println(err)
 	}
 	return *loc
+}
+
+func getModTime(fileName string) time.Time {
+	fs, err := os.Stat(fileName)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Print(err)
+		}
+		return time.Time{}
+	}
+	return fs.ModTime()
 }
