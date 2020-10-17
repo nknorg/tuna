@@ -9,3 +9,6 @@ wallet.pswd
 config.entry.json
 config.exit.json
 services.json
+aws-ip.json
+gcp-ip.json
+geolite2-country.mmdb

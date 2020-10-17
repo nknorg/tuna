@@ -24,5 +24,7 @@
     "disallow": [
       {"countryCode": ""}
     ]
-  }
+  },
+  "downloadGeoDB": true,
+  "geoDBPath": "."
 }

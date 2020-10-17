@@ -12,6 +12,8 @@
       }
     }
   },
+  "downloadGeoDB": true,
+  "geoDBPath": ".",
   "dialTimeout": 10,
   "udpTimeout": 60,
   "nanoPayFee": "0",
