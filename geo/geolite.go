@@ -47,6 +47,7 @@ func (p *MaxMindProvider) MaybeUpdate() error {
 		return nil
 	}
 	if p.NeedUpdate() {
+		log.Println("Updating geolite db")
 		tmpFile, err := ioutil.TempFile("", p.fileName+"-*")
 		if err != nil {
 			return err
@@ -102,13 +103,7 @@ func (p *MaxMindProvider) DownloadUrl() string {
 }
 
 func (p *MaxMindProvider) LastUpdate() time.Time {
-	fs, err := os.Stat(p.fileName)
-	if err != nil {
-		log.Print(err)
-		return time.Time{}
-	}
-
-	return fs.ModTime()
+	return getModTime(p.fileName)
 }
 
 func (p *MaxMindProvider) NeedUpdate() bool {

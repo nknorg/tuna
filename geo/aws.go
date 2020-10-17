@@ -75,6 +75,7 @@ func (p *AWSProvider) MaybeUpdate() error {
 		return nil
 	}
 	if p.NeedUpdate() {
+		log.Println("Updating AWS geo db")
 		tmpFile, err := ioutil.TempFile("", p.fileName+"-*")
 		if err != nil {
 			return err
@@ -95,7 +96,7 @@ func (p *AWSProvider) MaybeUpdate() error {
 		return err
 	}
 
-	for idx, _ := range p.Info.Prefixes {
+	for idx := range p.Info.Prefixes {
 		if len(p.Info.Prefixes[idx].IPPrefix) == 0 {
 			continue
 		}
@@ -158,12 +159,7 @@ func (p *AWSProvider) DownloadUrl() string {
 }
 
 func (p *AWSProvider) LastUpdate() time.Time {
-	fs, err := os.Stat(p.fileName)
-	if err != nil {
-		log.Print(err)
-		return time.Time{}
-	}
-	return fs.ModTime()
+	return getModTime(p.fileName)
 }
 
 func (p *AWSProvider) NeedUpdate() bool {
