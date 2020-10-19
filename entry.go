@@ -542,10 +542,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	go func() {
 		for {
 			tcpConn, err := listener.Accept()
-			if strings.Contains(err.Error(), "use of closed network connection") {
-				return
-			}
 			if err != nil {
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					return
+				}
 				log.Println("Couldn't accept client connection:", err)
 				time.Sleep(time.Second)
 				continue
