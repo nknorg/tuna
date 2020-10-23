@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	Geolite2Url    = "https://raw.githubusercontent.com/leo108/geolite2-db/master/Country.mmdb"
+	Geolite2Url    = "https://githubusercontent.nknorg.workers.dev/leo108/geolite2-db/master/Country.mmdb"
 	MaxMindExpired = 30 * 24 * time.Hour
 	MaxMindFile    = "geolite2-country.mmdb"
 )
