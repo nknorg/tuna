@@ -80,8 +80,7 @@ func (p *AWSProvider) MaybeUpdate() error {
 	}
 	if p.NeedUpdate() {
 		log.Println("Updating AWS geo db")
-		dir, filename := path.Split(p.fileName)
-		tmpFile, err := ioutil.TempFile(dir, filename+"-*")
+		tmpFile, err := ioutil.TempFile(path.Dir(p.fileName), path.Base(p.fileName)+"-*")
 		if err != nil {
 			return err
 		}
