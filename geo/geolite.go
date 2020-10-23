@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -36,8 +37,11 @@ func (p *MaxMindProvider) GetLocation(ip string) (*Location, error) {
 }
 
 func NewMaxMindProvider(path string) *MaxMindProvider {
-	p := filepath.Join(path, MaxMindFile)
-	return &MaxMindProvider{url: MaxMindFile, fileName: p, expire: MaxMindExpired}
+	return &MaxMindProvider{
+		url:      MaxMindFile,
+		fileName: filepath.Join(path, MaxMindFile),
+		expire:   MaxMindExpired,
+	}
 }
 
 func (p *MaxMindProvider) MaybeUpdate() error {
@@ -48,7 +52,8 @@ func (p *MaxMindProvider) MaybeUpdate() error {
 	}
 	if p.NeedUpdate() {
 		log.Println("Updating geolite db")
-		tmpFile, err := ioutil.TempFile("", p.fileName+"-*")
+		dir, filename := path.Split(p.fileName)
+		tmpFile, err := ioutil.TempFile(dir, filename+"-*")
 		if err != nil {
 			return err
 		}
@@ -56,7 +61,7 @@ func (p *MaxMindProvider) MaybeUpdate() error {
 		defer tmpFile.Close()
 
 		client := http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 300 * time.Second,
 		}
 		resp, err := client.Get(Geolite2Url)
 		if err != nil {

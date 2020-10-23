@@ -32,7 +32,7 @@ func DownloadJsonFile(url, filename string) error {
 	defer f.Close()
 
 	client := http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 60 * time.Second,
 	}
 	resp, err := client.Get(url)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -66,8 +67,11 @@ var GCPScopeMapping = map[string]string{
 }
 
 func NewGCPProvider(path string) *GCPProvider {
-	p := filepath.Join(path, GCPFile)
-	return &GCPProvider{url: GCPGeoUrl, fileName: p, expire: GCPExpired}
+	return &GCPProvider{
+		url:      GCPGeoUrl,
+		fileName: filepath.Join(path, GCPFile),
+		expire:   GCPExpired,
+	}
 }
 
 func (p *GCPProvider) MaybeUpdate() error {
@@ -78,7 +82,8 @@ func (p *GCPProvider) MaybeUpdate() error {
 	}
 	if p.NeedUpdate() {
 		log.Println("Updating GCP geo db")
-		tmpFile, err := ioutil.TempFile("", p.fileName+"-*")
+		dir, filename := path.Split(p.fileName)
+		tmpFile, err := ioutil.TempFile(dir, filename+"-*")
 		if err != nil {
 			return err
 		}

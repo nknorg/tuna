@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -64,8 +65,11 @@ var AWSRegionMapping = map[string]string{
 }
 
 func NewAWSProvider(path string) *AWSProvider {
-	p := filepath.Join(path, AWSFile)
-	return &AWSProvider{url: AWSGeoUrl, fileName: p, expire: AWSExpired}
+	return &AWSProvider{
+		url:      AWSGeoUrl,
+		fileName: filepath.Join(path, AWSFile),
+		expire:   AWSExpired,
+	}
 }
 
 func (p *AWSProvider) MaybeUpdate() error {
@@ -76,7 +80,8 @@ func (p *AWSProvider) MaybeUpdate() error {
 	}
 	if p.NeedUpdate() {
 		log.Println("Updating AWS geo db")
-		tmpFile, err := ioutil.TempFile("", p.fileName+"-*")
+		dir, filename := path.Split(p.fileName)
+		tmpFile, err := ioutil.TempFile(dir, filename+"-*")
 		if err != nil {
 			return err
 		}
