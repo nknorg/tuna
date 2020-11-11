@@ -38,8 +38,11 @@ func (l *Location) Empty() bool {
 }
 
 func (l *Location) Match(location *Location) bool {
-	if len(l.IP) > 0 && location.IP == l.IP {
-		return true
+	if len(l.IP) > 0 {
+		if location.IP == l.IP {
+			return true
+		}
+		return false
 	}
 	if len(l.CountryCode) > 0 && strings.ToLower(location.CountryCode) == strings.ToLower(l.CountryCode) {
 		return true
