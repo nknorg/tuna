@@ -260,11 +260,11 @@ func (te *TunaExit) listenTCP(port int) error {
 			if te.IsClosed() {
 				return
 			}
-			if strings.Contains(err.Error(), "use of closed network connection") {
-				te.Close()
-				return
-			}
 			if err != nil {
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					te.Close()
+					return
+				}
 				log.Println("Couldn't accept client connection:", err)
 				time.Sleep(time.Second)
 				continue
