@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ import (
 	"github.com/nknorg/nkn/v2/vault"
 	"github.com/nknorg/tuna/geo"
 	"github.com/nknorg/tuna/pb"
+	tunaUtil "github.com/nknorg/tuna/util"
 	"github.com/xtaci/smux"
 	"golang.org/x/crypto/nacl/box"
 )
@@ -37,23 +39,24 @@ import (
 type Protocol string
 
 const (
-	TCP                           Protocol = "tcp"
-	UDP                           Protocol = "udp"
-	DefaultNanoPayDuration                 = 4320 * 30
-	DefaultNanoPayUpdateInterval           = time.Minute
-	DefaultSubscriptionPrefix              = "tuna_v1."
-	DefaultReverseServiceName              = "reverse"
-	DefaultServiceListenIP                 = "127.0.0.1"
-	DefaultReverseServiceListenIP          = "0.0.0.0"
-	TrafficUnit                            = 1024 * 1024
-	TrafficPaymentThreshold                = 32
-	MaxTrafficUnpaid                       = 1
-	MinTrafficCoverage                     = 0.9
-	TrafficDelay                           = 10 * time.Second
-	MaxNanoPayDelay                        = 30 * time.Second
-	getSubscribersBatchSize                = 32
-	DefaultEncryptionAlgo                  = pb.EncryptionAlgo_ENCRYPTION_NONE
-	subscribeDurationRandomFactor          = 0.1
+	TCP                             Protocol = "tcp"
+	UDP                             Protocol = "udp"
+	DefaultNanoPayDuration                   = 4320 * 30
+	DefaultNanoPayUpdateInterval             = time.Minute
+	DefaultSubscriptionPrefix                = "tuna_v1."
+	DefaultReverseServiceName                = "reverse"
+	DefaultServiceListenIP                   = "127.0.0.1"
+	DefaultReverseServiceListenIP            = "0.0.0.0"
+	TrafficUnit                              = 1024 * 1024
+	TrafficPaymentThreshold                  = 32
+	MaxTrafficUnpaid                         = 1
+	MinTrafficCoverage                       = 0.9
+	TrafficDelay                             = 10 * time.Second
+	MaxNanoPayDelay                          = 30 * time.Second
+	getSubscribersBatchSize                  = 128
+	DefaultEncryptionAlgo                    = pb.EncryptionAlgo_ENCRYPTION_NONE
+	subscribeDurationRandomFactor            = 0.1
+	measureLatencyConcurrentWorkers          = 24
 )
 
 type ServiceInfo struct {
@@ -98,6 +101,27 @@ type Common struct {
 	udpConn          *net.UDPConn
 	isClosed         bool
 	sharedKeys       map[string]*[sharedKeySize]byte
+}
+
+type filterSubscriber struct {
+	address   string
+	metadata  *pb.ServiceMetadata
+	delay     time.Duration
+	bandwidth int64
+}
+type filterSubscribers []filterSubscriber
+
+func (fs filterSubscribers) Len() int {
+	return len(fs)
+}
+func (fs filterSubscribers) Swap(i, j int) {
+	fs[i], fs[j] = fs[j], fs[i]
+}
+
+type SortByDelay struct{ filterSubscribers }
+
+func (s SortByDelay) Less(i, j int) bool {
+	return s.filterSubscribers[i].delay < s.filterSubscribers[j].delay
 }
 
 func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse, isServer bool, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
@@ -461,33 +485,75 @@ func (c *Common) CreateServerConn(force bool) error {
 				allSubscribers = append(allSubscribers, subscriber)
 			}
 
-			rand.Shuffle(len(allSubscribers), func(i, j int) {
-				allSubscribers[i], allSubscribers[j] = allSubscribers[j], allSubscribers[i]
-			})
-
+			// filter
+			filterSubs := make(filterSubscribers, 0, len(allSubscribers))
 			for _, subscriber := range allSubscribers {
 				metadataString := subscribers.Subscribers.Map[subscriber]
-				if !c.SetMetadata(metadataString) {
+				metadata, err := ReadMetadata(metadataString)
+				if err != nil {
+					log.Println("Couldn't unmarshal metadata:", err)
 					continue
 				}
-
-				metadata := c.GetMetadata()
-
 				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
 				if err != nil {
 					log.Println(err)
 					continue
 				}
-
 				if entryToExitPrice > entryToExitMaxPrice || exitToEntryPrice > exitToEntryMaxPrice {
 					continue
 				}
-
 				res, err := c.ServiceInfo.IPFilter.AllowIP(metadata.Ip)
 				if err != nil {
 					log.Println(err)
 				}
 				if !res {
+					continue
+				}
+
+				filterSubs = append(filterSubs, filterSubscriber{
+					address:  subscriber,
+					metadata: metadata,
+				})
+			}
+
+			// measurement delay
+			wg := &sync.WaitGroup{}
+			var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
+			go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
+			for index, _ := range filterSubs {
+				func(subscriber *filterSubscriber) {
+					wg.Add(1)
+					tunaUtil.Enqueue(measurementDelayJobChan, func() {
+						addr := subscriber.metadata.Ip + ":" + strconv.Itoa(int(subscriber.metadata.TcpPort))
+						delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, 2*time.Second)
+						if err != nil {
+							switch err.(type) {
+							case net.Error:
+								return
+							default:
+								log.Println(err)
+								return
+							}
+						}
+						subscriber.delay = delay
+					})
+				}(&filterSubs[index])
+			}
+			wg.Wait()
+			close(measurementDelayJobChan)
+			sort.Sort(SortByDelay{filterSubs})
+
+			for _, subscriber := range filterSubs {
+				metadataString := subscribers.Subscribers.Map[subscriber.address]
+				if !c.SetMetadata(metadataString) {
+					continue
+				}
+
+				metadata := subscriber.metadata
+
+				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
+				if err != nil {
+					log.Println(err)
 					continue
 				}
 
@@ -498,7 +564,7 @@ func (c *Common) CreateServerConn(force bool) error {
 						continue
 					}
 				} else {
-					addr, err := nkn.ClientAddrToWalletAddr(subscriber)
+					addr, err := nkn.ClientAddrToWalletAddr(subscriber.address)
 					if err != nil {
 						log.Println(err)
 						continue
@@ -520,7 +586,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 				c.Unlock()
 
-				remotePublicKey, err := nkn.ClientAddrToPubKey(subscriber)
+				remotePublicKey, err := nkn.ClientAddrToPubKey(subscriber.address)
 				if err != nil {
 					log.Println(err)
 					continue
