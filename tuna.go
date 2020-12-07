@@ -520,7 +520,7 @@ func (c *Common) CreateServerConn(force bool) error {
 			wg := &sync.WaitGroup{}
 			var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
 			go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
-			for index, _ := range filterSubs {
+			for index := range filterSubs {
 				func(subscriber *filterSubscriber) {
 					wg.Add(1)
 					tunaUtil.Enqueue(measurementDelayJobChan, func() {
@@ -544,6 +544,10 @@ func (c *Common) CreateServerConn(force bool) error {
 			sort.Sort(SortByDelay{filterSubs})
 
 			for _, subscriber := range filterSubs {
+				if subscriber.delay == 0 {
+					continue
+				}
+
 				metadataString := subscribers.Subscribers.Map[subscriber.address]
 				if !c.SetMetadata(metadataString) {
 					continue
