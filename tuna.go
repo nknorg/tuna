@@ -340,62 +340,72 @@ func (c *Common) getOrComputeSharedKey(remotePublicKey []byte) (*[sharedKeySize]
 	return sharedKey, nil
 }
 
-func (c *Common) encryptConn(conn net.Conn, remotePublicKey []byte) (net.Conn, error) {
+func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetadata *pb.ConnectionMetadata) (net.Conn, *pb.ConnectionMetadata, error) {
 	var connNonce []byte
 	var encryptionAlgo pb.EncryptionAlgo
+	var remoteConnMetadata *pb.ConnectionMetadata
+	if localConnMetadata == nil {
+		localConnMetadata = &pb.ConnectionMetadata{}
+	} else {
+		connMetadataCopy := *localConnMetadata
+		localConnMetadata = &connMetadataCopy
+	}
 
 	if len(remotePublicKey) > 0 {
 		encryptionAlgo = c.encryptionAlgo
+		localConnMetadata.EncryptionAlgo = encryptionAlgo
+		localConnMetadata.PublicKey = c.Wallet.PubKey()
 
-		err := writeConnMetadata(conn, &pb.ConnectionMetadata{
-			EncryptionAlgo: encryptionAlgo,
-			PublicKey:      c.Wallet.PubKey(),
-		})
+		err := writeConnMetadata(conn, localConnMetadata)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		connMetadata, err := readConnMetadata(conn)
+		remoteConnMetadata, err = readConnMetadata(conn)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		connNonce = connMetadata.Nonce
+		connNonce = remoteConnMetadata.Nonce
 	} else {
 		connNonce = util.RandomBytes(connNonceSize)
+		localConnMetadata.Nonce = connNonce
 
-		err := writeConnMetadata(conn, &pb.ConnectionMetadata{
-			Nonce: connNonce,
-		})
+		err := writeConnMetadata(conn, localConnMetadata)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		connMetadata, err := readConnMetadata(conn)
+		remoteConnMetadata, err = readConnMetadata(conn)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		if len(connMetadata.PublicKey) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("invalid pubkey size %d", len(connMetadata.PublicKey))
+		if len(remoteConnMetadata.PublicKey) != ed25519.PublicKeySize {
+			return nil, nil, fmt.Errorf("invalid pubkey size %d", len(remoteConnMetadata.PublicKey))
 		}
 
-		encryptionAlgo = connMetadata.EncryptionAlgo
-		remotePublicKey = connMetadata.PublicKey
+		encryptionAlgo = remoteConnMetadata.EncryptionAlgo
+		remotePublicKey = remoteConnMetadata.PublicKey
 	}
 
 	if encryptionAlgo == pb.EncryptionAlgo_ENCRYPTION_NONE {
-		return conn, nil
+		return conn, remoteConnMetadata, nil
 	}
 
 	sharedKey, err := c.getOrComputeSharedKey(remotePublicKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	encryptKey := computeEncryptKey(connNonce, sharedKey[:])
 
-	return encryptConn(conn, encryptKey, encryptionAlgo)
+	encryptedConn, err := encryptConn(conn, encryptKey, encryptionAlgo)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return encryptedConn, remoteConnMetadata, nil
 }
 
 func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
@@ -416,7 +426,7 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 			return err
 		}
 
-		encryptedConn, err := c.encryptConn(tcpConn, remotePublicKey)
+		encryptedConn, _, err := c.wrapConn(tcpConn, remotePublicKey, nil)
 		if err != nil {
 			Close(tcpConn)
 			return err
@@ -516,7 +526,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				})
 			}
 
-			// measurement delay
+			// measure delay
 			wg := &sync.WaitGroup{}
 			var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
 			go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
