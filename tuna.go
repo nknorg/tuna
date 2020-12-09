@@ -29,6 +29,7 @@ import (
 	"github.com/nknorg/nkn/v2/util"
 	"github.com/nknorg/nkn/v2/util/address"
 	"github.com/nknorg/nkn/v2/vault"
+	"github.com/nknorg/tuna/filter"
 	"github.com/nknorg/tuna/geo"
 	"github.com/nknorg/tuna/pb"
 	tunaUtil "github.com/nknorg/tuna/util"
@@ -60,9 +61,10 @@ const (
 )
 
 type ServiceInfo struct {
-	MaxPrice string        `json:"maxPrice"`
-	ListenIP string        `json:"listenIP"`
-	IPFilter *geo.IPFilter `json:"ipFilter"`
+	MaxPrice  string            `json:"maxPrice"`
+	ListenIP  string            `json:"listenIP"`
+	IPFilter  *geo.IPFilter     `json:"ipFilter"`
+	NknFilter *filter.NknFilter `json:"nknFilter"`
 }
 
 type Service struct {
@@ -101,6 +103,7 @@ type Common struct {
 	udpConn          *net.UDPConn
 	isClosed         bool
 	sharedKeys       map[string]*[sharedKeySize]byte
+	remoteNknAddress string
 }
 
 type filterSubscriber struct {
@@ -255,6 +258,18 @@ func (c *Common) SetMetadata(metadataString string) bool {
 		return false
 	}
 	return true
+}
+
+func (c *Common) GetRemoteNknAddress() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.remoteNknAddress
+}
+
+func (c *Common) SetRemoteNknAddress(nknAddr string) {
+	c.Lock()
+	c.remoteNknAddress = nknAddr
+	c.Unlock()
 }
 
 func (c *Common) GetPaymentReceiver() string {
@@ -476,29 +491,53 @@ func (c *Common) CreateServerConn(force bool) error {
 				return err
 			}
 
-			subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
-			if err != nil {
-				return err
-			}
-			if subscribersCount == 0 {
-				return errors.New("there is no service providers for " + c.Service.Name)
-			}
+			var allSubscribers []string
+			var filterSubs filterSubscribers
+			var subscriberRaw map[string]string
 
-			offset := rand.Intn(subscribersCount/getSubscribersBatchSize + 1)
-			subscribers, err := c.Wallet.GetSubscribers(topic, offset*getSubscribersBatchSize, getSubscribersBatchSize, true, false)
-			if err != nil {
-				return err
-			}
+			if c.ServiceInfo.NknFilter != nil && len(c.ServiceInfo.NknFilter.Allow) > 0 { // nkn client filter
+				nknFilterLength := len(c.ServiceInfo.NknFilter.Allow)
+				subscriberRaw = make(map[string]string, nknFilterLength)
+				allSubscribers = make([]string, 0, nknFilterLength)
+				for _, aFilter := range c.ServiceInfo.NknFilter.Allow {
+					subscription, err := c.Wallet.GetSubscription(topic, aFilter.Address)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
 
-			allSubscribers := make([]string, 0, len(subscribers.Subscribers.Map))
-			for subscriber := range subscribers.Subscribers.Map {
-				allSubscribers = append(allSubscribers, subscriber)
+					subscriberRaw[aFilter.Address] = subscription.Meta
+					allSubscribers = append(allSubscribers, aFilter.Address)
+				}
+				if len(allSubscribers) == 0 {
+					return errors.New("none of the NKN address whitelist can provide service.")
+				}
+			} else {
+				subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
+				if err != nil {
+					return err
+				}
+				if subscribersCount == 0 {
+					return errors.New("there is no service providers for " + c.Service.Name)
+				}
+
+				offset := rand.Intn(subscribersCount/getSubscribersBatchSize + 1)
+				subscribers, err := c.Wallet.GetSubscribers(topic, offset*getSubscribersBatchSize, getSubscribersBatchSize, true, false)
+				if err != nil {
+					return err
+				}
+				subscriberRaw = subscribers.Subscribers.Map
+
+				allSubscribers = make([]string, 0, len(subscribers.Subscribers.Map))
+				for subscriber := range subscribers.Subscribers.Map {
+					allSubscribers = append(allSubscribers, subscriber)
+				}
 			}
 
 			// filter
-			filterSubs := make(filterSubscribers, 0, len(allSubscribers))
+			filterSubs = make(filterSubscribers, 0, len(allSubscribers))
 			for _, subscriber := range allSubscribers {
-				metadataString := subscribers.Subscribers.Map[subscriber]
+				metadataString := subscriberRaw[subscriber]
 				metadata, err := ReadMetadata(metadataString)
 				if err != nil {
 					log.Println("Couldn't unmarshal metadata:", err)
@@ -512,6 +551,11 @@ func (c *Common) CreateServerConn(force bool) error {
 				if entryToExitPrice > entryToExitMaxPrice || exitToEntryPrice > exitToEntryMaxPrice {
 					continue
 				}
+
+				if !c.ServiceInfo.NknFilter.IsAllow(&filter.NknClient{Address: subscriber}) {
+					continue
+				}
+
 				res, err := c.ServiceInfo.IPFilter.AllowIP(metadata.Ip)
 				if err != nil {
 					log.Println(err)
@@ -527,38 +571,36 @@ func (c *Common) CreateServerConn(force bool) error {
 			}
 
 			// measure delay
-			wg := &sync.WaitGroup{}
-			var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
-			go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
-			for index := range filterSubs {
-				func(subscriber *filterSubscriber) {
-					wg.Add(1)
-					tunaUtil.Enqueue(measurementDelayJobChan, func() {
-						addr := subscriber.metadata.Ip + ":" + strconv.Itoa(int(subscriber.metadata.TcpPort))
-						delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, 2*time.Second)
-						if err != nil {
-							switch err.(type) {
-							case net.Error:
-								return
-							default:
-								log.Println(err)
-								return
+			if len(filterSubs) > 1 {
+				wg := &sync.WaitGroup{}
+				var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
+				go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
+				for index := range filterSubs {
+					func(subscriber *filterSubscriber) {
+						wg.Add(1)
+						tunaUtil.Enqueue(measurementDelayJobChan, func() {
+							addr := subscriber.metadata.Ip + ":" + strconv.Itoa(int(subscriber.metadata.TcpPort))
+							delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, 2*time.Second)
+							if err != nil {
+								switch err.(type) {
+								case net.Error:
+									break
+								default:
+									log.Println(err)
+									break
+								}
 							}
-						}
-						subscriber.delay = delay
-					})
-				}(&filterSubs[index])
+							subscriber.delay = delay
+						})
+					}(&filterSubs[index])
+				}
+				wg.Wait()
+				close(measurementDelayJobChan)
+				sort.Sort(SortByDelay{filterSubs})
 			}
-			wg.Wait()
-			close(measurementDelayJobChan)
-			sort.Sort(SortByDelay{filterSubs})
 
 			for _, subscriber := range filterSubs {
-				if subscriber.delay == 0 {
-					continue
-				}
-
-				metadataString := subscribers.Subscribers.Map[subscriber.address]
+				metadataString := subscriberRaw[subscriber.address]
 				if !c.SetMetadata(metadataString) {
 					continue
 				}
@@ -590,8 +632,8 @@ func (c *Common) CreateServerConn(force bool) error {
 						continue
 					}
 				}
-
 				c.Lock()
+				c.remoteNknAddress = subscriber.address
 				c.entryToExitPrice = entryToExitPrice
 				c.exitToEntryPrice = exitToEntryPrice
 				if c.ReverseMetadata != nil {
@@ -599,7 +641,6 @@ func (c *Common) CreateServerConn(force bool) error {
 					c.metadata.ServiceUdp = c.ReverseMetadata.ServiceUdp
 				}
 				c.Unlock()
-
 				remotePublicKey, err := nkn.ClientAddrToPubKey(subscriber.address)
 				if err != nil {
 					log.Println(err)
