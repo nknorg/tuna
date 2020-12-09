@@ -14,6 +14,7 @@ import (
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/pb"
+	"github.com/nknorg/tuna/util"
 	"github.com/patrickmn/go-cache"
 	"github.com/rdegges/go-ipify"
 	"github.com/xtaci/smux"
@@ -560,12 +561,16 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 						return err
 					}
 
-					encryptedConn, err := te.encryptConn(tcpConn, nil)
+					encryptedConn, connMetadata, err := te.wrapConn(tcpConn, nil, nil)
 					if err != nil {
 						return err
 					}
 
 					defer Close(encryptedConn)
+
+					if connMetadata.IsMeasurement {
+						return util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), 0)
+					}
 
 					te.session, err = smux.Server(encryptedConn, nil)
 					if err != nil {

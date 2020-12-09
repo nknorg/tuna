@@ -14,6 +14,7 @@ import (
 	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/geo"
 	"github.com/nknorg/tuna/pb"
+	"github.com/nknorg/tuna/util"
 	"github.com/patrickmn/go-cache"
 	"github.com/rdegges/go-ipify"
 	"github.com/xtaci/smux"
@@ -271,23 +272,32 @@ func (te *TunaExit) listenTCP(port int) error {
 			}
 
 			go func() {
-				defer Close(conn)
+				err := func() error {
+					defer Close(conn)
 
-				encryptedConn, err := te.encryptConn(conn, nil)
+					encryptedConn, connMetadata, err := te.wrapConn(conn, nil, nil)
+					if err != nil {
+						return err
+					}
+
+					defer Close(encryptedConn)
+
+					if connMetadata.IsMeasurement {
+						return util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), 0)
+					}
+
+					session, err := smux.Server(encryptedConn, nil)
+					if err != nil {
+						return err
+					}
+
+					te.handleSession(session)
+
+					return nil
+				}()
 				if err != nil {
 					log.Println(err)
-					return
 				}
-
-				defer Close(encryptedConn)
-
-				session, err := smux.Server(encryptedConn, nil)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-				te.handleSession(session)
 			}()
 		}
 	}()
