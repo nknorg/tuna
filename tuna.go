@@ -59,8 +59,9 @@ const (
 	DefaultEncryptionAlgo                      = pb.EncryptionAlgo_ENCRYPTION_NONE
 	subscribeDurationRandomFactor              = 0.1
 	measureLatencyConcurrentWorkers            = 24
-	measureBandwidthConcurrentWorkers          = 10
-	topDelayCount                              = 30
+	measureBandwidthConcurrentWorkers          = 8
+	measureDelayTopDelayCount                  = 32
+	measurementBytesDownlink                   = 128 << 10
 )
 
 type ServiceInfo struct {
@@ -115,7 +116,7 @@ type filterSubscriber struct {
 	delay     time.Duration
 	bandwidth float32
 }
-type filterSubscribers []filterSubscriber
+type filterSubscribers []*filterSubscriber
 
 func (fs filterSubscribers) Len() int {
 	return len(fs)
@@ -519,7 +520,7 @@ func (c *Common) CreateServerConn(force bool) error {
 					allSubscribers = append(allSubscribers, aFilter.Address)
 				}
 				if len(allSubscribers) == 0 {
-					return errors.New("none of the NKN address whitelist can provide service.")
+					return errors.New("none of the NKN address whitelist can provide service")
 				}
 			} else {
 				subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
@@ -573,7 +574,7 @@ func (c *Common) CreateServerConn(force bool) error {
 					continue
 				}
 
-				filterSubs = append(filterSubs, filterSubscriber{
+				filterSubs = append(filterSubs, &filterSubscriber{
 					address:  subscriber,
 					metadata: metadata,
 				})
@@ -581,11 +582,13 @@ func (c *Common) CreateServerConn(force bool) error {
 
 			var delayMeasuredSubs filterSubscribers
 			var bandwidthMeasuredSubs filterSubscribers
-			if len(filterSubs) == 1 {
+			if len(filterSubs) == 0 {
+				continue
+			} else if len(filterSubs) == 1 {
 				bandwidthMeasuredSubs = filterSubs
 			} else {
 				// measure delay
-				delayMeasuredSubs = make(filterSubscribers, 0, topDelayCount)
+				delayMeasuredSubs = make(filterSubscribers, 0, measureDelayTopDelayCount)
 				wg := &sync.WaitGroup{}
 				var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
 				go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
@@ -596,37 +599,39 @@ func (c *Common) CreateServerConn(force bool) error {
 							addr := subscriber.metadata.Ip + ":" + strconv.Itoa(int(subscriber.metadata.TcpPort))
 							delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, 1*time.Second)
 							if err != nil {
-								switch err.(type) {
-								case net.Error:
-									return
-								default:
+								if _, ok := err.(net.Error); !ok {
 									log.Println(err)
-									return
 								}
-							} else {
-								subscriber.delay = delay
-								if len(delayMeasuredSubs) < topDelayCount {
-									delayMeasuredSubs = append(delayMeasuredSubs, *subscriber)
-								}
+								return
+							}
+							subscriber.delay = delay
+							if len(delayMeasuredSubs) < measureDelayTopDelayCount {
+								delayMeasuredSubs = append(delayMeasuredSubs, subscriber)
 							}
 						})
-					}(&filterSubs[index])
+					}(filterSubs[index])
 				}
 				wg.Wait()
 				close(measurementDelayJobChan)
 				sort.Sort(SortByDelay{filterSubs})
 
-				// measurement bandwidth
-				bandwidthTimeout := 3000 * time.Millisecond
+				// measure bandwidth
+				bandwidthTimeout := 3 * time.Second
 				bandwidthMeasuredSubs = make(filterSubscribers, 0, len(delayMeasuredSubs))
 				wg = &sync.WaitGroup{}
 				ctx, cancel := context.WithCancel(context.Background())
 				var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
 				go tunaUtil.WorkPool(measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
 				for index := range delayMeasuredSubs {
-					func(ctx context.Context, sub *filterSubscriber) {
+					func(sub *filterSubscriber) {
 						wg.Add(1)
 						tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
+							remotePublicKey, err := nkn.ClientAddrToPubKey(sub.address)
+							if err != nil {
+								log.Println(err)
+								return
+							}
+
 							addr := sub.metadata.Ip + ":" + strconv.Itoa(int(sub.metadata.TcpPort))
 							conn, err := net.DialTimeout(
 								string(TCP),
@@ -634,38 +639,47 @@ func (c *Common) CreateServerConn(force bool) error {
 								2*time.Second,
 							)
 							if err != nil {
-								log.Println(err)
+								if _, ok := err.(net.Error); !ok {
+									log.Println(err)
+								}
 								return
 							}
-							remotePublicKey, err := nkn.ClientAddrToPubKey(sub.address)
-							if err != nil {
-								log.Println(err)
-								return
-							}
+
 							encryptedConn, _, err := c.wrapConn(conn, remotePublicKey, &pb.ConnectionMetadata{
 								IsMeasurement:            true,
-								MeasurementBytesDownlink: 128000,
+								MeasurementBytesDownlink: measurementBytesDownlink,
 							})
-							go func() {
-								<-ctx.Done()
-								conn.SetDeadline(time.Now())
-							}()
-							timeStart := time.Now()
-							min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, 128000, bandwidthTimeout)
-							dur := time.Since(timeStart)
-							encryptedConn.Close()
 							if err != nil {
 								log.Println(err)
-							} else {
-								filterSubs[index].bandwidth = min
-								log.Printf("address: %s banwidth, min: %f, max: %f, time: %s", addr, min, max, dur)
-								bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, filterSubs[index])
-								if len(bandwidthMeasuredSubs) >= 3 {
-									cancel()
+								conn.Close()
+								return
+							}
+							defer encryptedConn.Close()
+
+							go func() {
+								<-ctx.Done()
+								encryptedConn.SetDeadline(time.Now())
+							}()
+
+							timeStart := time.Now()
+							min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, measurementBytesDownlink, bandwidthTimeout)
+							dur := time.Since(timeStart)
+							if err != nil {
+								if _, ok := err.(net.Error); !ok {
+									log.Println(err)
 								}
+								return
+							}
+
+							log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1000, max/1000, dur)
+
+							sub.bandwidth = min
+							bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, sub)
+							if len(bandwidthMeasuredSubs) >= 3 {
+								cancel()
 							}
 						})
-					}(ctx, &filterSubs[index])
+					}(filterSubs[index])
 				}
 				wg.Wait()
 				cancel()
