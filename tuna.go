@@ -679,7 +679,7 @@ func (c *Common) CreateServerConn(force bool) error {
 								cancel()
 							}
 						})
-					}(filterSubs[index])
+					}(delayMeasuredSubs[index])
 				}
 				wg.Wait()
 				cancel()
@@ -694,7 +694,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 
 				metadata := subscriber.metadata
-				log.Printf("IP: %s, delay: %s, bandwidth: %f", metadata.Ip, subscriber.delay, subscriber.bandwidth)
+				log.Printf("IP: %s, address: %s, delay: %s, bandwidth: %f KB/s", metadata.Ip, subscriber.address, subscriber.delay, subscriber.bandwidth/1000)
 				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
 				if err != nil {
 					log.Println(err)
