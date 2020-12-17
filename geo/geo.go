@@ -2,7 +2,9 @@ package geo
 
 import (
 	"log"
+	"net"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,7 @@ type Location struct {
 	CountryCode string `json:"countryCode"`
 	Country     string `json:"country"`
 	City        string `json:"city"`
+	cidr        *net.IPNet
 }
 
 var emptyLocation = Location{}
@@ -39,11 +42,29 @@ func (l *Location) Empty() bool {
 
 func (l *Location) Match(location *Location) bool {
 	if len(l.IP) > 0 {
-		if location.IP == l.IP {
+		if l.cidr == nil {
+			matched, err := regexp.MatchString(`/\d{1,2}`, l.IP)
+			if err != nil {
+				log.Println(err)
+				return false
+			}
+			if !matched {
+				l.IP += "/32"
+			}
+			_, subnet, err := net.ParseCIDR(l.IP)
+			if err != nil {
+				log.Println(err)
+				return false
+			}
+			l.cidr = subnet
+		}
+
+		if l.cidr.Contains(net.ParseIP(location.IP)) {
 			return true
 		}
 		return false
 	}
+
 	if len(l.CountryCode) > 0 && strings.ToLower(location.CountryCode) == strings.ToLower(l.CountryCode) {
 		return true
 	}
