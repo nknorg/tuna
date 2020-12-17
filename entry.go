@@ -39,6 +39,8 @@ type EntryConfiguration struct {
 	ReverseSubscriptionFee      string                 `json:"reverseSubscriptionFee"`
 	GeoDBPath                   string                 `json:"geoDBPath"`
 	DownloadGeoDB               bool                   `json:"downloadGeoDB"`
+	MeasureBandwidth            bool                   `json:"measureBandwidth"`
+	MeasurementBytesDownLink    int32                  `json:"measurementBytesDownLink"`
 }
 
 type TunaEntry struct {
@@ -63,7 +65,7 @@ type TunaEntry struct {
 }
 
 func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, config *EntryConfiguration) (*TunaEntry, error) {
-	c, err := NewCommon(&service, &serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, nil)
+	c, err := NewCommon(&service, &serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, config.MeasureBandwidth, config.MeasurementBytesDownLink, nil)
 	if err != nil {
 		return nil, err
 	}
