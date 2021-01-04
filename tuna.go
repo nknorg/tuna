@@ -61,6 +61,7 @@ const (
 	subscribeDurationRandomFactor              = 0.1
 	measureLatencyConcurrentWorkers            = 64
 	measureBandwidthConcurrentWorkers          = 16
+	measureBandwidthTopCount                   = 10
 	measureDelayTopDelayCount                  = 32
 	measurementBytesDownLink                   = 256 << 10
 )
@@ -91,8 +92,6 @@ type Common struct {
 	IsServer                 bool
 	MeasureBandwidth         bool
 	MeasurementBytesDownLink int32
-	Timeout                  int64
-	Debug                    bool
 
 	udpReadChan    chan []byte
 	udpWriteChan   chan []byte
@@ -473,97 +472,21 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 }
 
 func (c *Common) CreateServerConn(force bool) error {
-	entryToExitMaxPrice, exitToEntryMaxPrice, err := ParsePrice(c.ServiceInfo.MaxPrice)
-	if err != nil {
-		log.Fatalf("Parse price of service error: %v", err)
-	}
-
 	if !c.IsServer && (!c.GetConnected() || force) {
-		topic := c.SubscriptionPrefix + c.Service.Name
 		for {
-			err = c.SetPaymentReceiver("")
+			err := c.SetPaymentReceiver("")
 			if err != nil {
 				return err
 			}
 
-			var allSubscribers []string
 			var filterSubs types.Nodes
-			var subscriberRaw map[string]string
-
-			if c.ServiceInfo.NknFilter != nil && len(c.ServiceInfo.NknFilter.Allow) > 0 { // nkn client filter
-				nknFilterLength := len(c.ServiceInfo.NknFilter.Allow)
-				subscriberRaw = make(map[string]string, nknFilterLength)
-				allSubscribers = make([]string, 0, nknFilterLength)
-				for _, aFilter := range c.ServiceInfo.NknFilter.Allow {
-					subscription, err := c.Wallet.GetSubscription(topic, aFilter.Address)
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-
-					subscriberRaw[aFilter.Address] = subscription.Meta
-					allSubscribers = append(allSubscribers, aFilter.Address)
-				}
-				if len(allSubscribers) == 0 {
-					return errors.New("none of the NKN address whitelist can provide service")
-				}
-			} else {
-				subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
-				if err != nil {
-					return err
-				}
-				if subscribersCount == 0 {
-					return errors.New("there is no service providers for " + c.Service.Name)
-				}
-
-				offset := rand.Intn(subscribersCount/getSubscribersBatchSize + 1)
-				subscribers, err := c.Wallet.GetSubscribers(topic, offset*getSubscribersBatchSize, getSubscribersBatchSize, true, false)
-				if err != nil {
-					return err
-				}
-				subscriberRaw = subscribers.Subscribers.Map
-
-				allSubscribers = make([]string, 0, len(subscribers.Subscribers.Map))
-				for subscriber := range subscribers.Subscribers.Map {
-					allSubscribers = append(allSubscribers, subscriber)
-				}
+			allSubscribers, subscriberRaw, err := c.nknFilter()
+			if err != nil {
+				return err
 			}
 
 			// filter
-			filterSubs = make(types.Nodes, 0, len(allSubscribers))
-			for _, subscriber := range allSubscribers {
-				metadataString := subscriberRaw[subscriber]
-				metadata, err := ReadMetadata(metadataString)
-				if err != nil {
-					log.Println("Couldn't unmarshal metadata:", err)
-					continue
-				}
-				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				if entryToExitPrice > entryToExitMaxPrice || exitToEntryPrice > exitToEntryMaxPrice {
-					continue
-				}
-
-				if !c.ServiceInfo.NknFilter.IsAllow(&filter.NknClient{Address: subscriber}) {
-					continue
-				}
-
-				res, err := c.ServiceInfo.IPFilter.AllowIP(metadata.Ip)
-				if err != nil {
-					log.Println(err)
-				}
-				if !res {
-					continue
-				}
-
-				filterSubs = append(filterSubs, &types.Node{
-					Address:  subscriber,
-					Metadata: metadata,
-				})
-			}
+			filterSubs = c.filterSubscribers(allSubscribers, subscriberRaw)
 
 			var delayMeasuredSubs types.Nodes
 			var bandwidthMeasuredSubs types.Nodes
@@ -573,112 +496,11 @@ func (c *Common) CreateServerConn(force bool) error {
 				bandwidthMeasuredSubs = filterSubs
 			} else {
 				// measure delay
-				timeStart := time.Now()
-				delayMeasuredSubs = make(types.Nodes, 0, measureDelayTopDelayCount)
-				wg := &sync.WaitGroup{}
-				var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
-				go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
-				for index := range filterSubs {
-					func(subscriber *types.Node) {
-						wg.Add(1)
-						tunaUtil.Enqueue(measurementDelayJobChan, func() {
-							addr := subscriber.Metadata.Ip + ":" + strconv.Itoa(int(subscriber.Metadata.TcpPort))
-							delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, 1*time.Second)
-							if err != nil {
-								if _, ok := err.(net.Error); !ok {
-									log.Println(err)
-								}
-								return
-							}
-							subscriber.Delay = delay
-							if len(delayMeasuredSubs) < measureDelayTopDelayCount {
-								delayMeasuredSubs = append(delayMeasuredSubs, subscriber)
-							}
-						})
-					}(filterSubs[index])
-				}
-				wg.Wait()
-				measureDelayTime := time.Since(timeStart)
-				log.Println(fmt.Sprintf("measure delay: total use %s", measureDelayTime))
-
-				close(measurementDelayJobChan)
-				sort.Sort(types.SortByDelay{Nodes: filterSubs})
+				delayMeasuredSubs = c.measureDelay(filterSubs)
 
 				if c.MeasureBandwidth {
 					// measure bandwidth
-					timeStart = time.Now()
-					bandwidthTimeout := 2 * time.Second
-					bandwidthMeasuredSubs = make(types.Nodes, 0, len(delayMeasuredSubs))
-					wg = &sync.WaitGroup{}
-					ctx, cancel := context.WithCancel(context.Background())
-					var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
-					go tunaUtil.WorkPool(measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
-					for index := range delayMeasuredSubs {
-						func(sub *types.Node) {
-							wg.Add(1)
-							tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
-								remotePublicKey, err := nkn.ClientAddrToPubKey(sub.Address)
-								if err != nil {
-									log.Println(err)
-									return
-								}
-
-								addr := sub.Metadata.Ip + ":" + strconv.Itoa(int(sub.Metadata.TcpPort))
-								conn, err := net.DialTimeout(
-									string(TCP),
-									addr,
-									2*time.Second,
-								)
-								if err != nil {
-									if _, ok := err.(net.Error); !ok {
-										log.Println(err)
-									}
-									return
-								}
-
-								encryptedConn, _, err := c.wrapConn(conn, remotePublicKey, &pb.ConnectionMetadata{
-									IsMeasurement:            true,
-									MeasurementBytesDownlink: uint32(c.MeasurementBytesDownLink),
-								})
-								if err != nil {
-									log.Println(err)
-									conn.Close()
-									return
-								}
-								defer encryptedConn.Close()
-
-								go func() {
-									<-ctx.Done()
-									encryptedConn.SetDeadline(time.Now())
-								}()
-
-								timeStart := time.Now()
-								min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), bandwidthTimeout)
-								dur := time.Since(timeStart)
-								if err != nil {
-									if _, ok := err.(net.Error); !ok {
-										log.Println(err)
-									}
-									return
-								}
-
-								log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1000, max/1000, dur)
-
-								sub.Bandwidth = min
-								bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, sub)
-								if len(bandwidthMeasuredSubs) >= 5 {
-									cancel()
-								}
-							})
-						}(delayMeasuredSubs[index])
-					}
-					wg.Wait()
-					cancel()
-					measureBandwidthTime := time.Since(timeStart)
-					log.Println(fmt.Sprintf("measure bandwidth: total use %s", measureBandwidthTime))
-
-					close(measurementBandwidthJobChan)
-					sort.Sort(types.SortByBandwidth{Nodes: bandwidthMeasuredSubs})
+					bandwidthMeasuredSubs = c.measureBandwidth(delayMeasuredSubs, measureBandwidthTopCount)
 				} else {
 					bandwidthMeasuredSubs = delayMeasuredSubs
 				}
@@ -691,7 +513,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				}
 
 				metadata := subscriber.Metadata
-				log.Printf("IP: %s, address: %s, delay: %s, bandwidth: %f KB/s", metadata.Ip, subscriber.Address, subscriber.Delay, subscriber.Bandwidth/1000)
+				log.Printf("IP: %s, address: %s, delay: %.3f ms, bandwidth: %f KB/s", metadata.Ip, subscriber.Address, subscriber.Delay, subscriber.Bandwidth/1000)
 
 				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
 				if err != nil {
@@ -745,6 +567,240 @@ func (c *Common) CreateServerConn(force bool) error {
 	}
 
 	return nil
+}
+
+func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nodes, error) {
+	var filterSubs types.Nodes
+	allSubscribers, subscriberRaw, err := c.nknFilter()
+	if err != nil {
+		return nil, err
+	}
+
+	// filter
+	filterSubs = c.filterSubscribers(allSubscribers, subscriberRaw)
+
+	var delayMeasuredSubs types.Nodes
+	var bandwidthMeasuredSubs types.Nodes
+	if len(filterSubs) == 0 {
+		return nil, nil
+	} else if len(filterSubs) == 1 {
+		bandwidthMeasuredSubs = filterSubs
+	} else {
+		// measure delay
+		delayMeasuredSubs = c.measureDelay(filterSubs)
+
+		if measureBandwidth {
+			// measure bandwidth
+			bandwidthMeasuredSubs = c.measureBandwidth(delayMeasuredSubs, n)
+		} else {
+			length := n
+			if length > len(delayMeasuredSubs) {
+				length = len(delayMeasuredSubs)
+			}
+			bandwidthMeasuredSubs = delayMeasuredSubs[:length]
+		}
+	}
+
+	return bandwidthMeasuredSubs, nil
+}
+
+func (c *Common) nknFilter() ([]string, map[string]string, error) {
+	topic := c.SubscriptionPrefix + c.Service.Name
+	var allSubscribers []string
+	var subscriberRaw map[string]string
+
+	if c.ServiceInfo.NknFilter != nil && len(c.ServiceInfo.NknFilter.Allow) > 0 { // nkn client filter
+		nknFilterLength := len(c.ServiceInfo.NknFilter.Allow)
+		subscriberRaw = make(map[string]string, nknFilterLength)
+		allSubscribers = make([]string, 0, nknFilterLength)
+		for _, aFilter := range c.ServiceInfo.NknFilter.Allow {
+			subscription, err := c.Wallet.GetSubscription(topic, aFilter.Address)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			subscriberRaw[aFilter.Address] = subscription.Meta
+			allSubscribers = append(allSubscribers, aFilter.Address)
+		}
+		if len(allSubscribers) == 0 {
+			return nil, nil, errors.New("none of the NKN address whitelist can provide service")
+		}
+	} else {
+		subscribersCount, err := c.Wallet.GetSubscribersCount(topic)
+		if err != nil {
+			return nil, nil, err
+		}
+		if subscribersCount == 0 {
+			return nil, nil, errors.New("there is no service providers for " + c.Service.Name)
+		}
+
+		offset := rand.Intn(subscribersCount/getSubscribersBatchSize + 1)
+		subscribers, err := c.Wallet.GetSubscribers(topic, offset*getSubscribersBatchSize, getSubscribersBatchSize, true, false)
+		if err != nil {
+			return nil, nil, err
+		}
+		subscriberRaw = subscribers.Subscribers.Map
+
+		allSubscribers = make([]string, 0, len(subscribers.Subscribers.Map))
+		for subscriber := range subscribers.Subscribers.Map {
+			allSubscribers = append(allSubscribers, subscriber)
+		}
+	}
+	return allSubscribers, subscriberRaw, nil
+}
+
+func (c *Common) filterSubscribers(allSubscribers []string, subscriberRaw map[string]string) types.Nodes {
+	entryToExitMaxPrice, exitToEntryMaxPrice, err := ParsePrice(c.ServiceInfo.MaxPrice)
+	if err != nil {
+		log.Fatalf("Parse price of service error: %v", err)
+	}
+	filterSubs := make(types.Nodes, 0, len(allSubscribers))
+	for _, subscriber := range allSubscribers {
+		metadataString := subscriberRaw[subscriber]
+		metadata, err := ReadMetadata(metadataString)
+		if err != nil {
+			log.Println("Couldn't unmarshal metadata:", err)
+			continue
+		}
+		entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if entryToExitPrice > entryToExitMaxPrice || exitToEntryPrice > exitToEntryMaxPrice {
+			continue
+		}
+
+		if !c.ServiceInfo.NknFilter.IsAllow(&filter.NknClient{Address: subscriber}) {
+			continue
+		}
+
+		res, err := c.ServiceInfo.IPFilter.AllowIP(metadata.Ip)
+		if err != nil {
+			log.Println(err)
+		}
+		if !res {
+			continue
+		}
+
+		filterSubs = append(filterSubs, &types.Node{
+			Address:  subscriber,
+			Metadata: metadata,
+		})
+	}
+	return filterSubs
+}
+
+func (c *Common) measureDelay(filterSubs types.Nodes) types.Nodes {
+	timeStart := time.Now()
+	delayMeasuredSubs := make(types.Nodes, 0, measureDelayTopDelayCount)
+	wg := &sync.WaitGroup{}
+	var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
+	go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
+	for index := range filterSubs {
+		func(subscriber *types.Node) {
+			wg.Add(1)
+			tunaUtil.Enqueue(measurementDelayJobChan, func() {
+				addr := subscriber.Metadata.Ip + ":" + strconv.Itoa(int(subscriber.Metadata.TcpPort))
+				delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, 1*time.Second)
+				if err != nil {
+					if _, ok := err.(net.Error); !ok {
+						log.Println(err)
+					}
+					return
+				}
+				subscriber.Delay = float32(delay) / float32(time.Millisecond)
+				if len(delayMeasuredSubs) < measureDelayTopDelayCount {
+					delayMeasuredSubs = append(delayMeasuredSubs, subscriber)
+				}
+			})
+		}(filterSubs[index])
+	}
+	wg.Wait()
+	measureDelayTime := time.Since(timeStart)
+	log.Println(fmt.Sprintf("measure delay: total use %s", measureDelayTime))
+
+	close(measurementDelayJobChan)
+	sort.Sort(types.SortByDelay{Nodes: filterSubs})
+	return delayMeasuredSubs
+}
+
+func (c *Common) measureBandwidth(delayMeasuredSubs types.Nodes, n int) types.Nodes {
+	timeStart := time.Now()
+	bandwidthTimeout := 2 * time.Second
+	bandwidthMeasuredSubs := make(types.Nodes, 0, len(delayMeasuredSubs))
+	wg := &sync.WaitGroup{}
+	ctx, cancel := context.WithCancel(context.Background())
+	var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
+	go tunaUtil.WorkPool(measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
+	for index := range delayMeasuredSubs {
+		func(sub *types.Node) {
+			wg.Add(1)
+			tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
+				remotePublicKey, err := nkn.ClientAddrToPubKey(sub.Address)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				addr := sub.Metadata.Ip + ":" + strconv.Itoa(int(sub.Metadata.TcpPort))
+				conn, err := net.DialTimeout(
+					string(TCP),
+					addr,
+					2*time.Second,
+				)
+				if err != nil {
+					if _, ok := err.(net.Error); !ok {
+						log.Println(err)
+					}
+					return
+				}
+
+				encryptedConn, _, err := c.wrapConn(conn, remotePublicKey, &pb.ConnectionMetadata{
+					IsMeasurement:            true,
+					MeasurementBytesDownlink: uint32(c.MeasurementBytesDownLink),
+				})
+				if err != nil {
+					log.Println(err)
+					conn.Close()
+					return
+				}
+				defer encryptedConn.Close()
+
+				go func() {
+					<-ctx.Done()
+					encryptedConn.SetDeadline(time.Now())
+				}()
+
+				timeStart := time.Now()
+				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), bandwidthTimeout)
+				dur := time.Since(timeStart)
+				if err != nil {
+					if _, ok := err.(net.Error); !ok {
+						log.Println(err)
+					}
+					return
+				}
+
+				log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1000, max/1000, dur)
+
+				sub.Bandwidth = min
+				bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, sub)
+				if len(bandwidthMeasuredSubs) >= n {
+					cancel()
+				}
+			})
+		}(delayMeasuredSubs[index])
+	}
+	wg.Wait()
+	cancel()
+	measureBandwidthTime := time.Since(timeStart)
+	log.Println(fmt.Sprintf("measure bandwidth: total use %s", measureBandwidthTime))
+
+	close(measurementBandwidthJobChan)
+	sort.Sort(types.SortByBandwidth{Nodes: bandwidthMeasuredSubs})
+	return bandwidthMeasuredSubs
 }
 
 func (c *Common) startPayment(
