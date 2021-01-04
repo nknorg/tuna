@@ -2,13 +2,12 @@ package types
 
 import (
 	"github.com/nknorg/tuna/pb"
-	"time"
 )
 
 type Node struct {
 	Address   string
 	Metadata  *pb.ServiceMetadata
-	Delay     time.Duration
+	Delay     float32
 	Bandwidth float32
 }
 type Nodes []*Node
