@@ -92,6 +92,7 @@ type Common struct {
 	IsServer                 bool
 	MeasureBandwidth         bool
 	MeasurementBytesDownLink int32
+	MeasureStoragePath       string
 
 	udpReadChan    chan []byte
 	udpWriteChan   chan []byte
@@ -114,7 +115,7 @@ type Common struct {
 	remoteNknAddress string
 }
 
-func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse, isServer bool, measureBandwidth bool, measurementBytes int32, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
+func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse, isServer bool, measureBandwidth bool, measurementBytes int32, measureStoragePath string, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
 	encryptionAlgo := DefaultEncryptionAlgo
 	var err error
 	if service != nil && len(service.Encryption) > 0 {
@@ -144,6 +145,7 @@ func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, d
 		IsServer:                 isServer,
 		MeasureBandwidth:         measureBandwidth,
 		MeasurementBytesDownLink: measurementBytes,
+		MeasureStoragePath:       measureStoragePath,
 
 		curveSecretKey: curveSecretKey,
 		encryptionAlgo: encryptionAlgo,

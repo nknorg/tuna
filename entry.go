@@ -41,6 +41,7 @@ type EntryConfiguration struct {
 	DownloadGeoDB               bool                   `json:"downloadGeoDB"`
 	MeasureBandwidth            bool                   `json:"measureBandwidth"`
 	MeasurementBytesDownLink    int32                  `json:"measurementBytesDownLink"`
+	MeasureStoragePath          string                 `json:"measureStoragePath"`
 }
 
 type TunaEntry struct {
@@ -65,7 +66,7 @@ type TunaEntry struct {
 }
 
 func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, config *EntryConfiguration) (*TunaEntry, error) {
-	c, err := NewCommon(&service, &serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, config.MeasureBandwidth, config.MeasurementBytesDownLink, nil)
+	c, err := NewCommon(&service, &serviceInfo, wallet, config.DialTimeout, config.SubscriptionPrefix, config.Reverse, config.Reverse, config.MeasureBandwidth, config.MeasurementBytesDownLink, config.MeasureStoragePath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +110,10 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 	if !te.IsServer && te.ServiceInfo.IPFilter.NeedGeoInfo() {
 		te.ServiceInfo.IPFilter.AddProvider(te.config.DownloadGeoDB, te.config.GeoDBPath)
 		go te.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
+	}
+
+	if !te.IsServer && te.MeasureStoragePath != "" {
+
 	}
 
 	for {
