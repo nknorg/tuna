@@ -48,6 +48,7 @@ type ExitConfiguration struct {
 	ReverseIPFilter           geo.IPFilter               `json:"reverseIPFilter"`
 	MeasureBandwidth          bool                       `json:"measureBandwidth"`
 	MeasurementBytesDownLink  int32                      `json:"measurementBytesDownLink"`
+	MeasureStoragePath        string                     `json:"measureStoragePath"`
 }
 
 type TunaExit struct {
@@ -104,7 +105,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		subscriptionPrefix = config.SubscriptionPrefix
 	}
 
-	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, config.MeasureBandwidth, config.MeasurementBytesDownLink, reverseMetadata)
+	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, config.MeasureBandwidth, config.MeasurementBytesDownLink, config.MeasureStoragePath, reverseMetadata)
 	if err != nil {
 		return nil, err
 	}
