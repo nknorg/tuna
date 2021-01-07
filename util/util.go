@@ -24,6 +24,35 @@ func ReadJSON(fileName string, value interface{}) error {
 	return nil
 }
 
+func WriteJSON(path string, data interface{}) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	b, err := json.MarshalIndent(data, "", "    ")
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(b)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func Exists(path string) bool {
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsExist(err) {
+			return true
+		}
+		return false
+	}
+	return true
+}
+
 func DownloadJsonFile(url, filename string) error {
 	f, err := os.Create(filename)
 	if err != nil {
