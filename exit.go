@@ -105,7 +105,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		subscriptionPrefix = config.SubscriptionPrefix
 	}
 
-	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, config.MeasureBandwidth, config.MeasurementBytesDownLink, config.MeasureStoragePath, reverseMetadata)
+	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, config.GeoDBPath, config.DownloadGeoDB, config.MeasureBandwidth, config.MeasurementBytesDownLink, config.MeasureStoragePath, reverseMetadata)
 	if err != nil {
 		return nil, err
 	}
