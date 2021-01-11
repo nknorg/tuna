@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/nknorg/tuna/storage"
 	"github.com/nknorg/tuna/types"
 	"io"
 	"io/ioutil"
@@ -90,6 +91,8 @@ type Common struct {
 	ReverseMetadata          *pb.ServiceMetadata
 	OnConnect                *OnConnect
 	IsServer                 bool
+	GeoDBPath                string
+	DownloadGeoDB            bool
 	MeasureBandwidth         bool
 	MeasurementBytesDownLink int32
 	MeasureStoragePath       string
@@ -101,6 +104,7 @@ type Common struct {
 	curveSecretKey *[sharedKeySize]byte
 	encryptionAlgo pb.EncryptionAlgo
 	closeChan      chan struct{}
+	measureStorage *storage.MeasureStorage
 
 	sync.RWMutex
 	paymentReceiver  string
@@ -115,7 +119,7 @@ type Common struct {
 	remoteNknAddress string
 }
 
-func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse, isServer bool, measureBandwidth bool, measurementBytes int32, measureStoragePath string, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
+func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse, isServer bool, geoDBPath string, downloadGeoDB bool, measureBandwidth bool, measurementBytes int32, measureStoragePath string, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
 	encryptionAlgo := DefaultEncryptionAlgo
 	var err error
 	if service != nil && len(service.Encryption) > 0 {
@@ -143,6 +147,8 @@ func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, d
 		ReverseMetadata:          reverseMetadata,
 		OnConnect:                NewOnConnect(1, nil),
 		IsServer:                 isServer,
+		GeoDBPath:                geoDBPath,
+		DownloadGeoDB:            downloadGeoDB,
 		MeasureBandwidth:         measureBandwidth,
 		MeasurementBytesDownLink: measurementBytes,
 		MeasureStoragePath:       measureStoragePath,
@@ -572,8 +578,23 @@ func (c *Common) CreateServerConn(force bool) error {
 }
 
 func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nodes, error) {
+	geoCloseChan := make(chan struct{})
+	defer close(geoCloseChan)
+	if c.ServiceInfo.IPFilter.NeedGeoInfo() {
+		c.ServiceInfo.IPFilter.AddProvider(c.DownloadGeoDB, c.GeoDBPath)
+		go c.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
+	}
+	if !c.IsServer && c.MeasureStoragePath != "" {
+		c.measureStorage = storage.NewMeasureStorage(c.MeasureStoragePath)
+		err := c.measureStorage.Load()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var filterSubs types.Nodes
 	allSubscribers, subscriberRaw, err := c.nknFilter()
+
 	if err != nil {
 		return nil, err
 	}
@@ -611,7 +632,8 @@ func (c *Common) nknFilter() ([]string, map[string]string, error) {
 	var allSubscribers []string
 	var subscriberRaw map[string]string
 
-	if c.ServiceInfo.NknFilter != nil && len(c.ServiceInfo.NknFilter.Allow) > 0 { // nkn client filter
+	if c.ServiceInfo.NknFilter != nil && len(c.ServiceInfo.NknFilter.Allow) > 0 {
+		// nkn client filter
 		nknFilterLength := len(c.ServiceInfo.NknFilter.Allow)
 		subscriberRaw = make(map[string]string, nknFilterLength)
 		allSubscribers = make([]string, 0, nknFilterLength)
@@ -637,18 +659,28 @@ func (c *Common) nknFilter() ([]string, map[string]string, error) {
 			return nil, nil, errors.New("there is no service providers for " + c.Service.Name)
 		}
 
-		offset := rand.Intn(subscribersCount/getSubscribersBatchSize + 1)
+		offset := rand.Intn((subscribersCount-1)/getSubscribersBatchSize + 1)
 		subscribers, err := c.Wallet.GetSubscribers(topic, offset*getSubscribersBatchSize, getSubscribersBatchSize, true, false)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		subscriberRaw = subscribers.Subscribers.Map
 
-		allSubscribers = make([]string, 0, len(subscribers.Subscribers.Map))
-		for subscriber := range subscribers.Subscribers.Map {
+		allSubscribers = make([]string, 0, len(subscriberRaw))
+		if c.measureStorage != nil { // allow favorite nodes
+			nodes := c.measureStorage.FavoriteNodes.GetData()
+			for _, v := range nodes {
+				item := v.(*storage.FavoriteNode)
+				subscriberRaw[item.Address] = item.Metadata
+				log.Printf("allow favorite node: %s", item.IP)
+			}
+		}
+		for subscriber := range subscriberRaw {
 			allSubscribers = append(allSubscribers, subscriber)
 		}
 	}
+
 	return allSubscribers, subscriberRaw, nil
 }
 
@@ -658,6 +690,12 @@ func (c *Common) filterSubscribers(allSubscribers []string, subscriberRaw map[st
 		log.Fatalf("Parse price of service error: %v", err)
 	}
 	filterSubs := make(types.Nodes, 0, len(allSubscribers))
+
+	var nodes []*net.IPNet
+	if c.measureStorage != nil {
+		nodes = c.measureStorage.GetAvoidCIDR()
+	}
+
 	for _, subscriber := range allSubscribers {
 		metadataString := subscriberRaw[subscriber]
 		metadata, err := ReadMetadata(metadataString)
@@ -686,21 +724,31 @@ func (c *Common) filterSubscribers(allSubscribers []string, subscriberRaw map[st
 			continue
 		}
 
+		if c.measureStorage != nil { // disallow avoid nodes
+			for _, ip := range nodes {
+				if ip.Contains(net.ParseIP(metadata.Ip)) {
+					log.Printf("disallow avoid subnet: %s, ip: %s", ip.String(), metadata.Ip)
+					continue
+				}
+			}
+		}
+
 		filterSubs = append(filterSubs, &types.Node{
 			Address:  subscriber,
 			Metadata: metadata,
 		})
 	}
+
 	return filterSubs
 }
 
-func (c *Common) measureDelay(filterSubs types.Nodes) types.Nodes {
+func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 	timeStart := time.Now()
 	delayMeasuredSubs := make(types.Nodes, 0, measureDelayTopDelayCount)
 	wg := &sync.WaitGroup{}
 	var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
 	go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
-	for index := range filterSubs {
+	for index := range nodes {
 		func(subscriber *types.Node) {
 			wg.Add(1)
 			tunaUtil.Enqueue(measurementDelayJobChan, func() {
@@ -717,29 +765,33 @@ func (c *Common) measureDelay(filterSubs types.Nodes) types.Nodes {
 					delayMeasuredSubs = append(delayMeasuredSubs, subscriber)
 				}
 			})
-		}(filterSubs[index])
+		}(nodes[index])
 	}
 	wg.Wait()
 	measureDelayTime := time.Since(timeStart)
 	log.Println(fmt.Sprintf("measure delay: total use %s", measureDelayTime))
 
 	close(measurementDelayJobChan)
-	sort.Sort(types.SortByDelay{Nodes: filterSubs})
+	sort.Sort(types.SortByDelay{Nodes: nodes})
 	return delayMeasuredSubs
 }
 
-func (c *Common) measureBandwidth(delayMeasuredSubs types.Nodes, n int) types.Nodes {
+func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 	timeStart := time.Now()
 	bandwidthTimeout := 2 * time.Second
-	bandwidthMeasuredSubs := make(types.Nodes, 0, len(delayMeasuredSubs))
+	bandwidthMeasuredSubs := make(types.Nodes, 0, len(nodes))
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(context.Background())
 	var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
 	go tunaUtil.WorkPool(measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
-	for index := range delayMeasuredSubs {
+	for index := range nodes {
 		func(sub *types.Node) {
 			wg.Add(1)
+			isCanceled := false
+			var l sync.Mutex
 			tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
+				l.Lock()
+				defer l.Unlock()
 				remotePublicKey, err := nkn.ClientAddrToPubKey(sub.Address)
 				if err != nil {
 					log.Println(err)
@@ -779,21 +831,54 @@ func (c *Common) measureBandwidth(delayMeasuredSubs types.Nodes, n int) types.No
 				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), bandwidthTimeout)
 				dur := time.Since(timeStart)
 				if err != nil {
-					if _, ok := err.(net.Error); !ok {
-						log.Println(err)
+					if c.measureStorage != nil && !isCanceled {
+						c.measureStorage.AddAvoidNode(sub.Metadata.Ip, &storage.AvoidNode{
+							IP:      sub.Metadata.Ip,
+							Address: sub.Address,
+						})
+						err = c.measureStorage.SaveAvoidNodes()
+						if err != nil {
+							log.Println(err)
+						}
+						log.Printf("add avoid node: %s", sub.Metadata.Ip)
 					}
 					return
 				}
 
 				log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1000, max/1000, dur)
 
+				if c.measureStorage != nil {
+					metadata, err := proto.Marshal(sub.Metadata)
+					if err != nil {
+						log.Println(err)
+					} else {
+						metadataString := base64.StdEncoding.EncodeToString(metadata)
+						updated := c.measureStorage.AddFavoriteNode(sub.Metadata.Ip, &storage.FavoriteNode{
+							IP:           sub.Metadata.Ip,
+							Address:      sub.Address,
+							Metadata:     metadataString,
+							Delay:        sub.Delay,
+							MinBandwidth: min / 1024,
+							MaxBandwidth: max / 1024,
+						})
+						if updated {
+							err = c.measureStorage.SaveFavoriteNodes()
+							if err != nil {
+								log.Println(err)
+							}
+							log.Printf("add favorite node: %s", sub.Metadata.Ip)
+						}
+					}
+				}
+
 				sub.Bandwidth = min
 				bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, sub)
 				if len(bandwidthMeasuredSubs) >= n {
+					isCanceled = true
 					cancel()
 				}
 			})
-		}(delayMeasuredSubs[index])
+		}(nodes[index])
 	}
 	wg.Wait()
 	cancel()

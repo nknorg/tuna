@@ -79,3 +79,12 @@ func DownloadJsonFile(url, filename string) error {
 	}
 	return nil
 }
+
+func DeepCopyMap(value map[string]interface{}) map[string]interface{} {
+	newMap := make(map[string]interface{})
+	for k, v := range value {
+		newMap[k] = v
+	}
+
+	return newMap
+}
