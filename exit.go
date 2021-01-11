@@ -3,6 +3,7 @@ package tuna
 import (
 	"errors"
 	"fmt"
+	"github.com/nknorg/tuna/storage"
 	"log"
 	"net"
 	"strconv"
@@ -452,6 +453,14 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 	if !te.IsServer && te.ServiceInfo.IPFilter.NeedGeoInfo() {
 		te.ServiceInfo.IPFilter.AddProvider(te.config.DownloadGeoDB, te.config.GeoDBPath)
 		go te.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
+	}
+
+	if !te.IsServer && te.MeasureStoragePath != "" {
+		te.measureStorage = storage.NewMeasureStorage(te.MeasureStoragePath)
+		err := te.measureStorage.Load()
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
 	serviceID := byte(0)
