@@ -7,8 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/nknorg/tuna/storage"
-	"github.com/nknorg/tuna/types"
 	"io"
 	"io/ioutil"
 	"log"
@@ -22,6 +20,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nknorg/tuna/storage"
+	"github.com/nknorg/tuna/types"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/nknorg/nkn-sdk-go"
@@ -782,12 +783,12 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 	bandwidthMeasuredSubs := make(types.Nodes, 0, len(nodes))
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(context.Background())
+	isCanceled := false
 	var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
 	go tunaUtil.WorkPool(measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
 	for index := range nodes {
 		func(sub *types.Node) {
 			wg.Add(1)
-			isCanceled := false
 			var l sync.Mutex
 			tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
 				l.Lock()
