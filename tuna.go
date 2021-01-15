@@ -789,10 +789,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 	for index := range nodes {
 		func(sub *types.Node) {
 			wg.Add(1)
-			var l sync.Mutex
 			tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
-				l.Lock()
-				defer l.Unlock()
 				remotePublicKey, err := nkn.ClientAddrToPubKey(sub.Address)
 				if err != nil {
 					log.Println(err)
