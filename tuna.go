@@ -66,6 +66,7 @@ const (
 	measureBandwidthTopCount                   = 10
 	measureDelayTopDelayCount                  = 32
 	measurementBytesDownLink                   = 256 << 10
+	measurementBandwidthTimeout                = 2 * time.Second
 )
 
 type ServiceInfo struct {
@@ -98,14 +99,15 @@ type Common struct {
 	MeasurementBytesDownLink int32
 	MeasureStoragePath       string
 
-	udpReadChan    chan []byte
-	udpWriteChan   chan []byte
-	udpCloseChan   chan struct{}
-	tcpListener    *net.TCPListener
-	curveSecretKey *[sharedKeySize]byte
-	encryptionAlgo pb.EncryptionAlgo
-	closeChan      chan struct{}
-	measureStorage *storage.MeasureStorage
+	udpReadChan       chan []byte
+	udpWriteChan      chan []byte
+	udpCloseChan      chan struct{}
+	tcpListener       *net.TCPListener
+	curveSecretKey    *[sharedKeySize]byte
+	encryptionAlgo    pb.EncryptionAlgo
+	closeChan         chan struct{}
+	measureStorage    *storage.MeasureStorage
+	sortMeasuredNodes func(types.Nodes)
 
 	sync.RWMutex
 	paymentReceiver  string
@@ -120,7 +122,21 @@ type Common struct {
 	remoteNknAddress string
 }
 
-func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, dialTimeout int32, subscriptionPrefix string, reverse, isServer bool, geoDBPath string, downloadGeoDB bool, measureBandwidth bool, measurementBytes int32, measureStoragePath string, reverseMetadata *pb.ServiceMetadata) (*Common, error) {
+func NewCommon(
+	service *Service,
+	serviceInfo *ServiceInfo,
+	wallet *nkn.Wallet,
+	dialTimeout int32,
+	subscriptionPrefix string,
+	reverse, isServer bool,
+	geoDBPath string,
+	downloadGeoDB bool,
+	measureBandwidth bool,
+	measurementBytes int32,
+	measureStoragePath string,
+	sortMeasuredNodes func(types.Nodes),
+	reverseMetadata *pb.ServiceMetadata,
+) (*Common, error) {
 	encryptionAlgo := DefaultEncryptionAlgo
 	var err error
 	if service != nil && len(service.Encryption) > 0 {
@@ -153,6 +169,7 @@ func NewCommon(service *Service, serviceInfo *ServiceInfo, wallet *nkn.Wallet, d
 		MeasureBandwidth:         measureBandwidth,
 		MeasurementBytesDownLink: measurementBytes,
 		MeasureStoragePath:       measureStoragePath,
+		sortMeasuredNodes:        sortMeasuredNodes,
 
 		curveSecretKey: curveSecretKey,
 		encryptionAlgo: encryptionAlgo,
@@ -494,35 +511,35 @@ func (c *Common) CreateServerConn(force bool) error {
 				return err
 			}
 
-			// filter
 			filterSubs = c.filterSubscribers(allSubscribers, subscriberRaw)
 
-			var delayMeasuredSubs types.Nodes
-			var bandwidthMeasuredSubs types.Nodes
+			var candidateSubs types.Nodes
 			if len(filterSubs) == 0 {
 				continue
 			} else if len(filterSubs) == 1 {
-				bandwidthMeasuredSubs = filterSubs
+				candidateSubs = filterSubs
 			} else {
-				// measure delay
-				delayMeasuredSubs = c.measureDelay(filterSubs)
+				delayMeasuredSubs := c.measureDelay(filterSubs)
 
 				if c.MeasureBandwidth {
-					// measure bandwidth
-					bandwidthMeasuredSubs = c.measureBandwidth(delayMeasuredSubs, measureBandwidthTopCount)
+					candidateSubs = c.measureBandwidth(delayMeasuredSubs, measureBandwidthTopCount)
 				} else {
-					bandwidthMeasuredSubs = delayMeasuredSubs
+					candidateSubs = delayMeasuredSubs
 				}
 			}
 
-			for _, subscriber := range bandwidthMeasuredSubs {
+			if c.sortMeasuredNodes != nil {
+				c.sortMeasuredNodes(candidateSubs)
+			}
+
+			for _, subscriber := range candidateSubs {
 				metadataString := subscriberRaw[subscriber.Address]
 				if !c.SetMetadata(metadataString) {
 					continue
 				}
 
 				metadata := subscriber.Metadata
-				log.Printf("IP: %s, address: %s, delay: %.3f ms, bandwidth: %f KB/s", metadata.Ip, subscriber.Address, subscriber.Delay, subscriber.Bandwidth/1000)
+				log.Printf("IP: %s, address: %s, delay: %.3f ms, bandwidth: %f KB/s", metadata.Ip, subscriber.Address, subscriber.Delay, subscriber.Bandwidth/1024)
 
 				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
 				if err != nil {
@@ -600,32 +617,28 @@ func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nod
 		return nil, err
 	}
 
-	// filter
 	filterSubs = c.filterSubscribers(allSubscribers, subscriberRaw)
 
-	var delayMeasuredSubs types.Nodes
-	var bandwidthMeasuredSubs types.Nodes
+	var candidateSubs types.Nodes
 	if len(filterSubs) == 0 {
 		return nil, nil
 	} else if len(filterSubs) == 1 {
-		bandwidthMeasuredSubs = filterSubs
+		candidateSubs = filterSubs
 	} else {
-		// measure delay
-		delayMeasuredSubs = c.measureDelay(filterSubs)
+		delayMeasuredSubs := c.measureDelay(filterSubs)
 
 		if measureBandwidth {
-			// measure bandwidth
-			bandwidthMeasuredSubs = c.measureBandwidth(delayMeasuredSubs, n)
+			candidateSubs = c.measureBandwidth(delayMeasuredSubs, n)
 		} else {
 			length := n
 			if length > len(delayMeasuredSubs) {
 				length = len(delayMeasuredSubs)
 			}
-			bandwidthMeasuredSubs = delayMeasuredSubs[:length]
+			candidateSubs = delayMeasuredSubs[:length]
 		}
 	}
 
-	return bandwidthMeasuredSubs, nil
+	return candidateSubs, nil
 }
 
 func (c *Common) nknFilter() ([]string, map[string]string, error) {
@@ -779,7 +792,7 @@ func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 
 func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 	timeStart := time.Now()
-	bandwidthTimeout := 2 * time.Second
+	var resLock sync.Mutex
 	bandwidthMeasuredSubs := make(types.Nodes, 0, len(nodes))
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -826,10 +839,13 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 				}()
 
 				timeStart := time.Now()
-				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), bandwidthTimeout)
+				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), measurementBandwidthTimeout)
 				dur := time.Since(timeStart)
 				if err != nil {
-					if c.measureStorage != nil && !isCanceled {
+					resLock.Lock()
+					localIsCanceled := isCanceled
+					resLock.Unlock()
+					if c.measureStorage != nil && !localIsCanceled {
 						c.measureStorage.AddAvoidNode(sub.Metadata.Ip, &storage.AvoidNode{
 							IP:      sub.Metadata.Ip,
 							Address: sub.Address,
@@ -843,7 +859,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 					return
 				}
 
-				log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1000, max/1000, dur)
+				log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1024, max/1024, dur)
 
 				if c.measureStorage != nil {
 					metadata, err := proto.Marshal(sub.Metadata)
@@ -870,11 +886,13 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 				}
 
 				sub.Bandwidth = min
+				resLock.Lock()
 				bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, sub)
 				if len(bandwidthMeasuredSubs) >= n {
 					isCanceled = true
 					cancel()
 				}
+				resLock.Unlock()
 			})
 		}(nodes[index])
 	}
