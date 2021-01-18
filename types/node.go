@@ -7,8 +7,8 @@ import (
 type Node struct {
 	Address   string
 	Metadata  *pb.ServiceMetadata
-	Delay     float32
-	Bandwidth float32
+	Delay     float32 // ms
+	Bandwidth float32 // byte/s
 }
 type Nodes []*Node
 

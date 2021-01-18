@@ -3,13 +3,15 @@ package tuna
 import (
 	"errors"
 	"fmt"
-	"github.com/nknorg/tuna/storage"
 	"log"
 	"net"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/nknorg/tuna/storage"
+	"github.com/nknorg/tuna/types"
 
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
@@ -50,6 +52,7 @@ type ExitConfiguration struct {
 	MeasureBandwidth          bool                       `json:"measureBandwidth"`
 	MeasurementBytesDownLink  int32                      `json:"measurementBytesDownLink"`
 	MeasureStoragePath        string                     `json:"measureStoragePath"`
+	SortMeasuredNodes         func(types.Nodes)          `json:"-"`
 }
 
 type TunaExit struct {
@@ -106,7 +109,22 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		subscriptionPrefix = config.SubscriptionPrefix
 	}
 
-	c, err := NewCommon(service, serviceInfo, wallet, config.DialTimeout, subscriptionPrefix, config.Reverse, !config.Reverse, config.GeoDBPath, config.DownloadGeoDB, config.MeasureBandwidth, config.MeasurementBytesDownLink, config.MeasureStoragePath, reverseMetadata)
+	c, err := NewCommon(
+		service,
+		serviceInfo,
+		wallet,
+		config.DialTimeout,
+		subscriptionPrefix,
+		config.Reverse,
+		!config.Reverse,
+		config.GeoDBPath,
+		config.DownloadGeoDB,
+		config.MeasureBandwidth,
+		config.MeasurementBytesDownLink,
+		config.MeasureStoragePath,
+		config.SortMeasuredNodes,
+		reverseMetadata,
+	)
 	if err != nil {
 		return nil, err
 	}
