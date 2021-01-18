@@ -50,6 +50,7 @@ type ExitConfiguration struct {
 	DownloadGeoDB             bool                       `json:"downloadGeoDB"`
 	ReverseIPFilter           geo.IPFilter               `json:"reverseIPFilter"`
 	MeasureBandwidth          bool                       `json:"measureBandwidth"`
+	MeasureBandwidthTimeout   int32                      `json:"measureBandwidthTimeout"`
 	MeasurementBytesDownLink  int32                      `json:"measurementBytesDownLink"`
 	MeasureStoragePath        string                     `json:"measureStoragePath"`
 	SortMeasuredNodes         func(types.Nodes)          `json:"-"`
@@ -120,6 +121,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		config.GeoDBPath,
 		config.DownloadGeoDB,
 		config.MeasureBandwidth,
+		config.MeasureBandwidthTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
 		config.SortMeasuredNodes,

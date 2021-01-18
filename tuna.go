@@ -65,8 +65,8 @@ const (
 	measureBandwidthConcurrentWorkers          = 16
 	measureBandwidthTopCount                   = 10
 	measureDelayTopDelayCount                  = 32
-	measurementBytesDownLink                   = 256 << 10
-	measurementBandwidthTimeout                = 2 * time.Second
+	defaultMeasuremBandwidthTimeout            = 2 // second
+	defaultMeasurementBytesDownLink            = 256 << 10
 )
 
 type ServiceInfo struct {
@@ -96,6 +96,7 @@ type Common struct {
 	GeoDBPath                string
 	DownloadGeoDB            bool
 	MeasureBandwidth         bool
+	MeasureBandwidthTimeout  time.Duration
 	MeasurementBytesDownLink int32
 	MeasureStoragePath       string
 
@@ -132,6 +133,7 @@ func NewCommon(
 	geoDBPath string,
 	downloadGeoDB bool,
 	measureBandwidth bool,
+	measureBandwidthTimeout int32,
 	measurementBytes int32,
 	measureStoragePath string,
 	sortMeasuredNodes func(types.Nodes),
@@ -150,8 +152,12 @@ func NewCommon(
 	copy(sk[:], ed25519.GetPrivateKeyFromSeed(wallet.Seed()))
 	curveSecretKey := ed25519.PrivateKeyToCurve25519PrivateKey(&sk)
 
+	if measureBandwidthTimeout == 0 {
+		measureBandwidthTimeout = defaultMeasuremBandwidthTimeout
+	}
+
 	if measurementBytes == 0 {
-		measurementBytes = measurementBytesDownLink
+		measurementBytes = defaultMeasurementBytesDownLink
 	}
 
 	common := &Common{
@@ -167,6 +173,7 @@ func NewCommon(
 		GeoDBPath:                geoDBPath,
 		DownloadGeoDB:            downloadGeoDB,
 		MeasureBandwidth:         measureBandwidth,
+		MeasureBandwidthTimeout:  time.Duration(measureBandwidthTimeout) * time.Second,
 		MeasurementBytesDownLink: measurementBytes,
 		MeasureStoragePath:       measureStoragePath,
 		sortMeasuredNodes:        sortMeasuredNodes,
@@ -839,7 +846,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 				}()
 
 				timeStart := time.Now()
-				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), measurementBandwidthTimeout)
+				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), c.MeasureBandwidthTimeout)
 				dur := time.Since(timeStart)
 				if err != nil {
 					resLock.Lock()
