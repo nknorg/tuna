@@ -2,13 +2,14 @@ package storage
 
 import (
 	"fmt"
-	"github.com/nknorg/tuna/util"
 	"log"
 	"math"
 	"net"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/nknorg/tuna/util"
 )
 
 const (
@@ -20,6 +21,12 @@ const (
 
 	FavoriteFileName = "favorite-node.json"
 	AvoidFileName    = "avoid-node.json"
+)
+
+var (
+	// file lock is global variable so it's shared among multiple tuna instance
+	avoidNodeFileMutex    sync.RWMutex
+	favoriteNodeFileMutex sync.RWMutex
 )
 
 type FavoriteNode struct {
@@ -50,9 +57,6 @@ type MeasureStorage struct {
 
 	avoidNodeMutex sync.RWMutex
 	AvoidNodes     map[string]AvoidNodes
-
-	avoidNodeFileMutex    sync.RWMutex
-	favoriteNodeFileMutex sync.RWMutex
 }
 
 func NewMeasureStorage(path string) *MeasureStorage {
@@ -63,18 +67,47 @@ func NewMeasureStorage(path string) *MeasureStorage {
 	}
 }
 
+// Load must be called before all other methods
 func (s *MeasureStorage) Load() error {
+	err := s.loadFavoriteData()
+	if err != nil {
+		return err
+	}
+
+	err = s.loadAvoidData()
+	if err != nil {
+		return err
+	}
+
+	err = s.ClearFavoriteExpired()
+	if err != nil {
+		return err
+	}
+
+	err = s.ClearAvoidExpired()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *MeasureStorage) loadFavoriteData() error {
+	favoriteNodeFileMutex.Lock()
+	defer favoriteNodeFileMutex.Unlock()
+
+	favoriteData := make(map[string]*FavoriteNode)
 	isExists := util.Exists(s.favoriteFilePath)
 	if !isExists {
-		err := util.WriteJSON(s.favoriteFilePath, map[string]*FavoriteNode{})
+		err := util.WriteJSON(s.favoriteFilePath, favoriteData)
 		if err != nil {
 			return err
 		}
 	}
-	var favoriteData map[string]*FavoriteNode
-	err := util.ReadJSON(s.favoriteFilePath, &favoriteData)
+
+	err := util.ReadJSON(s.favoriteFilePath, favoriteData)
 	if err != nil {
-		err := util.WriteJSON(s.favoriteFilePath, map[string]*FavoriteNode{})
+		err = util.WriteJSON(s.favoriteFilePath, favoriteData)
 		if err != nil {
 			return err
 		}
@@ -85,31 +118,32 @@ func (s *MeasureStorage) Load() error {
 		s.FavoriteNodes.Add(k, v)
 	}
 
-	isExists = util.Exists(s.avoidFilePath)
+	return nil
+}
+
+func (s *MeasureStorage) loadAvoidData() error {
+	avoidNodeFileMutex.Lock()
+	defer avoidNodeFileMutex.Unlock()
+
+	avoidData := make(map[string]AvoidNodes)
+	isExists := util.Exists(s.avoidFilePath)
 	if !isExists {
-		err := util.WriteJSON(s.avoidFilePath, map[string]*AvoidNode{})
+		err := util.WriteJSON(s.avoidFilePath, avoidData)
 		if err != nil {
 			return err
 		}
 	}
-	var avoidData map[string]AvoidNodes
-	err = util.ReadJSON(s.avoidFilePath, &avoidData)
+
+	err := util.ReadJSON(s.avoidFilePath, avoidData)
 	if err != nil {
-		err := util.WriteJSON(s.avoidFilePath, map[string]*AvoidNode{})
+		err = util.WriteJSON(s.avoidFilePath, avoidData)
 		if err != nil {
 			return err
 		}
 	}
+
 	s.AvoidNodes = avoidData
 
-	err = s.ClearFavoriteExpired()
-	if err != nil {
-		return err
-	}
-	err = s.ClearAvoidExpired()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -119,13 +153,11 @@ func (s *MeasureStorage) ClearFavoriteExpired() error {
 			s.FavoriteNodes.Delete(k)
 		}
 	}
-	err := s.SaveFavoriteNodes()
-	return err
+	return s.SaveFavoriteNodes()
 }
 
 func (s *MeasureStorage) ClearAvoidExpired() error {
 	s.avoidNodeMutex.Lock()
-	defer s.avoidNodeMutex.Unlock()
 	for k1, v1 := range s.AvoidNodes {
 		for k2, v2 := range v1 {
 			if time.Now().Unix() > v2.ExpiresAt {
@@ -136,14 +168,14 @@ func (s *MeasureStorage) ClearAvoidExpired() error {
 			delete(s.AvoidNodes, k1)
 		}
 	}
-	err := s.SaveAvoidNodes()
-
-	return err
+	// Unlock must be called before save to avoid deadlock
+	s.avoidNodeMutex.Unlock()
+	return s.SaveAvoidNodes()
 }
 
 func (s *MeasureStorage) SaveFavoriteNodes() error {
-	s.favoriteNodeFileMutex.Lock()
-	defer s.favoriteNodeFileMutex.Unlock()
+	favoriteNodeFileMutex.Lock()
+	defer favoriteNodeFileMutex.Unlock()
 	err := util.WriteJSON(s.favoriteFilePath, s.FavoriteNodes.GetData())
 	if err != nil {
 		return err
@@ -152,8 +184,10 @@ func (s *MeasureStorage) SaveFavoriteNodes() error {
 }
 
 func (s *MeasureStorage) SaveAvoidNodes() error {
-	s.avoidNodeFileMutex.Lock()
-	defer s.avoidNodeFileMutex.Unlock()
+	s.avoidNodeMutex.RLock()
+	defer s.avoidNodeMutex.RUnlock()
+	avoidNodeFileMutex.Lock()
+	defer avoidNodeFileMutex.Unlock()
 	err := util.WriteJSON(s.avoidFilePath, s.AvoidNodes)
 	if err != nil {
 		return err
@@ -197,8 +231,6 @@ func (s *MeasureStorage) AddFavoriteNode(key string, val *FavoriteNode) bool {
 }
 
 func (s *MeasureStorage) AddAvoidNode(key string, val *AvoidNode) {
-	s.avoidNodeMutex.Lock()
-	defer s.avoidNodeMutex.Unlock()
 	if val.ExpiresAt == 0 {
 		val.ExpiresAt = time.Now().Add(avoidExpired).Unix()
 	}
@@ -212,6 +244,9 @@ func (s *MeasureStorage) AddAvoidNode(key string, val *AvoidNode) {
 		log.Println(err)
 		return
 	}
+
+	s.avoidNodeMutex.Lock()
+	defer s.avoidNodeMutex.Unlock()
 
 	if _, ok := s.AvoidNodes[subnet.String()]; ok {
 		s.AvoidNodes[subnet.String()][key] = val
