@@ -43,6 +43,7 @@ type EntryConfiguration struct {
 	GeoDBPath                   string                 `json:"geoDBPath"`
 	DownloadGeoDB               bool                   `json:"downloadGeoDB"`
 	MeasureBandwidth            bool                   `json:"measureBandwidth"`
+	MeasureBandwidthTimeout     int32                  `json:"measureBandwidthTimeout"`
 	MeasurementBytesDownLink    int32                  `json:"measurementBytesDownLink"`
 	MeasureStoragePath          string                 `json:"measureStoragePath"`
 	SortMeasuredNodes           func(types.Nodes)      `json:"-"`
@@ -81,6 +82,7 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		config.GeoDBPath,
 		config.DownloadGeoDB,
 		config.MeasureBandwidth,
+		config.MeasureBandwidthTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
 		config.SortMeasuredNodes,
