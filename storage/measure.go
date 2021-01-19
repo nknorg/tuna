@@ -105,7 +105,7 @@ func (s *MeasureStorage) loadFavoriteData() error {
 		}
 	}
 
-	err := util.ReadJSON(s.favoriteFilePath, favoriteData)
+	err := util.ReadJSON(s.favoriteFilePath, &favoriteData)
 	if err != nil {
 		err = util.WriteJSON(s.favoriteFilePath, favoriteData)
 		if err != nil {
@@ -134,7 +134,7 @@ func (s *MeasureStorage) loadAvoidData() error {
 		}
 	}
 
-	err := util.ReadJSON(s.avoidFilePath, avoidData)
+	err := util.ReadJSON(s.avoidFilePath, &avoidData)
 	if err != nil {
 		err = util.WriteJSON(s.avoidFilePath, avoidData)
 		if err != nil {
