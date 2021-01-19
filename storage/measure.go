@@ -143,7 +143,9 @@ func (s *MeasureStorage) loadAvoidData() error {
 	}
 
 	s.AvoidNodes = avoidData
-
+	if s.AvoidNodes == nil {
+		s.AvoidNodes = avoidData
+	}
 	return nil
 }
 
