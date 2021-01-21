@@ -398,6 +398,8 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 		return nil, nil, err
 	}
 
+	defer conn.SetDeadline(time.Time{})
+
 	if len(remotePublicKey) > 0 {
 		encryptionAlgo = c.encryptionAlgo
 		localConnMetadata.EncryptionAlgo = encryptionAlgo
@@ -448,11 +450,6 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	encryptKey := computeEncryptKey(connNonce, sharedKey[:])
 
 	encryptedConn, err := encryptConn(conn, encryptKey, encryptionAlgo)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	err = conn.SetDeadline(time.Time{})
 	if err != nil {
 		return nil, nil, err
 	}
