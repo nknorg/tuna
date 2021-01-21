@@ -393,6 +393,11 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 		localConnMetadata = &connMetadataCopy
 	}
 
+	err := conn.SetDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if len(remotePublicKey) > 0 {
 		encryptionAlgo = c.encryptionAlgo
 		localConnMetadata.EncryptionAlgo = encryptionAlgo
@@ -443,6 +448,11 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	encryptKey := computeEncryptKey(connNonce, sharedKey[:])
 
 	encryptedConn, err := encryptConn(conn, encryptKey, encryptionAlgo)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = conn.SetDeadline(time.Time{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -829,6 +839,11 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 					return
 				}
 
+				go func() {
+					<-ctx.Done()
+					conn.SetDeadline(time.Now())
+				}()
+
 				encryptedConn, _, err := c.wrapConn(conn, remotePublicKey, &pb.ConnectionMetadata{
 					IsMeasurement:            true,
 					MeasurementBytesDownlink: uint32(c.MeasurementBytesDownLink),
@@ -839,11 +854,6 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 					return
 				}
 				defer encryptedConn.Close()
-
-				go func() {
-					<-ctx.Done()
-					encryptedConn.SetDeadline(time.Now())
-				}()
 
 				timeStart := time.Now()
 				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), c.MeasureBandwidthTimeout)
