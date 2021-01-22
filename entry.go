@@ -43,10 +43,12 @@ type EntryConfiguration struct {
 	ReverseSubscriptionFee      string                 `json:"reverseSubscriptionFee"`
 	GeoDBPath                   string                 `json:"geoDBPath"`
 	DownloadGeoDB               bool                   `json:"downloadGeoDB"`
+	GetSubscribersBatchSize     int32                  `json:"getSubscribersBatchSize"`
 	MeasureBandwidth            bool                   `json:"measureBandwidth"`
 	MeasureBandwidthTimeout     int32                  `json:"measureBandwidthTimeout"`
 	MeasurementBytesDownLink    int32                  `json:"measurementBytesDownLink"`
 	MeasureStoragePath          string                 `json:"measureStoragePath"`
+	MaxPoolSize                 int32                  `json:"maxPoolSize"`
 	SortMeasuredNodes           func(types.Nodes)      `json:"-"`
 }
 
@@ -82,10 +84,12 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		config.Reverse,
 		config.GeoDBPath,
 		config.DownloadGeoDB,
+		config.GetSubscribersBatchSize,
 		config.MeasureBandwidth,
 		config.MeasureBandwidthTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
+		config.MaxPoolSize,
 		config.SortMeasuredNodes,
 		nil,
 	)
