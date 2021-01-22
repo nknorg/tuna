@@ -680,22 +680,24 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		reverseServiceName = DefaultReverseServiceName
 	}
 
-	UpdateMetadata(
-		reverseServiceName,
-		0,
-		nil,
-		nil,
-		ip,
-		uint32(config.ReverseTCP),
-		uint32(config.ReverseUDP),
-		config.ReversePrice,
-		config.ReverseBeneficiaryAddr,
-		config.ReverseSubscriptionPrefix,
-		uint32(config.ReverseSubscriptionDuration),
-		config.ReverseSubscriptionFee,
-		wallet,
-		make(chan struct{}),
-	)
+	for _, rsn := range strings.Split(reverseServiceName, ",") {
+		UpdateMetadata(
+			strings.Trim(rsn, " "),
+			0,
+			nil,
+			nil,
+			ip,
+			uint32(config.ReverseTCP),
+			uint32(config.ReverseUDP),
+			config.ReversePrice,
+			config.ReverseBeneficiaryAddr,
+			config.ReverseSubscriptionPrefix,
+			uint32(config.ReverseSubscriptionDuration),
+			config.ReverseSubscriptionFee,
+			wallet,
+			make(chan struct{}),
+		)
+	}
 
 	return nil
 }
