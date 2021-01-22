@@ -44,30 +44,31 @@ import (
 type Protocol string
 
 const (
-	TCP                               Protocol = "tcp"
-	UDP                               Protocol = "udp"
-	DefaultNanoPayDuration                     = 4320 * 30
-	DefaultNanoPayUpdateInterval               = time.Minute
-	DefaultNanoPayMinFlushAmount               = "0.01"
-	DefaultSubscriptionPrefix                  = "tuna_v1."
-	DefaultReverseServiceName                  = "reverse"
-	DefaultServiceListenIP                     = "127.0.0.1"
-	DefaultReverseServiceListenIP              = "0.0.0.0"
-	TrafficUnit                                = 1024 * 1024
-	TrafficPaymentThreshold                    = 32
-	MaxTrafficUnpaid                           = 1
-	MinTrafficCoverage                         = 0.9
-	TrafficDelay                               = 10 * time.Second
-	MaxNanoPayDelay                            = 30 * time.Second
-	getSubscribersBatchSize                    = 512
-	DefaultEncryptionAlgo                      = pb.EncryptionAlgo_ENCRYPTION_NONE
-	subscribeDurationRandomFactor              = 0.1
-	measureLatencyConcurrentWorkers            = 64
-	measureBandwidthConcurrentWorkers          = 16
-	measureBandwidthTopCount                   = 10
-	measureDelayTopDelayCount                  = 32
-	defaultMeasuremBandwidthTimeout            = 2 // second
-	defaultMeasurementBytesDownLink            = 256 << 10
+	TCP                                      Protocol = "tcp"
+	UDP                                      Protocol = "udp"
+	DefaultNanoPayDuration                            = 4320 * 30
+	DefaultNanoPayUpdateInterval                      = time.Minute
+	DefaultNanoPayMinFlushAmount                      = "0.01"
+	DefaultSubscriptionPrefix                         = "tuna_v1."
+	DefaultReverseServiceName                         = "reverse"
+	DefaultServiceListenIP                            = "127.0.0.1"
+	DefaultReverseServiceListenIP                     = "0.0.0.0"
+	TrafficUnit                                       = 1024 * 1024
+	TrafficPaymentThreshold                           = 32
+	MaxTrafficUnpaid                                  = 1
+	MinTrafficCoverage                                = 0.9
+	TrafficDelay                                      = 10 * time.Second
+	MaxNanoPayDelay                                   = 30 * time.Second
+	defaultGetSubscribersBatchSize                    = 256
+	DefaultEncryptionAlgo                             = pb.EncryptionAlgo_ENCRYPTION_NONE
+	subscribeDurationRandomFactor                     = 0.1
+	defaultMeasureLatencyConcurrentWorkers            = 64
+	defaultMeasureBandwidthConcurrentWorkers          = 16
+	measureBandwidthTopCount                          = 10
+	measureDelayTopDelayCount                         = 32
+	defaultMeasuremBandwidthTimeout                   = 2 // second
+	defaultMeasurementBytesDownLink                   = 256 << 10
+	defaultMaxPoolSize                                = 64
 )
 
 type ServiceInfo struct {
@@ -96,20 +97,24 @@ type Common struct {
 	IsServer                 bool
 	GeoDBPath                string
 	DownloadGeoDB            bool
+	GetSubscribersBatchSize  int
 	MeasureBandwidth         bool
 	MeasureBandwidthTimeout  time.Duration
 	MeasurementBytesDownLink int32
 	MeasureStoragePath       string
+	MaxPoolSize              int32
 
-	udpReadChan       chan []byte
-	udpWriteChan      chan []byte
-	udpCloseChan      chan struct{}
-	tcpListener       *net.TCPListener
-	curveSecretKey    *[sharedKeySize]byte
-	encryptionAlgo    pb.EncryptionAlgo
-	closeChan         chan struct{}
-	measureStorage    *storage.MeasureStorage
-	sortMeasuredNodes func(types.Nodes)
+	udpReadChan                       chan []byte
+	udpWriteChan                      chan []byte
+	udpCloseChan                      chan struct{}
+	tcpListener                       *net.TCPListener
+	curveSecretKey                    *[sharedKeySize]byte
+	encryptionAlgo                    pb.EncryptionAlgo
+	closeChan                         chan struct{}
+	measureStorage                    *storage.MeasureStorage
+	sortMeasuredNodes                 func(types.Nodes)
+	measureLatencyConcurrentWorkers   int
+	measureBandwidthConcurrentWorkers int
 
 	sync.RWMutex
 	paymentReceiver  string
@@ -133,10 +138,12 @@ func NewCommon(
 	reverse, isServer bool,
 	geoDBPath string,
 	downloadGeoDB bool,
+	getSubscribersBatchSize int32,
 	measureBandwidth bool,
 	measureBandwidthTimeout int32,
 	measurementBytes int32,
 	measureStoragePath string,
+	maxPoolSize int32,
 	sortMeasuredNodes func(types.Nodes),
 	reverseMetadata *pb.ServiceMetadata,
 ) (*Common, error) {
@@ -153,12 +160,30 @@ func NewCommon(
 	copy(sk[:], ed25519.GetPrivateKeyFromSeed(wallet.Seed()))
 	curveSecretKey := ed25519.PrivateKeyToCurve25519PrivateKey(&sk)
 
+	if getSubscribersBatchSize == 0 {
+		getSubscribersBatchSize = defaultGetSubscribersBatchSize
+	}
+
 	if measureBandwidthTimeout == 0 {
 		measureBandwidthTimeout = defaultMeasuremBandwidthTimeout
 	}
 
 	if measurementBytes == 0 {
 		measurementBytes = defaultMeasurementBytesDownLink
+	}
+
+	if maxPoolSize == 0 {
+		maxPoolSize = defaultMaxPoolSize
+	}
+
+	measureLatencyConcurrentWorkers := defaultMeasureLatencyConcurrentWorkers
+	if measureLatencyConcurrentWorkers > int(maxPoolSize) {
+		measureLatencyConcurrentWorkers = int(maxPoolSize)
+	}
+
+	measureBandwidthConcurrentWorkers := defaultMeasureBandwidthConcurrentWorkers
+	if measureBandwidthConcurrentWorkers > int(maxPoolSize) {
+		measureBandwidthConcurrentWorkers = int(maxPoolSize)
 	}
 
 	common := &Common{
@@ -173,16 +198,20 @@ func NewCommon(
 		IsServer:                 isServer,
 		GeoDBPath:                geoDBPath,
 		DownloadGeoDB:            downloadGeoDB,
+		GetSubscribersBatchSize:  int(getSubscribersBatchSize),
 		MeasureBandwidth:         measureBandwidth,
 		MeasureBandwidthTimeout:  time.Duration(measureBandwidthTimeout) * time.Second,
 		MeasurementBytesDownLink: measurementBytes,
 		MeasureStoragePath:       measureStoragePath,
+		MaxPoolSize:              maxPoolSize,
 		sortMeasuredNodes:        sortMeasuredNodes,
 
-		curveSecretKey: curveSecretKey,
-		encryptionAlgo: encryptionAlgo,
-		closeChan:      make(chan struct{}),
-		sharedKeys:     make(map[string]*[sharedKeySize]byte),
+		curveSecretKey:                    curveSecretKey,
+		encryptionAlgo:                    encryptionAlgo,
+		closeChan:                         make(chan struct{}),
+		sharedKeys:                        make(map[string]*[sharedKeySize]byte),
+		measureLatencyConcurrentWorkers:   measureLatencyConcurrentWorkers,
+		measureBandwidthConcurrentWorkers: measureBandwidthConcurrentWorkers,
 	}
 
 	return common, nil
@@ -688,8 +717,8 @@ func (c *Common) nknFilter() ([]string, map[string]string, error) {
 			return nil, nil, errors.New("there is no service providers for " + c.Service.Name)
 		}
 
-		offset := rand.Intn((subscribersCount-1)/getSubscribersBatchSize + 1)
-		subscribers, err := c.Wallet.GetSubscribers(topic, offset*getSubscribersBatchSize, getSubscribersBatchSize, true, false)
+		offset := rand.Intn((subscribersCount-1)/c.GetSubscribersBatchSize + 1)
+		subscribers, err := c.Wallet.GetSubscribers(topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -776,7 +805,7 @@ func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 	delayMeasuredSubs := make(types.Nodes, 0, measureDelayTopDelayCount)
 	wg := &sync.WaitGroup{}
 	var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
-	go tunaUtil.WorkPool(measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
+	go tunaUtil.WorkPool(c.measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
 	for index := range nodes {
 		func(subscriber *types.Node) {
 			wg.Add(1)
@@ -813,7 +842,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 	ctx, cancel := context.WithCancel(context.Background())
 	isCanceled := false
 	var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
-	go tunaUtil.WorkPool(measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
+	go tunaUtil.WorkPool(c.measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
 	for index := range nodes {
 		func(sub *types.Node) {
 			wg.Add(1)
@@ -984,6 +1013,21 @@ func (c *Common) startPayment(
 		lastCost = cost
 		lastPaymentTime = costTimeStamp
 	}
+}
+
+func GetFavoriteSeedRpcServer(path string) ([]string, error) {
+	measureStorage := storage.NewMeasureStorage(path)
+	err := measureStorage.Load()
+	if err != nil {
+		return nil, err
+	}
+	nodes := make([]string, 0, measureStorage.FavoriteNodes.Len())
+
+	for _, f := range measureStorage.FavoriteNodes.GetData() {
+		item := f.(*storage.FavoriteNode)
+		nodes = append(nodes, fmt.Sprintf("http://%s:30003", item.IP))
+	}
+	return nodes, nil
 }
 
 func ReadMetadata(metadataString string) (*pb.ServiceMetadata, error) {

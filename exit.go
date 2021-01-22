@@ -49,11 +49,13 @@ type ExitConfiguration struct {
 	ReverseEncryption         string                     `json:"reverseEncryption"`
 	GeoDBPath                 string                     `json:"geoDBPath"`
 	DownloadGeoDB             bool                       `json:"downloadGeoDB"`
+	GetSubscribersBatchSize   int32                      `json:"getSubscribersBatchSize"`
 	ReverseIPFilter           geo.IPFilter               `json:"reverseIPFilter"`
 	MeasureBandwidth          bool                       `json:"measureBandwidth"`
 	MeasureBandwidthTimeout   int32                      `json:"measureBandwidthTimeout"`
 	MeasurementBytesDownLink  int32                      `json:"measurementBytesDownLink"`
 	MeasureStoragePath        string                     `json:"measureStoragePath"`
+	MaxPoolSize               int32                      `json:"maxPoolSize"`
 	SortMeasuredNodes         func(types.Nodes)          `json:"-"`
 }
 
@@ -121,10 +123,12 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		!config.Reverse,
 		config.GeoDBPath,
 		config.DownloadGeoDB,
+		config.GetSubscribersBatchSize,
 		config.MeasureBandwidth,
 		config.MeasureBandwidthTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
+		config.MaxPoolSize,
 		config.SortMeasuredNodes,
 		reverseMetadata,
 	)
