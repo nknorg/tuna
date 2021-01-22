@@ -36,6 +36,7 @@ type EntryConfiguration struct {
 	ReverseServiceListenIP      string                 `json:"reverseServiceListenIP"`
 	ReversePrice                string                 `json:"reversePrice"`
 	ReverseClaimInterval        int32                  `json:"reverseClaimInterval"`
+	ReverseMinFlushAmount       string                 `json:"reverseMinFlushAmount"`
 	ReverseServiceName          string                 `json:"reverseServiceName"`
 	ReverseSubscriptionPrefix   string                 `json:"reverseSubscriptionPrefix"`
 	ReverseSubscriptionDuration int32                  `json:"reverseSubscriptionDuration"`
@@ -223,7 +224,12 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
+	minFlushAmount := te.config.ReverseMinFlushAmount
+	if len(minFlushAmount) == 0 {
+		minFlushAmount = DefaultNanoPayMinFlushAmount
+	}
+
+	npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), minFlushAmount, onErr)
 	if err != nil {
 		return err
 	}
