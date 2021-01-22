@@ -38,6 +38,7 @@ type ExitConfiguration struct {
 	SubscriptionDuration      int32                      `json:"subscriptionDuration"`
 	SubscriptionFee           string                     `json:"subscriptionFee"`
 	ClaimInterval             int32                      `json:"claimInterval"`
+	MinFlushAmount            string                     `json:"minFlushAmount"`
 	Services                  map[string]ExitServiceInfo `json:"services"`
 	Reverse                   bool                       `json:"reverse"`
 	ReverseRandomPorts        bool                       `json:"reverseRandomPorts"`
@@ -189,7 +190,12 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	}
 
 	if !te.config.Reverse {
-		npc, err = te.Wallet.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), onErr)
+		minFlushAmount := te.config.MinFlushAmount
+		if len(minFlushAmount) == 0 {
+			minFlushAmount = DefaultNanoPayMinFlushAmount
+		}
+
+		npc, err = te.Wallet.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), minFlushAmount, onErr)
 		if err != nil {
 			log.Fatalln(err)
 		}

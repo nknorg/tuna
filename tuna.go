@@ -48,6 +48,7 @@ const (
 	UDP                               Protocol = "udp"
 	DefaultNanoPayDuration                     = 4320 * 30
 	DefaultNanoPayUpdateInterval               = time.Minute
+	DefaultNanoPayMinFlushAmount               = "0.01"
 	DefaultSubscriptionPrefix                  = "tuna_v1."
 	DefaultReverseServiceName                  = "reverse"
 	DefaultServiceListenIP                     = "127.0.0.1"

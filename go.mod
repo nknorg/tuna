@@ -6,7 +6,7 @@ require (
 	github.com/golang/protobuf v1.4.1
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/nknorg/encrypted-stream v1.0.0
-	github.com/nknorg/nkn-sdk-go v1.3.4-0.20201020100539-187d9201bdfe
+	github.com/nknorg/nkn-sdk-go v1.3.5-0.20210122065249-60681fa3cf01
 	github.com/nknorg/nkn/v2 v2.0.6
 	github.com/oschwald/geoip2-golang v1.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
