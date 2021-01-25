@@ -209,7 +209,6 @@ func (s *MeasureStorage) AddFavoriteNode(key string, val *FavoriteNode) bool {
 			}
 		}
 		if val.MinBandwidth > minBandwidth {
-			s.FavoriteNodes.Add(key, val)
 			deleteKey := ""
 			minExpire := int64(math.MaxInt32)
 			for k, v := range s.FavoriteNodes.GetData() {
@@ -220,9 +219,9 @@ func (s *MeasureStorage) AddFavoriteNode(key string, val *FavoriteNode) bool {
 				}
 			}
 			s.FavoriteNodes.Delete(deleteKey)
+			s.FavoriteNodes.Add(key, val)
 			return true
 		}
-
 	} else {
 		s.FavoriteNodes.Add(key, val)
 		return true
