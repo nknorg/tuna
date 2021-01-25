@@ -625,7 +625,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 						return fmt.Errorf("couldn't accept stream: %v", err)
 					}
 
-					buf, err := ReadVarBytes(stream)
+					buf, err := ReadVarBytes(stream, maxServiceMetadataSize)
 					if err != nil {
 						return fmt.Errorf("couldn't read service metadata: %v", err)
 					}

@@ -69,6 +69,11 @@ const (
 	defaultMeasuremBandwidthTimeout                   = 2 // second
 	defaultMeasurementBytesDownLink                   = 256 << 10
 	defaultMaxPoolSize                                = 64
+	pipeBufferSize                                    = 32768
+	maxConnMetadataSize                               = 1024
+	maxStreamMetadataSize                             = 1024
+	maxServiceMetadataSize                            = 4096
+	maxNanoPayTxnSize                                 = 4096
 )
 
 type ServiceInfo struct {
@@ -1142,7 +1147,7 @@ func UpdateMetadata(
 }
 
 func copyBuffer(dest io.Writer, src io.Reader, written *uint64) error {
-	buf := make([]byte, 32768)
+	buf := make([]byte, pipeBufferSize)
 	for {
 		nr, err := src.Read(buf)
 		if nr > 0 {
@@ -1364,7 +1369,7 @@ func checkPayment(session *smux.Session, lastPaymentTime *time.Time, lastPayment
 
 func handlePaymentStream(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastPaymentTime *time.Time, lastPaymentAmount, bytesPaid *common.Fixed64, getTotalCost func() (common.Fixed64, common.Fixed64)) error {
 	for {
-		tx, err := ReadVarBytes(stream)
+		tx, err := ReadVarBytes(stream, maxNanoPayTxnSize)
 		if err != nil {
 			return fmt.Errorf("couldn't read payment stream: %v", err)
 		}
