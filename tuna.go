@@ -69,7 +69,7 @@ const (
 	defaultMeasuremBandwidthTimeout                   = 2 // second
 	defaultMeasurementBytesDownLink                   = 256 << 10
 	defaultMaxPoolSize                                = 64
-	pipeBufferSize                                    = 32768
+	pipeBufferSize                                    = 4096 // should be <= 4096 to be compatible with c++ smux
 	maxConnMetadataSize                               = 1024
 	maxStreamMetadataSize                             = 1024
 	maxServiceMetadataSize                            = 4096
