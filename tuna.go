@@ -731,12 +731,12 @@ func (c *Common) nknFilter() ([]string, map[string]string, error) {
 		subscriberRaw = subscribers.Subscribers.Map
 
 		allSubscribers = make([]string, 0, len(subscriberRaw))
-		if c.measureStorage != nil { // allow favorite nodes
+		if c.measureStorage != nil {
 			nodes := c.measureStorage.FavoriteNodes.GetData()
 			for _, v := range nodes {
 				item := v.(*storage.FavoriteNode)
 				subscriberRaw[item.Address] = item.Metadata
-				log.Printf("allow favorite node: %s", item.IP)
+				log.Printf("use favorite node: %s", item.IP)
 			}
 		}
 		for subscriber := range subscriberRaw {
