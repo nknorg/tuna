@@ -582,7 +582,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			continue
 		}
 
-		buf, err := ReadVarBytes(stream)
+		buf, err := ReadVarBytes(stream, maxServiceMetadataSize)
 		if err != nil {
 			log.Println("Couldn't read reverse metadata:", err)
 			time.Sleep(1 * time.Second)

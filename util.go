@@ -98,7 +98,7 @@ func ParsePrice(priceStr string) (common.Fixed64, common.Fixed64, error) {
 	return entryToExitPrice, exitToEntryPrice, nil
 }
 
-func ReadVarBytes(reader io.Reader) ([]byte, error) {
+func ReadVarBytes(reader io.Reader, maxMsgSize uint32) ([]byte, error) {
 	b := make([]byte, 4)
 	_, err := io.ReadFull(reader, b)
 	if err != nil {
@@ -132,7 +132,7 @@ func WriteVarBytes(writer io.Writer, b []byte) error {
 }
 
 func readConnMetadata(conn net.Conn) (*pb.ConnectionMetadata, error) {
-	b, err := ReadVarBytes(conn)
+	b, err := ReadVarBytes(conn, maxConnMetadataSize)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func writeConnMetadata(conn net.Conn, connMetadata *pb.ConnectionMetadata) error
 }
 
 func readStreamMetadata(stream *smux.Stream) (*pb.StreamMetadata, error) {
-	b, err := ReadVarBytes(stream)
+	b, err := ReadVarBytes(stream, maxStreamMetadataSize)
 	if err != nil {
 		return nil, err
 	}
