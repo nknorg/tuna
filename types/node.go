@@ -10,6 +10,7 @@ type Node struct {
 	Delay     float32 // ms
 	Bandwidth float32 // byte/s
 }
+
 type Nodes []*Node
 
 func (fs Nodes) Len() int {

@@ -11,7 +11,13 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/pb"
+	"github.com/nknorg/tuna/storage"
+	"github.com/nknorg/tuna/types"
 	"github.com/xtaci/smux"
+)
+
+const (
+	nodeRPCPort = 30003
 )
 
 var encryptionAlgoMap = map[string]pb.EncryptionAlgo{
@@ -182,4 +188,31 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 	}
 
 	return nil
+}
+
+func GetFavoriteSeedRpcServer(path string) ([]string, error) {
+	measureStorage := storage.NewMeasureStorage(path)
+	err := measureStorage.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make(types.Nodes, 0, measureStorage.FavoriteNodes.Len())
+	for _, node := range measureStorage.FavoriteNodes.GetData() {
+		nodes = append(nodes, &types.Node{
+			Metadata: &pb.ServiceMetadata{
+				Ip:      node.(*storage.FavoriteNode).IP,
+				TcpPort: nodeRPCPort,
+			},
+		})
+	}
+
+	nodesWithDelay := measureDelay(nodes, len(nodes), len(nodes), defaultMeasureDelayTimeout)
+
+	rpcAddrs := make([]string, 0, len(nodesWithDelay))
+	for _, node := range nodesWithDelay {
+		rpcAddrs = append(rpcAddrs, fmt.Sprintf("http://%s:%d", node.Metadata.Ip, nodeRPCPort))
+	}
+
+	return rpcAddrs, nil
 }

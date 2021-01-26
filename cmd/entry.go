@@ -50,6 +50,13 @@ func (e *EntryCommand) Execute(args []string) error {
 	var seedRPCServerAddr *nkn.StringArray
 	if len(opts.SeedRPCServerAddr) > 0 {
 		seedRPCServerAddr = nkn.NewStringArrayFromString(strings.ReplaceAll(opts.SeedRPCServerAddr, ",", " "))
+	} else if len(config.MeasureStoragePath) > 0 {
+		rpcAddrs, err := tuna.GetFavoriteSeedRpcServer(config.MeasureStoragePath)
+		if err != nil {
+			log.Println(err)
+		} else {
+			seedRPCServerAddr = nkn.NewStringArray(append(rpcAddrs, nkn.DefaultSeedRPCServerAddr...)...)
+		}
 	}
 
 	walletConfig := &nkn.WalletConfig{
