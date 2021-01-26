@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	maxFavoriteLength = 10
+	maxFavoriteLength = 8
 	maskSize          = 16
-	favoriteExpired   = 14 * 24 * time.Hour
+	favoriteExpired   = 365 * 24 * time.Hour
 	avoidExpired      = 7 * 24 * time.Hour
 	avoidCIDRMinIP    = 3
 
