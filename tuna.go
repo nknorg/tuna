@@ -63,8 +63,8 @@ const (
 	DefaultEncryptionAlgo                             = pb.EncryptionAlgo_ENCRYPTION_NONE
 	subscribeDurationRandomFactor                     = 0.1
 	defaultMeasureLatencyConcurrentWorkers            = 64
-	defaultMeasureBandwidthConcurrentWorkers          = 16
-	measureBandwidthTopCount                          = 10
+	defaultMeasureBandwidthConcurrentWorkers          = 16 // should be at least measureBandwidthTopCount + maxFavoriteLength
+	measureBandwidthTopCount                          = 8
 	measureDelayTopDelayCount                         = 32
 	defaultMeasuremBandwidthTimeout                   = 2 // second
 	defaultMeasurementBytesDownLink                   = 256 << 10
