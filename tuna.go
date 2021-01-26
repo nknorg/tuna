@@ -68,6 +68,7 @@ const (
 	measureBandwidthTopCount                          = 8
 	measureDelayTopDelayCount                         = 32
 	defaultMeasuremBandwidthTimeout                   = 2 // second
+	defaultMeasureBandwidthWorkersTimeout             = 8 // second
 	defaultMeasurementBytesDownLink                   = 256 << 10
 	defaultMaxPoolSize                                = 64
 	pipeBufferSize                                    = 4096 // should be <= 4096 to be compatible with c++ smux
@@ -99,23 +100,24 @@ type Service struct {
 }
 
 type Common struct {
-	Service                  *Service
-	ServiceInfo              *ServiceInfo
-	Wallet                   *nkn.Wallet
-	DialTimeout              int32
-	SubscriptionPrefix       string
-	Reverse                  bool
-	ReverseMetadata          *pb.ServiceMetadata
-	OnConnect                *OnConnect
-	IsServer                 bool
-	GeoDBPath                string
-	DownloadGeoDB            bool
-	GetSubscribersBatchSize  int
-	MeasureBandwidth         bool
-	MeasureBandwidthTimeout  time.Duration
-	MeasurementBytesDownLink int32
-	MeasureStoragePath       string
-	MaxPoolSize              int32
+	Service                        *Service
+	ServiceInfo                    *ServiceInfo
+	Wallet                         *nkn.Wallet
+	DialTimeout                    int32
+	SubscriptionPrefix             string
+	Reverse                        bool
+	ReverseMetadata                *pb.ServiceMetadata
+	OnConnect                      *OnConnect
+	IsServer                       bool
+	GeoDBPath                      string
+	DownloadGeoDB                  bool
+	GetSubscribersBatchSize        int
+	MeasureBandwidth               bool
+	MeasureBandwidthTimeout        time.Duration
+	MeasureBandwidthWorkersTimeout time.Duration
+	MeasurementBytesDownLink       int32
+	MeasureStoragePath             string
+	MaxPoolSize                    int32
 
 	udpReadChan                       chan []byte
 	udpWriteChan                      chan []byte
@@ -154,6 +156,7 @@ func NewCommon(
 	getSubscribersBatchSize int32,
 	measureBandwidth bool,
 	measureBandwidthTimeout int32,
+	measureBandwidthWorkersTimeout int32,
 	measurementBytes int32,
 	measureStoragePath string,
 	maxPoolSize int32,
@@ -181,6 +184,10 @@ func NewCommon(
 		measureBandwidthTimeout = defaultMeasuremBandwidthTimeout
 	}
 
+	if measureBandwidthWorkersTimeout == 0 {
+		measureBandwidthWorkersTimeout = defaultMeasureBandwidthWorkersTimeout
+	}
+
 	if measurementBytes == 0 {
 		measurementBytes = defaultMeasurementBytesDownLink
 	}
@@ -200,24 +207,25 @@ func NewCommon(
 	}
 
 	c := &Common{
-		Service:                  service,
-		ServiceInfo:              serviceInfo,
-		Wallet:                   wallet,
-		DialTimeout:              dialTimeout,
-		SubscriptionPrefix:       subscriptionPrefix,
-		Reverse:                  reverse,
-		ReverseMetadata:          reverseMetadata,
-		OnConnect:                NewOnConnect(1, nil),
-		IsServer:                 isServer,
-		GeoDBPath:                geoDBPath,
-		DownloadGeoDB:            downloadGeoDB,
-		GetSubscribersBatchSize:  int(getSubscribersBatchSize),
-		MeasureBandwidth:         measureBandwidth,
-		MeasureBandwidthTimeout:  time.Duration(measureBandwidthTimeout) * time.Second,
-		MeasurementBytesDownLink: measurementBytes,
-		MeasureStoragePath:       measureStoragePath,
-		MaxPoolSize:              maxPoolSize,
-		sortMeasuredNodes:        sortMeasuredNodes,
+		Service:                        service,
+		ServiceInfo:                    serviceInfo,
+		Wallet:                         wallet,
+		DialTimeout:                    dialTimeout,
+		SubscriptionPrefix:             subscriptionPrefix,
+		Reverse:                        reverse,
+		ReverseMetadata:                reverseMetadata,
+		OnConnect:                      NewOnConnect(1, nil),
+		IsServer:                       isServer,
+		GeoDBPath:                      geoDBPath,
+		DownloadGeoDB:                  downloadGeoDB,
+		GetSubscribersBatchSize:        int(getSubscribersBatchSize),
+		MeasureBandwidth:               measureBandwidth,
+		MeasureBandwidthTimeout:        time.Duration(measureBandwidthTimeout) * time.Second,
+		MeasureBandwidthWorkersTimeout: time.Duration(measureBandwidthWorkersTimeout) * time.Second,
+		MeasurementBytesDownLink:       measurementBytes,
+		MeasureStoragePath:             measureStoragePath,
+		MaxPoolSize:                    maxPoolSize,
+		sortMeasuredNodes:              sortMeasuredNodes,
 
 		curveSecretKey:                    curveSecretKey,
 		encryptionAlgo:                    encryptionAlgo,
@@ -662,7 +670,7 @@ func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nod
 	} else {
 		delayMeasuredSubs := measureDelay(filterSubs, c.measureDelayConcurrentWorkers, measureDelayTopDelayCount, defaultMeasureDelayTimeout)
 		if measureBandwidth {
-			candidateSubs = c.measureBandwidth(delayMeasuredSubs, n)
+			candidateSubs = c.measureBandwidth(delayMeasuredSubs, n, c.MeasureBandwidthWorkersTimeout)
 		} else {
 			length := n
 			if length > len(delayMeasuredSubs) {
@@ -835,12 +843,12 @@ func measureDelay(nodes types.Nodes, concurrentWorkers, numResults int, timeout 
 	return delayMeasuredSubs
 }
 
-func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
+func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duration) types.Nodes {
 	timeStart := time.Now()
 	var resLock sync.Mutex
 	bandwidthMeasuredSubs := make(types.Nodes, 0, len(nodes))
 	wg := &sync.WaitGroup{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	isCanceled := false
 	var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
 	go tunaUtil.WorkPool(c.measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
@@ -848,6 +856,12 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 		func(sub *types.Node) {
 			wg.Add(1)
 			tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
+				select {
+				case <-ctx.Done():
+					log.Println("job canceled.")
+					return
+				default:
+				}
 				remotePublicKey, err := nkn.ClientAddrToPubKey(sub.Address)
 				if err != nil {
 					log.Println(err)
@@ -858,7 +872,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 				conn, err := net.DialTimeout(
 					string(TCP),
 					addr,
-					2*time.Second,
+					1*time.Second,
 				)
 				if err != nil {
 					if _, ok := err.(net.Error); !ok {
@@ -905,7 +919,6 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 				}
 
 				log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1024, max/1024, dur)
-
 				if c.measureStorage != nil {
 					metadata, err := proto.Marshal(sub.Metadata)
 					if err != nil {
@@ -934,6 +947,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 				resLock.Lock()
 				bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, sub)
 				if len(bandwidthMeasuredSubs) >= n {
+					log.Println("bandwidth measurement cancel.")
 					isCanceled = true
 					cancel()
 				}
