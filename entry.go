@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nknorg/tuna/storage"
 	"github.com/nknorg/tuna/types"
 
 	"github.com/nknorg/nkn-sdk-go"
@@ -133,17 +132,8 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 
 	geoCloseChan := make(chan struct{})
 	defer close(geoCloseChan)
-	if !te.IsServer && te.ServiceInfo.IPFilter.NeedGeoInfo() {
-		te.ServiceInfo.IPFilter.AddProvider(te.config.DownloadGeoDB, te.config.GeoDBPath)
-		go te.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
-	}
-
-	if !te.IsServer && te.MeasureStoragePath != "" {
-		te.measureStorage = storage.NewMeasureStorage(te.MeasureStoragePath)
-		err := te.measureStorage.Load()
-		if err != nil {
-			log.Println(err)
-		}
+	if len(te.ServiceInfo.IPFilter.GetProviders()) > 0 {
+		go te.ServiceInfo.IPFilter.StartUpdateDataFile(geoCloseChan)
 	}
 
 	for {
@@ -630,11 +620,15 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 						return fmt.Errorf("couldn't read service metadata: %v", err)
 					}
 
-					te.SetMetadata(string(buf))
+					metadata, err := ReadMetadata(string(buf))
+					if err != nil {
+						return fmt.Errorf("couldn't decode service metadata: %v", err)
+					}
+
+					te.SetMetadata(metadata)
 
 					te.SetServerTCPConn(encryptedConn)
 
-					metadata := te.GetMetadata()
 					if metadata.UdpPort > 0 {
 						ip, _, err := net.SplitHostPort(encryptedConn.RemoteAddr().String())
 						if err != nil {

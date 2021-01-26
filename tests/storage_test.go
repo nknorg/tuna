@@ -1,9 +1,10 @@
 package tests
 
 import (
-	"github.com/nknorg/tuna/storage"
 	"log"
 	"testing"
+
+	"github.com/nknorg/tuna/storage"
 )
 
 func TestMeasureStorage(t *testing.T) {

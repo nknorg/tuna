@@ -76,6 +76,13 @@ const (
 	maxNanoPayTxnSize                                 = 4096
 )
 
+var (
+	// This lock makes sure that only one measurement can run at the same time if
+	// measurement storage is set so that later measurement can take use of the
+	// previous measurement results.
+	measureStorageMutex sync.Mutex
+)
+
 type ServiceInfo struct {
 	MaxPrice  string            `json:"maxPrice"`
 	ListenIP  string            `json:"listenIP"`
@@ -191,7 +198,7 @@ func NewCommon(
 		measureBandwidthConcurrentWorkers = int(maxPoolSize)
 	}
 
-	common := &Common{
+	c := &Common{
 		Service:                  service,
 		ServiceInfo:              serviceInfo,
 		Wallet:                   wallet,
@@ -219,7 +226,15 @@ func NewCommon(
 		measureBandwidthConcurrentWorkers: measureBandwidthConcurrentWorkers,
 	}
 
-	return common, nil
+	if !c.IsServer && c.ServiceInfo.IPFilter.NeedGeoInfo() {
+		c.ServiceInfo.IPFilter.AddProvider(c.DownloadGeoDB, c.GeoDBPath)
+	}
+
+	if !c.IsServer && c.MeasureStoragePath != "" {
+		c.measureStorage = storage.NewMeasureStorage(c.MeasureStoragePath)
+	}
+
+	return c, nil
 }
 
 func (c *Common) GetTCPConn() net.Conn {
@@ -310,16 +325,10 @@ func (c *Common) GetMetadata() *pb.ServiceMetadata {
 	return c.metadata
 }
 
-func (c *Common) SetMetadata(metadataString string) bool {
-	var err error
+func (c *Common) SetMetadata(metadata *pb.ServiceMetadata) {
 	c.Lock()
-	c.metadata, err = ReadMetadata(metadataString)
-	c.Unlock()
-	if err != nil {
-		log.Println("Couldn't unmarshal metadata:", err)
-		return false
-	}
-	return true
+	defer c.Unlock()
+	c.metadata = metadata
 }
 
 func (c *Common) GetRemoteNknAddress() string {
@@ -554,40 +563,17 @@ func (c *Common) CreateServerConn(force bool) error {
 				return err
 			}
 
-			var filterSubs types.Nodes
-			allSubscribers, subscriberRaw, err := c.nknFilter()
+			candidateSubs, err := c.GetTopPerformanceNodes(c.MeasureBandwidth, measureBandwidthTopCount)
 			if err != nil {
-				return err
-			}
-
-			filterSubs = c.filterSubscribers(allSubscribers, subscriberRaw)
-
-			var candidateSubs types.Nodes
-			if len(filterSubs) == 0 {
+				log.Println(err)
+				time.Sleep(time.Second)
 				continue
-			} else if len(filterSubs) == 1 {
-				candidateSubs = filterSubs
-			} else {
-				delayMeasuredSubs := c.measureDelay(filterSubs)
-
-				if c.MeasureBandwidth {
-					candidateSubs = c.measureBandwidth(delayMeasuredSubs, measureBandwidthTopCount)
-				} else {
-					candidateSubs = delayMeasuredSubs
-				}
-			}
-
-			if c.sortMeasuredNodes != nil {
-				c.sortMeasuredNodes(candidateSubs)
 			}
 
 			for _, subscriber := range candidateSubs {
-				metadataString := subscriberRaw[subscriber.Address]
-				if !c.SetMetadata(metadataString) {
-					continue
-				}
-
 				metadata := subscriber.Metadata
+				c.SetMetadata(metadata)
+
 				log.Printf("IP: %s, address: %s, delay: %.3f ms, bandwidth: %f KB/s", metadata.Ip, subscriber.Address, subscriber.Delay, subscriber.Bandwidth/1024)
 
 				entryToExitPrice, exitToEntryPrice, err := ParsePrice(metadata.Price)
@@ -645,14 +631,14 @@ func (c *Common) CreateServerConn(force bool) error {
 }
 
 func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nodes, error) {
-	geoCloseChan := make(chan struct{})
-	defer close(geoCloseChan)
-	if c.ServiceInfo.IPFilter.NeedGeoInfo() {
-		c.ServiceInfo.IPFilter.AddProvider(c.DownloadGeoDB, c.GeoDBPath)
-		go c.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
+	if len(c.ServiceInfo.IPFilter.GetProviders()) > 0 {
+		c.ServiceInfo.IPFilter.UpdateDataFile()
 	}
-	if !c.IsServer && c.MeasureStoragePath != "" {
-		c.measureStorage = storage.NewMeasureStorage(c.MeasureStoragePath)
+
+	if c.measureStorage != nil {
+		measureStorageMutex.Lock()
+		defer measureStorageMutex.Unlock()
+
 		err := c.measureStorage.Load()
 		if err != nil {
 			return nil, err
@@ -661,7 +647,6 @@ func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nod
 
 	var filterSubs types.Nodes
 	allSubscribers, subscriberRaw, err := c.nknFilter()
-
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +660,6 @@ func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nod
 		candidateSubs = filterSubs
 	} else {
 		delayMeasuredSubs := c.measureDelay(filterSubs)
-
 		if measureBandwidth {
 			candidateSubs = c.measureBandwidth(delayMeasuredSubs, n)
 		} else {
@@ -685,6 +669,10 @@ func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nod
 			}
 			candidateSubs = delayMeasuredSubs[:length]
 		}
+	}
+
+	if c.sortMeasuredNodes != nil {
+		c.sortMeasuredNodes(candidateSubs)
 	}
 
 	return candidateSubs, nil
@@ -736,7 +724,7 @@ func (c *Common) nknFilter() ([]string, map[string]string, error) {
 			for _, v := range nodes {
 				item := v.(*storage.FavoriteNode)
 				subscriberRaw[item.Address] = item.Metadata
-				log.Printf("use favorite node: %s", item.IP)
+				log.Printf("Use favorite node: %s", item.IP)
 			}
 		}
 		for subscriber := range subscriberRaw {
