@@ -63,7 +63,7 @@ const (
 	DefaultEncryptionAlgo                             = pb.EncryptionAlgo_ENCRYPTION_NONE
 	subscribeDurationRandomFactor                     = 0.1
 	defaultMeasureLatencyConcurrentWorkers            = 64
-	defaultMeasureBandwidthConcurrentWorkers          = 16 // should be at least measureBandwidthTopCount + maxFavoriteLength
+	defaultMeasureBandwidthConcurrentWorkers          = 16 // should be >= measureBandwidthTopCount
 	measureBandwidthTopCount                          = 8
 	measureDelayTopDelayCount                         = 32
 	defaultMeasuremBandwidthTimeout                   = 2 // second
@@ -823,7 +823,7 @@ func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 	log.Println(fmt.Sprintf("measure delay: total use %s", measureDelayTime))
 
 	close(measurementDelayJobChan)
-	sort.Sort(types.SortByDelay{Nodes: nodes})
+	sort.Sort(types.SortByDelay{Nodes: delayMeasuredSubs})
 	return delayMeasuredSubs
 }
 
