@@ -180,7 +180,24 @@ func (f *IPFilter) AddProvider(download bool, path string) {
 	f.providers = append(f.providers, ip2c)
 }
 
-func (f *IPFilter) UpdateDataFile(c chan struct{}) {
+func (f *IPFilter) GetProviders() []GeoProvider {
+	return f.providers
+}
+
+func (f *IPFilter) UpdateDataFile() {
+	for _, p := range f.providers {
+		if len(p.FileName()) == 0 {
+			continue
+		}
+		err := p.MaybeUpdate()
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+	}
+}
+
+func (f *IPFilter) StartUpdateDataFile(c chan struct{}) {
 	for {
 		select {
 		case _, ok := <-c:
@@ -188,16 +205,7 @@ func (f *IPFilter) UpdateDataFile(c chan struct{}) {
 				return
 			}
 		default:
-			for _, p := range f.providers {
-				if len(p.FileName()) == 0 {
-					continue
-				}
-				err := p.MaybeUpdate()
-				if err != nil {
-					log.Print(err)
-					continue
-				}
-			}
+			f.UpdateDataFile()
 		}
 		time.Sleep(1 * time.Hour)
 	}

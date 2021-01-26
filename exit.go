@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nknorg/tuna/storage"
 	"github.com/nknorg/tuna/types"
 
 	"github.com/nknorg/nkn-sdk-go"
@@ -480,17 +479,8 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 
 	geoCloseChan := make(chan struct{})
 	defer close(geoCloseChan)
-	if !te.IsServer && te.ServiceInfo.IPFilter.NeedGeoInfo() {
-		te.ServiceInfo.IPFilter.AddProvider(te.config.DownloadGeoDB, te.config.GeoDBPath)
-		go te.ServiceInfo.IPFilter.UpdateDataFile(geoCloseChan)
-	}
-
-	if !te.IsServer && te.MeasureStoragePath != "" {
-		te.measureStorage = storage.NewMeasureStorage(te.MeasureStoragePath)
-		err := te.measureStorage.Load()
-		if err != nil {
-			log.Println(err)
-		}
+	if len(te.ServiceInfo.IPFilter.GetProviders()) > 0 {
+		go te.ServiceInfo.IPFilter.StartUpdateDataFile(geoCloseChan)
 	}
 
 	serviceID := byte(0)

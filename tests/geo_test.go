@@ -262,7 +262,7 @@ func TestGetLocations(t *testing.T) {
 	filter := &geo.IPFilter{}
 	filter.AddProvider(true, ".")
 	c := make(chan struct{})
-	go filter.UpdateDataFile(c)
+	go filter.StartUpdateDataFile(c)
 	for _, data := range testGeoData {
 		loc := filter.GetLocation(data.IP)
 		if loc.CountryCode != data.Country {
