@@ -795,6 +795,7 @@ func (c *Common) filterSubscribers(allSubscribers []string, subscriberRaw map[st
 
 func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 	timeStart := time.Now()
+	var lock sync.Mutex
 	delayMeasuredSubs := make(types.Nodes, 0, measureDelayTopDelayCount)
 	wg := &sync.WaitGroup{}
 	var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
@@ -812,9 +813,9 @@ func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 					return
 				}
 				subscriber.Delay = float32(delay) / float32(time.Millisecond)
-				if len(delayMeasuredSubs) < measureDelayTopDelayCount {
-					delayMeasuredSubs = append(delayMeasuredSubs, subscriber)
-				}
+				lock.Lock()
+				delayMeasuredSubs = append(delayMeasuredSubs, subscriber)
+				lock.Unlock()
 			})
 		}(nodes[index])
 	}
@@ -823,7 +824,13 @@ func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 	log.Println(fmt.Sprintf("measure delay: total use %s", measureDelayTime))
 
 	close(measurementDelayJobChan)
+
 	sort.Sort(types.SortByDelay{Nodes: delayMeasuredSubs})
+
+	if len(delayMeasuredSubs) > measureDelayTopDelayCount {
+		delayMeasuredSubs = delayMeasuredSubs[:measureDelayTopDelayCount]
+	}
+
 	return delayMeasuredSubs
 }
 
