@@ -28,34 +28,35 @@ type ExitServiceInfo struct {
 }
 
 type ExitConfiguration struct {
-	BeneficiaryAddr           string                     `json:"beneficiaryAddr"`
-	ListenTCP                 int32                      `json:"listenTCP"`
-	ListenUDP                 int32                      `json:"listenUDP"`
-	DialTimeout               int32                      `json:"dialTimeout"`
-	UDPTimeout                int32                      `json:"udpTimeout"`
-	SubscriptionPrefix        string                     `json:"subscriptionPrefix"`
-	SubscriptionDuration      int32                      `json:"subscriptionDuration"`
-	SubscriptionFee           string                     `json:"subscriptionFee"`
-	ClaimInterval             int32                      `json:"claimInterval"`
-	MinFlushAmount            string                     `json:"minFlushAmount"`
-	Services                  map[string]ExitServiceInfo `json:"services"`
-	Reverse                   bool                       `json:"reverse"`
-	ReverseRandomPorts        bool                       `json:"reverseRandomPorts"`
-	ReverseMaxPrice           string                     `json:"reverseMaxPrice"`
-	ReverseNanoPayFee         string                     `json:"reverseNanopayfee"`
-	ReverseServiceName        string                     `json:"reverseServiceName"`
-	ReverseSubscriptionPrefix string                     `json:"reverseSubscriptionPrefix"`
-	ReverseEncryption         string                     `json:"reverseEncryption"`
-	GeoDBPath                 string                     `json:"geoDBPath"`
-	DownloadGeoDB             bool                       `json:"downloadGeoDB"`
-	GetSubscribersBatchSize   int32                      `json:"getSubscribersBatchSize"`
-	ReverseIPFilter           geo.IPFilter               `json:"reverseIPFilter"`
-	MeasureBandwidth          bool                       `json:"measureBandwidth"`
-	MeasureBandwidthTimeout   int32                      `json:"measureBandwidthTimeout"`
-	MeasurementBytesDownLink  int32                      `json:"measurementBytesDownLink"`
-	MeasureStoragePath        string                     `json:"measureStoragePath"`
-	MaxPoolSize               int32                      `json:"maxPoolSize"`
-	SortMeasuredNodes         func(types.Nodes)          `json:"-"`
+	BeneficiaryAddr                string                     `json:"beneficiaryAddr"`
+	ListenTCP                      int32                      `json:"listenTCP"`
+	ListenUDP                      int32                      `json:"listenUDP"`
+	DialTimeout                    int32                      `json:"dialTimeout"`
+	UDPTimeout                     int32                      `json:"udpTimeout"`
+	SubscriptionPrefix             string                     `json:"subscriptionPrefix"`
+	SubscriptionDuration           int32                      `json:"subscriptionDuration"`
+	SubscriptionFee                string                     `json:"subscriptionFee"`
+	ClaimInterval                  int32                      `json:"claimInterval"`
+	MinFlushAmount                 string                     `json:"minFlushAmount"`
+	Services                       map[string]ExitServiceInfo `json:"services"`
+	Reverse                        bool                       `json:"reverse"`
+	ReverseRandomPorts             bool                       `json:"reverseRandomPorts"`
+	ReverseMaxPrice                string                     `json:"reverseMaxPrice"`
+	ReverseNanoPayFee              string                     `json:"reverseNanopayfee"`
+	ReverseServiceName             string                     `json:"reverseServiceName"`
+	ReverseSubscriptionPrefix      string                     `json:"reverseSubscriptionPrefix"`
+	ReverseEncryption              string                     `json:"reverseEncryption"`
+	GeoDBPath                      string                     `json:"geoDBPath"`
+	DownloadGeoDB                  bool                       `json:"downloadGeoDB"`
+	GetSubscribersBatchSize        int32                      `json:"getSubscribersBatchSize"`
+	ReverseIPFilter                geo.IPFilter               `json:"reverseIPFilter"`
+	MeasureBandwidth               bool                       `json:"measureBandwidth"`
+	MeasureBandwidthTimeout        int32                      `json:"measureBandwidthTimeout"`
+	MeasureBandwidthWorkersTimeout int32                      `json:"measureBandwidthWorkersTimeout"`
+	MeasurementBytesDownLink       int32                      `json:"measurementBytesDownLink"`
+	MeasureStoragePath             string                     `json:"measureStoragePath"`
+	MaxPoolSize                    int32                      `json:"maxPoolSize"`
+	SortMeasuredNodes              func(types.Nodes)          `json:"-"`
 }
 
 type TunaExit struct {
@@ -125,6 +126,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		config.GetSubscribersBatchSize,
 		config.MeasureBandwidth,
 		config.MeasureBandwidthTimeout,
+		config.MeasureBandwidthWorkersTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
 		config.MaxPoolSize,

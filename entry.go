@@ -23,32 +23,33 @@ import (
 )
 
 type EntryConfiguration struct {
-	Services                    map[string]ServiceInfo `json:"services"`
-	DialTimeout                 int32                  `json:"dialTimeout"`
-	UDPTimeout                  int32                  `json:"udpTimeout"`
-	NanoPayFee                  string                 `json:"nanoPayFee"`
-	SubscriptionPrefix          string                 `json:"subscriptionPrefix"`
-	Reverse                     bool                   `json:"reverse"`
-	ReverseBeneficiaryAddr      string                 `json:"reverseBeneficiaryAddr"`
-	ReverseTCP                  int32                  `json:"reverseTCP"`
-	ReverseUDP                  int32                  `json:"reverseUDP"`
-	ReverseServiceListenIP      string                 `json:"reverseServiceListenIP"`
-	ReversePrice                string                 `json:"reversePrice"`
-	ReverseClaimInterval        int32                  `json:"reverseClaimInterval"`
-	ReverseMinFlushAmount       string                 `json:"reverseMinFlushAmount"`
-	ReverseServiceName          string                 `json:"reverseServiceName"`
-	ReverseSubscriptionPrefix   string                 `json:"reverseSubscriptionPrefix"`
-	ReverseSubscriptionDuration int32                  `json:"reverseSubscriptionDuration"`
-	ReverseSubscriptionFee      string                 `json:"reverseSubscriptionFee"`
-	GeoDBPath                   string                 `json:"geoDBPath"`
-	DownloadGeoDB               bool                   `json:"downloadGeoDB"`
-	GetSubscribersBatchSize     int32                  `json:"getSubscribersBatchSize"`
-	MeasureBandwidth            bool                   `json:"measureBandwidth"`
-	MeasureBandwidthTimeout     int32                  `json:"measureBandwidthTimeout"`
-	MeasurementBytesDownLink    int32                  `json:"measurementBytesDownLink"`
-	MeasureStoragePath          string                 `json:"measureStoragePath"`
-	MaxPoolSize                 int32                  `json:"maxPoolSize"`
-	SortMeasuredNodes           func(types.Nodes)      `json:"-"`
+	Services                       map[string]ServiceInfo `json:"services"`
+	DialTimeout                    int32                  `json:"dialTimeout"`
+	UDPTimeout                     int32                  `json:"udpTimeout"`
+	NanoPayFee                     string                 `json:"nanoPayFee"`
+	SubscriptionPrefix             string                 `json:"subscriptionPrefix"`
+	Reverse                        bool                   `json:"reverse"`
+	ReverseBeneficiaryAddr         string                 `json:"reverseBeneficiaryAddr"`
+	ReverseTCP                     int32                  `json:"reverseTCP"`
+	ReverseUDP                     int32                  `json:"reverseUDP"`
+	ReverseServiceListenIP         string                 `json:"reverseServiceListenIP"`
+	ReversePrice                   string                 `json:"reversePrice"`
+	ReverseClaimInterval           int32                  `json:"reverseClaimInterval"`
+	ReverseMinFlushAmount          string                 `json:"reverseMinFlushAmount"`
+	ReverseServiceName             string                 `json:"reverseServiceName"`
+	ReverseSubscriptionPrefix      string                 `json:"reverseSubscriptionPrefix"`
+	ReverseSubscriptionDuration    int32                  `json:"reverseSubscriptionDuration"`
+	ReverseSubscriptionFee         string                 `json:"reverseSubscriptionFee"`
+	GeoDBPath                      string                 `json:"geoDBPath"`
+	DownloadGeoDB                  bool                   `json:"downloadGeoDB"`
+	GetSubscribersBatchSize        int32                  `json:"getSubscribersBatchSize"`
+	MeasureBandwidth               bool                   `json:"measureBandwidth"`
+	MeasureBandwidthTimeout        int32                  `json:"measureBandwidthTimeout"`
+	MeasureBandwidthWorkersTimeout int32                  `json:"measureBandwidthWorkersTimeout"`
+	MeasurementBytesDownLink       int32                  `json:"measurementBytesDownLink"`
+	MeasureStoragePath             string                 `json:"measureStoragePath"`
+	MaxPoolSize                    int32                  `json:"maxPoolSize"`
+	SortMeasuredNodes              func(types.Nodes)      `json:"-"`
 }
 
 type TunaEntry struct {
@@ -86,6 +87,7 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		config.GetSubscribersBatchSize,
 		config.MeasureBandwidth,
 		config.MeasureBandwidthTimeout,
+		config.MeasureBandwidthWorkersTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
 		config.MaxPoolSize,
