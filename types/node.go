@@ -15,6 +15,7 @@ type Nodes []*Node
 func (fs Nodes) Len() int {
 	return len(fs)
 }
+
 func (fs Nodes) Swap(i, j int) {
 	fs[i], fs[j] = fs[j], fs[i]
 }
