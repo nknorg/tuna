@@ -62,7 +62,8 @@ const (
 	defaultGetSubscribersBatchSize                    = 256
 	DefaultEncryptionAlgo                             = pb.EncryptionAlgo_ENCRYPTION_NONE
 	subscribeDurationRandomFactor                     = 0.1
-	defaultMeasureLatencyConcurrentWorkers            = 64
+	defaultMeasureDelayTimeout                        = 1 * time.Second
+	defaultMeasureDelayConcurrentWorkers              = 64
 	defaultMeasureBandwidthConcurrentWorkers          = 16 // should be >= measureBandwidthTopCount
 	measureBandwidthTopCount                          = 8
 	measureDelayTopDelayCount                         = 32
@@ -125,7 +126,7 @@ type Common struct {
 	closeChan                         chan struct{}
 	measureStorage                    *storage.MeasureStorage
 	sortMeasuredNodes                 func(types.Nodes)
-	measureLatencyConcurrentWorkers   int
+	measureDelayConcurrentWorkers     int
 	measureBandwidthConcurrentWorkers int
 
 	sync.RWMutex
@@ -188,9 +189,9 @@ func NewCommon(
 		maxPoolSize = defaultMaxPoolSize
 	}
 
-	measureLatencyConcurrentWorkers := defaultMeasureLatencyConcurrentWorkers
-	if measureLatencyConcurrentWorkers > int(maxPoolSize) {
-		measureLatencyConcurrentWorkers = int(maxPoolSize)
+	measureDelayConcurrentWorkers := defaultMeasureDelayConcurrentWorkers
+	if measureDelayConcurrentWorkers > int(maxPoolSize) {
+		measureDelayConcurrentWorkers = int(maxPoolSize)
 	}
 
 	measureBandwidthConcurrentWorkers := defaultMeasureBandwidthConcurrentWorkers
@@ -222,7 +223,7 @@ func NewCommon(
 		encryptionAlgo:                    encryptionAlgo,
 		closeChan:                         make(chan struct{}),
 		sharedKeys:                        make(map[string]*[sharedKeySize]byte),
-		measureLatencyConcurrentWorkers:   measureLatencyConcurrentWorkers,
+		measureDelayConcurrentWorkers:     measureDelayConcurrentWorkers,
 		measureBandwidthConcurrentWorkers: measureBandwidthConcurrentWorkers,
 	}
 
@@ -659,7 +660,7 @@ func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nod
 	} else if len(filterSubs) == 1 {
 		candidateSubs = filterSubs
 	} else {
-		delayMeasuredSubs := c.measureDelay(filterSubs)
+		delayMeasuredSubs := measureDelay(filterSubs, c.measureDelayConcurrentWorkers, measureDelayTopDelayCount, defaultMeasureDelayTimeout)
 		if measureBandwidth {
 			candidateSubs = c.measureBandwidth(delayMeasuredSubs, n)
 		} else {
@@ -793,28 +794,28 @@ func (c *Common) filterSubscribers(allSubscribers []string, subscriberRaw map[st
 	return filterSubs
 }
 
-func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
+func measureDelay(nodes types.Nodes, concurrentWorkers, numResults int, timeout time.Duration) types.Nodes {
 	timeStart := time.Now()
 	var lock sync.Mutex
-	delayMeasuredSubs := make(types.Nodes, 0, measureDelayTopDelayCount)
+	delayMeasuredSubs := make(types.Nodes, 0, len(nodes))
 	wg := &sync.WaitGroup{}
 	var measurementDelayJobChan = make(chan tunaUtil.Job, 1)
-	go tunaUtil.WorkPool(c.measureLatencyConcurrentWorkers, measurementDelayJobChan, wg)
+	go tunaUtil.WorkPool(concurrentWorkers, measurementDelayJobChan, wg)
 	for index := range nodes {
-		func(subscriber *types.Node) {
+		func(node *types.Node) {
 			wg.Add(1)
 			tunaUtil.Enqueue(measurementDelayJobChan, func() {
-				addr := subscriber.Metadata.Ip + ":" + strconv.Itoa(int(subscriber.Metadata.TcpPort))
-				delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, 1*time.Second)
+				addr := node.Metadata.Ip + ":" + strconv.Itoa(int(node.Metadata.TcpPort))
+				delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, timeout)
 				if err != nil {
 					if _, ok := err.(net.Error); !ok {
 						log.Println(err)
 					}
 					return
 				}
-				subscriber.Delay = float32(delay) / float32(time.Millisecond)
+				node.Delay = float32(delay) / float32(time.Millisecond)
 				lock.Lock()
-				delayMeasuredSubs = append(delayMeasuredSubs, subscriber)
+				delayMeasuredSubs = append(delayMeasuredSubs, node)
 				lock.Unlock()
 			})
 		}(nodes[index])
@@ -827,8 +828,8 @@ func (c *Common) measureDelay(nodes types.Nodes) types.Nodes {
 
 	sort.Sort(types.SortByDelay{Nodes: delayMeasuredSubs})
 
-	if len(delayMeasuredSubs) > measureDelayTopDelayCount {
-		delayMeasuredSubs = delayMeasuredSubs[:measureDelayTopDelayCount]
+	if len(delayMeasuredSubs) > numResults {
+		delayMeasuredSubs = delayMeasuredSubs[:numResults]
 	}
 
 	return delayMeasuredSubs
@@ -946,7 +947,9 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int) types.Nodes {
 	log.Println(fmt.Sprintf("measure bandwidth: total use %s", measureBandwidthTime))
 
 	close(measurementBandwidthJobChan)
+
 	sort.Sort(types.SortByBandwidth{Nodes: bandwidthMeasuredSubs})
+
 	return bandwidthMeasuredSubs
 }
 
@@ -1013,21 +1016,6 @@ func (c *Common) startPayment(
 		lastCost = cost
 		lastPaymentTime = costTimeStamp
 	}
-}
-
-func GetFavoriteSeedRpcServer(path string) ([]string, error) {
-	measureStorage := storage.NewMeasureStorage(path)
-	err := measureStorage.Load()
-	if err != nil {
-		return nil, err
-	}
-	nodes := make([]string, 0, measureStorage.FavoriteNodes.Len())
-
-	for _, f := range measureStorage.FavoriteNodes.GetData() {
-		item := f.(*storage.FavoriteNode)
-		nodes = append(nodes, fmt.Sprintf("http://%s:30003", item.IP))
-	}
-	return nodes, nil
 }
 
 func ReadMetadata(metadataString string) (*pb.ServiceMetadata, error) {
