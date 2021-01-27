@@ -278,19 +278,24 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 }
 
 func (te *TunaEntry) Close() {
+	te.WaitSessions()
+
 	te.Lock()
 	defer te.Unlock()
-	if !te.isClosed {
-		te.isClosed = true
-		close(te.closeChan)
-		for _, listener := range te.tcpListeners {
-			Close(listener)
-		}
-		for _, conn := range te.serviceConn {
-			Close(conn)
-		}
-		te.OnConnect.close()
+
+	if te.isClosed {
+		return
 	}
+
+	te.isClosed = true
+	close(te.closeChan)
+	for _, listener := range te.tcpListeners {
+		Close(listener)
+	}
+	for _, conn := range te.serviceConn {
+		Close(conn)
+	}
+	te.OnConnect.close()
 }
 
 func (te *TunaEntry) IsClosed() bool {
@@ -423,11 +428,11 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 					}
 
 					if te.config.Reverse {
-						go Pipe(stream, conn, &te.reverseBytesEntryToExit)
-						go Pipe(conn, stream, &te.reverseBytesExitToEntry)
+						go te.pipe(stream, conn, &te.reverseBytesEntryToExit)
+						go te.pipe(conn, stream, &te.reverseBytesExitToEntry)
 					} else {
-						go Pipe(stream, conn, &te.bytesEntryToExit)
-						go Pipe(conn, stream, &te.bytesExitToEntry)
+						go te.pipe(stream, conn, &te.bytesEntryToExit)
+						go te.pipe(conn, stream, &te.bytesExitToEntry)
 					}
 				}()
 			}
