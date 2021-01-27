@@ -507,6 +507,11 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 }
 
 func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
+	config, err := MergedEntryConfig(config)
+	if err != nil {
+		return err
+	}
+
 	var serviceListenIP string
 	if net.ParseIP(config.ReverseServiceListenIP) == nil {
 		serviceListenIP = defaultReverseServiceListenIP

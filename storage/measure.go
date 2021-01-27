@@ -19,8 +19,8 @@ const (
 	avoidExpired      = 7 * 24 * time.Hour
 	avoidCIDRMinIP    = 3
 
-	FavoriteFileName = "favorite-node.json"
-	AvoidFileName    = "avoid-node.json"
+	FavoriteFileSuffix = ".favorite-node.json"
+	AvoidFileSuffix    = ".avoid-node.json"
 )
 
 var (
@@ -59,11 +59,11 @@ type MeasureStorage struct {
 	AvoidNodes     map[string]AvoidNodes
 }
 
-func NewMeasureStorage(path string) *MeasureStorage {
+func NewMeasureStorage(path, filenamePrefix string) *MeasureStorage {
 	return &MeasureStorage{
 		path:             path,
-		favoriteFilePath: filepath.Join(path, FavoriteFileName),
-		avoidFilePath:    filepath.Join(path, AvoidFileName),
+		favoriteFilePath: filepath.Join(path, filenamePrefix+FavoriteFileSuffix),
+		avoidFilePath:    filepath.Join(path, filenamePrefix+AvoidFileSuffix),
 	}
 }
 
@@ -97,19 +97,13 @@ func (s *MeasureStorage) loadFavoriteData() error {
 	defer favoriteNodeFileMutex.Unlock()
 
 	favoriteData := make(map[string]*FavoriteNode)
-	isExists := util.Exists(s.favoriteFilePath)
-	if !isExists {
-		err := util.WriteJSON(s.favoriteFilePath, favoriteData)
+	if util.Exists(s.favoriteFilePath) {
+		err := util.ReadJSON(s.favoriteFilePath, &favoriteData)
 		if err != nil {
-			return err
-		}
-	}
-
-	err := util.ReadJSON(s.favoriteFilePath, &favoriteData)
-	if err != nil {
-		err = util.WriteJSON(s.favoriteFilePath, favoriteData)
-		if err != nil {
-			return err
+			err = util.WriteJSON(s.favoriteFilePath, favoriteData)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -126,19 +120,13 @@ func (s *MeasureStorage) loadAvoidData() error {
 	defer avoidNodeFileMutex.Unlock()
 
 	avoidData := make(map[string]AvoidNodes)
-	isExists := util.Exists(s.avoidFilePath)
-	if !isExists {
-		err := util.WriteJSON(s.avoidFilePath, avoidData)
+	if util.Exists(s.avoidFilePath) {
+		err := util.ReadJSON(s.avoidFilePath, &avoidData)
 		if err != nil {
-			return err
-		}
-	}
-
-	err := util.ReadJSON(s.avoidFilePath, &avoidData)
-	if err != nil {
-		err = util.WriteJSON(s.avoidFilePath, avoidData)
-		if err != nil {
-			return err
+			err = util.WriteJSON(s.avoidFilePath, avoidData)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

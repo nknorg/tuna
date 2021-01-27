@@ -190,11 +190,15 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 	return nil
 }
 
-func GetFavoriteSeedRpcServer(path string) ([]string, error) {
-	measureStorage := storage.NewMeasureStorage(path)
+func GetFavoriteSeedRpcServer(path, filenamePrefix string) ([]string, error) {
+	measureStorage := storage.NewMeasureStorage(path, filenamePrefix)
 	err := measureStorage.Load()
 	if err != nil {
 		return nil, err
+	}
+
+	if measureStorage.FavoriteNodes.Len() == 0 {
+		return nil, nil
 	}
 
 	nodes := make(types.Nodes, 0, measureStorage.FavoriteNodes.Len())

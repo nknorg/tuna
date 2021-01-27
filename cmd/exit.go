@@ -46,12 +46,13 @@ func (e *ExitCommand) Execute(args []string) error {
 	var seedRPCServerAddr *nkn.StringArray
 	if len(opts.SeedRPCServerAddr) > 0 {
 		seedRPCServerAddr = nkn.NewStringArrayFromString(strings.ReplaceAll(opts.SeedRPCServerAddr, ",", " "))
-	} else if len(config.MeasureStoragePath) > 0 {
-		rpcAddrs, err := tuna.GetFavoriteSeedRpcServer(config.MeasureStoragePath)
-		if err != nil {
-			log.Println(err)
-		} else {
-			seedRPCServerAddr = nkn.NewStringArray(append(rpcAddrs, nkn.DefaultSeedRPCServerAddr...)...)
+	} else if config.Reverse && len(config.MeasureStoragePath) > 0 {
+		c, err := tuna.MergedExitConfig(config)
+		if err == nil {
+			rpcAddrs, err := tuna.GetFavoriteSeedRpcServer(config.MeasureStoragePath, c.SubscriptionPrefix+c.ReverseServiceName)
+			if err == nil {
+				seedRPCServerAddr = nkn.NewStringArray(append(rpcAddrs, nkn.DefaultSeedRPCServerAddr...)...)
+			}
 		}
 	}
 
