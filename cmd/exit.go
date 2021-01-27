@@ -17,10 +17,7 @@ type ExitCommand struct {
 var exitCommand ExitCommand
 
 func (e *ExitCommand) Execute(args []string) error {
-	config := &tuna.ExitConfiguration{
-		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
-		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
-	}
+	config := &tuna.ExitConfiguration{}
 	err := util.ReadJSON(e.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config file error:", err)

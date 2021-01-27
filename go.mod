@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/golang/protobuf v1.4.1
+	github.com/imdario/mergo v0.3.9
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/nknorg/encrypted-stream v1.0.0
 	github.com/nknorg/nkn-sdk-go v1.3.5-0.20210122112757-1388e8cb9351

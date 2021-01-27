@@ -41,41 +41,24 @@ import (
 	"golang.org/x/crypto/nacl/box"
 )
 
-type Protocol string
-
 const (
-	TCP                                      Protocol = "tcp"
-	UDP                                      Protocol = "udp"
-	DefaultNanoPayDuration                            = 4320 * 30
-	DefaultNanoPayUpdateInterval                      = time.Minute
-	DefaultNanoPayMinFlushAmount                      = "0.01"
-	DefaultSubscriptionPrefix                         = "tuna_v1."
-	DefaultReverseServiceName                         = "reverse"
-	DefaultServiceListenIP                            = "127.0.0.1"
-	DefaultReverseServiceListenIP                     = "0.0.0.0"
-	TrafficUnit                                       = 1024 * 1024
-	TrafficPaymentThreshold                           = 32
-	MaxTrafficUnpaid                                  = 1
-	MinTrafficCoverage                                = 0.9
-	TrafficDelay                                      = 10 * time.Second
-	MaxNanoPayDelay                                   = 30 * time.Second
-	defaultGetSubscribersBatchSize                    = 256
-	DefaultEncryptionAlgo                             = pb.EncryptionAlgo_ENCRYPTION_NONE
-	subscribeDurationRandomFactor                     = 0.1
-	defaultMeasureDelayTimeout                        = 1 * time.Second
-	defaultMeasureDelayConcurrentWorkers              = 64
-	defaultMeasureBandwidthConcurrentWorkers          = 16 // should be >= measureBandwidthTopCount
-	measureBandwidthTopCount                          = 8
-	measureDelayTopDelayCount                         = 32
-	defaultMeasuremBandwidthTimeout                   = 2 // second
-	defaultMeasureBandwidthWorkersTimeout             = 8 // second
-	defaultMeasurementBytesDownLink                   = 256 << 10
-	defaultMaxPoolSize                                = 64
-	pipeBufferSize                                    = 4096 // should be <= 4096 to be compatible with c++ smux
-	maxConnMetadataSize                               = 1024
-	maxStreamMetadataSize                             = 1024
-	maxServiceMetadataSize                            = 4096
-	maxNanoPayTxnSize                                 = 4096
+	TrafficUnit = 1024 * 1024
+
+	tcp                           = "tcp"
+	udp                           = "udp"
+	trafficPaymentThreshold       = 32
+	maxTrafficUnpaid              = 1
+	minTrafficCoverage            = 0.9
+	trafficDelay                  = 10 * time.Second
+	maxNanoPayDelay               = 30 * time.Second
+	subscribeDurationRandomFactor = 0.1
+	measureBandwidthTopCount      = 8
+	measureDelayTopDelayCount     = 32
+	pipeBufferSize                = 4096 // should be <= 4096 to be compatible with c++ smux
+	maxConnMetadataSize           = 1024
+	maxStreamMetadataSize         = 1024
+	maxServiceMetadataSize        = 4096
+	maxNanoPayTxnSize             = 4096
 )
 
 var (
@@ -166,7 +149,7 @@ func NewCommon(
 	sortMeasuredNodes func(types.Nodes),
 	reverseMetadata *pb.ServiceMetadata,
 ) (*Common, error) {
-	encryptionAlgo := DefaultEncryptionAlgo
+	encryptionAlgo := defaultEncryptionAlgo
 	var err error
 	if service != nil && len(service.Encryption) > 0 {
 		encryptionAlgo, err = ParseEncryptionAlgo(service.Encryption)
@@ -178,26 +161,6 @@ func NewCommon(
 	var sk [ed25519.PrivateKeySize]byte
 	copy(sk[:], ed25519.GetPrivateKeyFromSeed(wallet.Seed()))
 	curveSecretKey := ed25519.PrivateKeyToCurve25519PrivateKey(&sk)
-
-	if getSubscribersBatchSize == 0 {
-		getSubscribersBatchSize = defaultGetSubscribersBatchSize
-	}
-
-	if measureBandwidthTimeout == 0 {
-		measureBandwidthTimeout = defaultMeasuremBandwidthTimeout
-	}
-
-	if measureBandwidthWorkersTimeout == 0 {
-		measureBandwidthWorkersTimeout = defaultMeasureBandwidthWorkersTimeout
-	}
-
-	if measurementBytes == 0 {
-		measurementBytes = defaultMeasurementBytesDownLink
-	}
-
-	if maxPoolSize == 0 {
-		maxPoolSize = defaultMaxPoolSize
-	}
 
 	measureDelayConcurrentWorkers := defaultMeasureDelayConcurrentWorkers
 	if measureDelayConcurrentWorkers > int(maxPoolSize) {
@@ -525,7 +488,7 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 
 		addr := metadata.Ip + ":" + strconv.Itoa(int(metadata.TcpPort))
 		tcpConn, err := net.DialTimeout(
-			string(TCP),
+			tcp,
 			addr,
 			time.Duration(c.DialTimeout)*time.Second,
 		)
@@ -549,7 +512,7 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 
 		addr := net.UDPAddr{IP: net.ParseIP(metadata.Ip), Port: int(metadata.UdpPort)}
 		udpConn, err := net.DialUDP(
-			string(UDP),
+			udp,
 			nil,
 			&addr,
 		)
@@ -819,7 +782,7 @@ func measureDelay(nodes types.Nodes, concurrentWorkers, numResults int, timeout 
 			wg.Add(1)
 			tunaUtil.Enqueue(measurementDelayJobChan, func() {
 				addr := node.Metadata.Ip + ":" + strconv.Itoa(int(node.Metadata.TcpPort))
-				delay, err := tunaUtil.DelayMeasurement(string(TCP), addr, timeout)
+				delay, err := tunaUtil.DelayMeasurement(tcp, addr, timeout)
 				if err != nil {
 					if _, ok := err.(net.Error); !ok {
 						log.Println(err)
@@ -875,9 +838,9 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 
 				addr := sub.Metadata.Ip + ":" + strconv.Itoa(int(sub.Metadata.TcpPort))
 				conn, err := net.DialTimeout(
-					string(TCP),
+					tcp,
 					addr,
-					1*time.Second,
+					defaultMeasureDelayTimeout,
 				)
 				if err != nil {
 					if _, ok := err.(net.Error); !ok {
@@ -992,10 +955,10 @@ func (c *Common) startPayment(
 			}
 			bytesEntryToExit = atomic.LoadUint64(bytesEntryToExitUsed)
 			bytesExitToEntry = atomic.LoadUint64(bytesExitToEntryUsed)
-			if (bytesEntryToExit+bytesExitToEntry)-(*bytesEntryToExitPaid+*bytesExitToEntryPaid) > TrafficPaymentThreshold*TrafficUnit {
+			if (bytesEntryToExit+bytesExitToEntry)-(*bytesEntryToExitPaid+*bytesExitToEntryPaid) > trafficPaymentThreshold*TrafficUnit {
 				break
 			}
-			if time.Since(lastPaymentTime) > DefaultNanoPayUpdateInterval {
+			if time.Since(lastPaymentTime) > defaultNanoPayUpdateInterval {
 				break
 			}
 		}
@@ -1016,7 +979,7 @@ func (c *Common) startPayment(
 
 		paymentReceiver := c.GetPaymentReceiver()
 		if np == nil || np.Recipient() != paymentReceiver {
-			np, err = c.Wallet.NewNanoPay(paymentReceiver, nanoPayFee, DefaultNanoPayDuration)
+			np, err = c.Wallet.NewNanoPay(paymentReceiver, nanoPayFee, defaultNanoPayDuration)
 			if err != nil {
 				log.Printf("Create nanopay err: %v", err)
 				continue
@@ -1392,7 +1355,7 @@ func checkPayment(session *smux.Session, lastPaymentTime *time.Time, lastPayment
 				return
 			}
 			totalCostNow, totalBytesNow := getTotalCost()
-			time.AfterFunc(TrafficDelay, func() {
+			time.AfterFunc(trafficDelay, func() {
 				totalCostDelayed, totalBytesDelayed = totalCostNow, totalBytesNow
 			})
 		}
@@ -1411,18 +1374,18 @@ func checkPayment(session *smux.Session, lastPaymentTime *time.Time, lastPayment
 				continue
 			}
 
-			if time.Since(*lastPaymentTime) > DefaultNanoPayUpdateInterval {
+			if time.Since(*lastPaymentTime) > defaultNanoPayUpdateInterval {
 				break
 			}
 
-			if totalBytes-*bytesPaid > TrafficPaymentThreshold*TrafficUnit {
+			if totalBytes-*bytesPaid > trafficPaymentThreshold*TrafficUnit {
 				break
 			}
 		}
 
-		time.Sleep(MaxNanoPayDelay)
+		time.Sleep(maxNanoPayDelay)
 
-		if *lastPaymentAmount < common.Fixed64(MinTrafficCoverage*float64(totalCost)) && totalCost-*lastPaymentAmount > common.Fixed64(MaxTrafficUnpaid*TrafficUnit*float64(totalCost)/float64(totalBytes)) {
+		if *lastPaymentAmount < common.Fixed64(minTrafficCoverage*float64(totalCost)) && totalCost-*lastPaymentAmount > common.Fixed64(maxTrafficUnpaid*TrafficUnit*float64(totalCost)/float64(totalBytes)) {
 			Close(session)
 			*isClosed = true
 			log.Printf("Not enough payment. Since last payment: %s. Last claimed: %v, expected: %v", time.Since(*lastPaymentTime).String(), *lastPaymentAmount, totalCost)

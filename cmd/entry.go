@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net"
 	"strings"
 
 	"github.com/nknorg/nkn-sdk-go"
@@ -18,10 +17,7 @@ type EntryCommand struct {
 var entryCommand EntryCommand
 
 func (e *EntryCommand) Execute(args []string) error {
-	config := &tuna.EntryConfiguration{
-		SubscriptionPrefix:        tuna.DefaultSubscriptionPrefix,
-		ReverseSubscriptionPrefix: tuna.DefaultSubscriptionPrefix,
-	}
+	config := &tuna.EntryConfiguration{}
 	err := util.ReadJSON(e.ConfigFile, config)
 	if err != nil {
 		log.Fatalln("Load config error:", err)
@@ -84,11 +80,6 @@ func (e *EntryCommand) Execute(args []string) error {
 
 	service:
 		for serviceName, serviceInfo := range config.Services {
-			serviceListenIP := net.ParseIP(serviceInfo.ListenIP)
-			if serviceListenIP == nil {
-				serviceInfo.ListenIP = tuna.DefaultServiceListenIP
-			}
-
 			for _, service := range services {
 				if service.Name == serviceName {
 					go func(service tuna.Service, serviceInfo tuna.ServiceInfo) {

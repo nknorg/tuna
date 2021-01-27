@@ -10,11 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nknorg/tuna/types"
-
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
-	"github.com/nknorg/tuna/geo"
 	"github.com/nknorg/tuna/pb"
 	"github.com/nknorg/tuna/util"
 	"github.com/patrickmn/go-cache"
@@ -25,38 +22,6 @@ import (
 type ExitServiceInfo struct {
 	Address string `json:"address"`
 	Price   string `json:"price"`
-}
-
-type ExitConfiguration struct {
-	BeneficiaryAddr                string                     `json:"beneficiaryAddr"`
-	ListenTCP                      int32                      `json:"listenTCP"`
-	ListenUDP                      int32                      `json:"listenUDP"`
-	DialTimeout                    int32                      `json:"dialTimeout"`
-	UDPTimeout                     int32                      `json:"udpTimeout"`
-	SubscriptionPrefix             string                     `json:"subscriptionPrefix"`
-	SubscriptionDuration           int32                      `json:"subscriptionDuration"`
-	SubscriptionFee                string                     `json:"subscriptionFee"`
-	ClaimInterval                  int32                      `json:"claimInterval"`
-	MinFlushAmount                 string                     `json:"minFlushAmount"`
-	Services                       map[string]ExitServiceInfo `json:"services"`
-	Reverse                        bool                       `json:"reverse"`
-	ReverseRandomPorts             bool                       `json:"reverseRandomPorts"`
-	ReverseMaxPrice                string                     `json:"reverseMaxPrice"`
-	ReverseNanoPayFee              string                     `json:"reverseNanopayfee"`
-	ReverseServiceName             string                     `json:"reverseServiceName"`
-	ReverseSubscriptionPrefix      string                     `json:"reverseSubscriptionPrefix"`
-	ReverseEncryption              string                     `json:"reverseEncryption"`
-	GeoDBPath                      string                     `json:"geoDBPath"`
-	DownloadGeoDB                  bool                       `json:"downloadGeoDB"`
-	GetSubscribersBatchSize        int32                      `json:"getSubscribersBatchSize"`
-	ReverseIPFilter                geo.IPFilter               `json:"reverseIPFilter"`
-	MeasureBandwidth               bool                       `json:"measureBandwidth"`
-	MeasureBandwidthTimeout        int32                      `json:"measureBandwidthTimeout"`
-	MeasureBandwidthWorkersTimeout int32                      `json:"measureBandwidthWorkersTimeout"`
-	MeasurementBytesDownLink       int32                      `json:"measurementBytesDownLink"`
-	MeasureStoragePath             string                     `json:"measureStoragePath"`
-	MaxPoolSize                    int32                      `json:"maxPoolSize"`
-	SortMeasuredNodes              func(types.Nodes)          `json:"-"`
 }
 
 type TunaExit struct {
@@ -80,6 +45,11 @@ type TunaExit struct {
 }
 
 func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfiguration) (*TunaExit, error) {
+	config, err := MergedExitConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
 	var service *Service
 	var serviceInfo *ServiceInfo
 	var subscriptionPrefix string
@@ -89,13 +59,10 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 			return nil, errors.New("services should have length 1")
 		}
 
-		reverseServiceName := config.ReverseServiceName
-		if len(reverseServiceName) == 0 {
-			reverseServiceName = DefaultReverseServiceName
-		}
+		subscriptionPrefix = config.ReverseSubscriptionPrefix
 
 		service = &Service{
-			Name:       reverseServiceName,
+			Name:       config.ReverseServiceName,
 			Encryption: services[0].Encryption,
 		}
 
@@ -103,8 +70,6 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 			MaxPrice: config.ReverseMaxPrice,
 			IPFilter: &config.ReverseIPFilter,
 		}
-
-		subscriptionPrefix = config.ReverseSubscriptionPrefix
 
 		reverseMetadata = &pb.ServiceMetadata{}
 		reverseMetadata.ServiceTcp = services[0].TCP
@@ -129,7 +94,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		config.MeasureBandwidthWorkersTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
-		config.MaxPoolSize,
+		config.MaxMeasureWorkerPoolSize,
 		config.SortMeasuredNodes,
 		reverseMetadata,
 	)
@@ -195,12 +160,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	}
 
 	if !te.config.Reverse {
-		minFlushAmount := te.config.MinFlushAmount
-		if len(minFlushAmount) == 0 {
-			minFlushAmount = DefaultNanoPayMinFlushAmount
-		}
-
-		npc, err = te.Wallet.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), minFlushAmount, onErr)
+		npc, err = te.Wallet.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.MinFlushAmount, onErr)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -240,13 +200,13 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				}
 				tcpPortsCount := len(service.TCP)
 				udpPortsCount := len(service.UDP)
-				var protocol Protocol
+				var protocol string
 				var port int
 				if portID < tcpPortsCount {
-					protocol = TCP
+					protocol = tcp
 					port = int(service.TCP[portID])
 				} else if portID-tcpPortsCount < udpPortsCount {
-					protocol = UDP
+					protocol = udp
 					portID -= tcpPortsCount
 					port = int(service.UDP[portID])
 				} else {

@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nknorg/tuna/types"
-
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/tuna/pb"
@@ -21,36 +19,6 @@ import (
 	"github.com/rdegges/go-ipify"
 	"github.com/xtaci/smux"
 )
-
-type EntryConfiguration struct {
-	Services                       map[string]ServiceInfo `json:"services"`
-	DialTimeout                    int32                  `json:"dialTimeout"`
-	UDPTimeout                     int32                  `json:"udpTimeout"`
-	NanoPayFee                     string                 `json:"nanoPayFee"`
-	SubscriptionPrefix             string                 `json:"subscriptionPrefix"`
-	Reverse                        bool                   `json:"reverse"`
-	ReverseBeneficiaryAddr         string                 `json:"reverseBeneficiaryAddr"`
-	ReverseTCP                     int32                  `json:"reverseTCP"`
-	ReverseUDP                     int32                  `json:"reverseUDP"`
-	ReverseServiceListenIP         string                 `json:"reverseServiceListenIP"`
-	ReversePrice                   string                 `json:"reversePrice"`
-	ReverseClaimInterval           int32                  `json:"reverseClaimInterval"`
-	ReverseMinFlushAmount          string                 `json:"reverseMinFlushAmount"`
-	ReverseServiceName             string                 `json:"reverseServiceName"`
-	ReverseSubscriptionPrefix      string                 `json:"reverseSubscriptionPrefix"`
-	ReverseSubscriptionDuration    int32                  `json:"reverseSubscriptionDuration"`
-	ReverseSubscriptionFee         string                 `json:"reverseSubscriptionFee"`
-	GeoDBPath                      string                 `json:"geoDBPath"`
-	DownloadGeoDB                  bool                   `json:"downloadGeoDB"`
-	GetSubscribersBatchSize        int32                  `json:"getSubscribersBatchSize"`
-	MeasureBandwidth               bool                   `json:"measureBandwidth"`
-	MeasureBandwidthTimeout        int32                  `json:"measureBandwidthTimeout"`
-	MeasureBandwidthWorkersTimeout int32                  `json:"measureBandwidthWorkersTimeout"`
-	MeasurementBytesDownLink       int32                  `json:"measurementBytesDownLink"`
-	MeasureStoragePath             string                 `json:"measureStoragePath"`
-	MaxPoolSize                    int32                  `json:"maxPoolSize"`
-	SortMeasuredNodes              func(types.Nodes)      `json:"-"`
-}
 
 type TunaEntry struct {
 	// It's important to keep these uint64 field on top to avoid panic on arm32
@@ -74,6 +42,11 @@ type TunaEntry struct {
 }
 
 func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, config *EntryConfiguration) (*TunaEntry, error) {
+	config, err := MergedEntryConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
 	c, err := NewCommon(
 		&service,
 		&serviceInfo,
@@ -90,7 +63,7 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		config.MeasureBandwidthWorkersTimeout,
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
-		config.MaxPoolSize,
+		config.MaxMeasureWorkerPoolSize,
 		config.SortMeasuredNodes,
 		nil,
 	)
@@ -116,6 +89,10 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 	defer te.Close()
 
 	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
+	if listenIP == nil {
+		listenIP = net.ParseIP(defaultServiceListenIP)
+	}
+
 	tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
 	if err != nil {
 		return err
@@ -189,6 +166,9 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 
 	metadata := te.GetMetadata()
 	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
+	if listenIP == nil {
+		listenIP = net.ParseIP(defaultServiceListenIP)
+	}
 	tcpPorts, err := te.listenTCP(listenIP, metadata.ServiceTcp)
 	if err != nil {
 		return err
@@ -220,12 +200,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	minFlushAmount := te.config.ReverseMinFlushAmount
-	if len(minFlushAmount) == 0 {
-		minFlushAmount = DefaultNanoPayMinFlushAmount
-	}
-
-	npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), minFlushAmount, onErr)
+	npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.ReverseMinFlushAmount, onErr)
 	if err != nil {
 		return err
 	}
@@ -389,7 +364,7 @@ func (te *TunaEntry) openServiceStream(portID byte) (*smux.Stream, error) {
 func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 	assignedPorts := make([]uint32, 0, len(ports))
 	for i, _port := range ports {
-		listener, err := net.ListenTCP(string(TCP), &net.TCPAddr{IP: ip, Port: int(_port)})
+		listener, err := net.ListenTCP(tcp, &net.TCPAddr{IP: ip, Port: int(_port)})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
@@ -488,7 +463,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 	}()
 
 	for i, _port := range ports {
-		localConn, err := net.ListenUDP(string(UDP), &net.UDPAddr{IP: ip, Port: int(_port)})
+		localConn, err := net.ListenUDP(udp, &net.UDPAddr{IP: ip, Port: int(_port)})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
@@ -534,7 +509,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	var serviceListenIP string
 	if net.ParseIP(config.ReverseServiceListenIP) == nil {
-		serviceListenIP = DefaultReverseServiceListenIP
+		serviceListenIP = defaultReverseServiceListenIP
 	} else {
 		serviceListenIP = config.ReverseServiceListenIP
 	}
@@ -544,12 +519,12 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		return fmt.Errorf("Couldn't get IP: %v", err)
 	}
 
-	listener, err := net.ListenTCP(string(TCP), &net.TCPAddr{Port: int(config.ReverseTCP)})
+	listener, err := net.ListenTCP(tcp, &net.TCPAddr{Port: int(config.ReverseTCP)})
 	if err != nil {
 		return err
 	}
 
-	udpConn, err := net.ListenUDP(string(UDP), &net.UDPAddr{Port: int(config.ReverseUDP)})
+	udpConn, err := net.ListenUDP(udp, &net.UDPAddr{Port: int(config.ReverseUDP)})
 	if err != nil {
 		return err
 	}
@@ -680,12 +655,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		}
 	}()
 
-	reverseServiceName := config.ReverseServiceName
-	if len(reverseServiceName) == 0 {
-		reverseServiceName = DefaultReverseServiceName
-	}
-
-	for _, rsn := range strings.Split(reverseServiceName, ",") {
+	for _, rsn := range strings.Split(config.ReverseServiceName, ",") {
 		UpdateMetadata(
 			strings.Trim(rsn, " "),
 			0,
