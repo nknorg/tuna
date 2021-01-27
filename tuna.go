@@ -208,7 +208,7 @@ func NewCommon(
 	}
 
 	if !c.IsServer && c.MeasureStoragePath != "" {
-		c.measureStorage = storage.NewMeasureStorage(c.MeasureStoragePath)
+		c.measureStorage = storage.NewMeasureStorage(c.MeasureStoragePath, c.SubscriptionPrefix+c.Service.Name)
 	}
 
 	return c, nil

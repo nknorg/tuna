@@ -8,7 +8,7 @@ import (
 )
 
 func TestMeasureStorage(t *testing.T) {
-	measureStorage := storage.NewMeasureStorage(".")
+	measureStorage := storage.NewMeasureStorage(".", "test")
 	err := measureStorage.Load()
 	if err != nil {
 		log.Println(err)
