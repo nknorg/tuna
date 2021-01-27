@@ -130,6 +130,7 @@ type Common struct {
 	sortMeasuredNodes                 func(types.Nodes)
 	measureDelayConcurrentWorkers     int
 	measureBandwidthConcurrentWorkers int
+	sessionsWaitGroup                 *sync.WaitGroup
 
 	sync.RWMutex
 	paymentReceiver  string
@@ -142,6 +143,8 @@ type Common struct {
 	isClosed         bool
 	sharedKeys       map[string]*[sharedKeySize]byte
 	remoteNknAddress string
+	activeSessions   int
+	linger           time.Duration
 }
 
 func NewCommon(
@@ -206,6 +209,7 @@ func NewCommon(
 		measureBandwidthConcurrentWorkers = int(maxPoolSize)
 	}
 
+	var wg sync.WaitGroup
 	c := &Common{
 		Service:                        service,
 		ServiceInfo:                    serviceInfo,
@@ -225,7 +229,6 @@ func NewCommon(
 		MeasurementBytesDownLink:       measurementBytes,
 		MeasureStoragePath:             measureStoragePath,
 		MaxPoolSize:                    maxPoolSize,
-		sortMeasuredNodes:              sortMeasuredNodes,
 
 		curveSecretKey:                    curveSecretKey,
 		encryptionAlgo:                    encryptionAlgo,
@@ -233,6 +236,8 @@ func NewCommon(
 		sharedKeys:                        make(map[string]*[sharedKeySize]byte),
 		measureDelayConcurrentWorkers:     measureDelayConcurrentWorkers,
 		measureBandwidthConcurrentWorkers: measureBandwidthConcurrentWorkers,
+		sortMeasuredNodes:                 sortMeasuredNodes,
+		sessionsWaitGroup:                 &wg,
 	}
 
 	if !c.IsServer && c.ServiceInfo.IPFilter.NeedGeoInfo() {
@@ -1032,6 +1037,74 @@ func (c *Common) startPayment(
 	}
 }
 
+func (c *Common) pipe(dest io.WriteCloser, src io.ReadCloser, written *uint64) {
+	c.sessionsWaitGroup.Add(1)
+
+	c.Lock()
+	c.activeSessions++
+	c.Unlock()
+
+	defer func() {
+		dest.Close()
+		src.Close()
+
+		c.Lock()
+		c.activeSessions--
+		c.Unlock()
+
+		c.sessionsWaitGroup.Done()
+	}()
+
+	copyBuffer(dest, src, written)
+}
+
+func (c *Common) GetNumActiveSessions() int {
+	c.RLock()
+	defer c.RUnlock()
+	return c.activeSessions
+}
+
+func (c *Common) GetSessionsWaitGroup() *sync.WaitGroup {
+	return c.sessionsWaitGroup
+}
+
+// SetLinger sets the behavior of Close when there is at least one active session.
+// t = 0 (default): close all conn when tuna close.
+// t < 0: tuna Close() call will block and wait for all sessions to close before closing tuna.
+// t > 0: tuna Close() call will block and wait for up to timeout all sessions to close before closing tuna.
+func (c *Common) SetLinger(t time.Duration) {
+	c.Lock()
+	c.linger = t
+	c.Unlock()
+}
+
+// WaitSessions waits for sessions wait group, or until linger times out.
+func (c *Common) WaitSessions() {
+	c.RLock()
+	linger := c.linger
+	c.RUnlock()
+
+	if linger == 0 {
+		return
+	}
+
+	waitChan := make(chan struct{})
+	go func() {
+		c.sessionsWaitGroup.Wait()
+		close(waitChan)
+	}()
+
+	var timeoutChan <-chan time.Time
+	if linger > 0 {
+		timeoutChan = time.After(linger)
+	}
+
+	select {
+	case <-waitChan:
+	case <-timeoutChan:
+	}
+}
+
 func ReadMetadata(metadataString string) (*pb.ServiceMetadata, error) {
 	metadataRaw, err := base64.StdEncoding.DecodeString(metadataString)
 	if err != nil {
@@ -1168,12 +1241,6 @@ func copyBuffer(dest io.Writer, src io.Reader, written *uint64) error {
 			return nil
 		}
 	}
-}
-
-func Pipe(dest io.WriteCloser, src io.ReadCloser, written *uint64) {
-	defer dest.Close()
-	defer src.Close()
-	copyBuffer(dest, src, written)
 }
 
 func Close(conn io.Closer) {

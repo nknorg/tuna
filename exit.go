@@ -262,11 +262,11 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				}
 
 				if te.config.Reverse {
-					go Pipe(conn, stream, &te.reverseBytesEntryToExit)
-					go Pipe(stream, conn, &te.reverseBytesExitToEntry)
+					go te.pipe(conn, stream, &te.reverseBytesEntryToExit)
+					go te.pipe(stream, conn, &te.reverseBytesExitToEntry)
 				} else {
-					go Pipe(conn, stream, &bytesEntryToExit[serviceID])
-					go Pipe(stream, conn, &bytesExitToEntry[serviceID])
+					go te.pipe(conn, stream, &bytesEntryToExit[serviceID])
+					go te.pipe(stream, conn, &bytesExitToEntry[serviceID])
 				}
 
 				return nil
@@ -655,17 +655,22 @@ func (te *TunaExit) GetReverseUDPPorts() []uint32 {
 }
 
 func (te *TunaExit) Close() {
+	te.WaitSessions()
+
 	te.Lock()
 	defer te.Unlock()
-	if !te.isClosed {
-		te.isClosed = true
-		close(te.closeChan)
-		Close(te.tcpListener)
-		Close(te.udpConn)
-		Close(te.Common.tcpConn)
-		Close(te.Common.udpConn)
-		te.OnConnect.close()
+
+	if te.isClosed {
+		return
 	}
+
+	te.isClosed = true
+	close(te.closeChan)
+	Close(te.tcpListener)
+	Close(te.udpConn)
+	Close(te.Common.tcpConn)
+	Close(te.Common.udpConn)
+	te.OnConnect.close()
 }
 
 func (te *TunaExit) IsClosed() bool {
