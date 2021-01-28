@@ -661,19 +661,21 @@ func (c *Common) nknFilter() ([]string, map[string]string, error) {
 	var subscriberRaw map[string]string
 
 	if c.ServiceInfo.NknFilter != nil && len(c.ServiceInfo.NknFilter.Allow) > 0 {
-		// nkn client filter
 		nknFilterLength := len(c.ServiceInfo.NknFilter.Allow)
 		subscriberRaw = make(map[string]string, nknFilterLength)
 		allSubscribers = make([]string, 0, nknFilterLength)
-		for _, aFilter := range c.ServiceInfo.NknFilter.Allow {
-			subscription, err := c.Wallet.GetSubscription(topic, aFilter.Address)
-			if err != nil {
-				log.Println(err)
-				continue
+		for _, f := range c.ServiceInfo.NknFilter.Allow {
+			if len(f.Metadata) > 0 {
+				subscriberRaw[f.Address] = f.Metadata
+			} else {
+				subscription, err := c.Wallet.GetSubscription(topic, f.Address)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				subscriberRaw[f.Address] = subscription.Meta
 			}
-
-			subscriberRaw[aFilter.Address] = subscription.Meta
-			allSubscribers = append(allSubscribers, aFilter.Address)
+			allSubscribers = append(allSubscribers, f.Address)
 		}
 		if len(allSubscribers) == 0 {
 			return nil, nil, errors.New("none of the NKN address whitelist can provide service")
@@ -798,7 +800,7 @@ func measureDelay(nodes types.Nodes, concurrentWorkers, numResults int, timeout 
 	}
 	wg.Wait()
 	measureDelayTime := time.Since(timeStart)
-	log.Println(fmt.Sprintf("measure delay: total use %s", measureDelayTime))
+	log.Printf("Measure delay: total use %s\n", measureDelayTime)
 
 	close(measurementDelayJobChan)
 
@@ -817,7 +819,6 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 	bandwidthMeasuredSubs := make(types.Nodes, 0, len(nodes))
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	isCanceled := false
 	var measurementBandwidthJobChan = make(chan tunaUtil.Job, 1)
 	go tunaUtil.WorkPool(c.measureBandwidthConcurrentWorkers, measurementBandwidthJobChan, wg)
 	for index := range nodes {
@@ -826,7 +827,6 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 			tunaUtil.Enqueue(measurementBandwidthJobChan, func() {
 				select {
 				case <-ctx.Done():
-					log.Println("job canceled.")
 					return
 				default:
 				}
@@ -859,7 +859,11 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 					MeasurementBytesDownlink: uint32(c.MeasurementBytesDownLink),
 				})
 				if err != nil {
-					log.Println(err)
+					select {
+					case <-ctx.Done():
+					default:
+						log.Println(err)
+					}
 					conn.Close()
 					return
 				}
@@ -869,24 +873,26 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 				min, max, err := tunaUtil.BandwidthMeasurementClient(encryptedConn, int(c.MeasurementBytesDownLink), c.MeasureBandwidthTimeout)
 				dur := time.Since(timeStart)
 				if err != nil {
-					resLock.Lock()
-					localIsCanceled := isCanceled
-					resLock.Unlock()
-					if c.measureStorage != nil && !localIsCanceled {
-						c.measureStorage.AddAvoidNode(sub.Metadata.Ip, &storage.AvoidNode{
-							IP:      sub.Metadata.Ip,
-							Address: sub.Address,
-						})
-						err = c.measureStorage.SaveAvoidNodes()
-						if err != nil {
-							log.Println(err)
+					select {
+					case <-ctx.Done():
+					default:
+						if c.measureStorage != nil {
+							c.measureStorage.AddAvoidNode(sub.Metadata.Ip, &storage.AvoidNode{
+								IP:      sub.Metadata.Ip,
+								Address: sub.Address,
+							})
+							err = c.measureStorage.SaveAvoidNodes()
+							if err != nil {
+								log.Println(err)
+							}
+							log.Printf("Add avoid node: %s", sub.Metadata.Ip)
 						}
-						log.Printf("add avoid node: %s", sub.Metadata.Ip)
 					}
 					return
 				}
 
-				log.Printf("address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1024, max/1024, dur)
+				log.Printf("Address: %s, bandwidth: %f - %f KB/s, time: %s", addr, min/1024, max/1024, dur)
+
 				if c.measureStorage != nil {
 					metadata, err := proto.Marshal(sub.Metadata)
 					if err != nil {
@@ -906,7 +912,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 							if err != nil {
 								log.Println(err)
 							}
-							log.Printf("add favorite node: %s", sub.Metadata.Ip)
+							log.Printf("Add favorite node: %s", sub.Metadata.Ip)
 						}
 					}
 				}
@@ -915,8 +921,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 				resLock.Lock()
 				bandwidthMeasuredSubs = append(bandwidthMeasuredSubs, sub)
 				if len(bandwidthMeasuredSubs) >= n {
-					log.Println("bandwidth measurement cancel.")
-					isCanceled = true
+					log.Println("Collected enough results, cancel bandwidth measurement.")
 					cancel()
 				}
 				resLock.Unlock()
@@ -926,7 +931,7 @@ func (c *Common) measureBandwidth(nodes types.Nodes, n int, timeout time.Duratio
 	wg.Wait()
 	cancel()
 	measureBandwidthTime := time.Since(timeStart)
-	log.Println(fmt.Sprintf("measure bandwidth: total use %s", measureBandwidthTime))
+	log.Printf("Measure bandwidth: total use %s\n", measureBandwidthTime)
 
 	close(measurementBandwidthJobChan)
 

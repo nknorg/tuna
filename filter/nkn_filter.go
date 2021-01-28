@@ -5,7 +5,8 @@ import (
 )
 
 type NknClient struct {
-	Address string `json:"address"`
+	Address  string `json:"address"`
+	Metadata string `json:"metadata"`
 }
 
 var emptyNknClient = NknClient{}
