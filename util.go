@@ -4,15 +4,17 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strings"
 	"sync"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
+	nknPb "github.com/nknorg/nkn/v2/pb"
 	"github.com/nknorg/tuna/pb"
 	"github.com/nknorg/tuna/storage"
-	"github.com/nknorg/tuna/types"
 	"github.com/xtaci/smux"
 )
 
@@ -190,7 +192,9 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 	return nil
 }
 
-func GetFavoriteSeedRpcServer(path, filenamePrefix string) ([]string, error) {
+// GetFavoriteSeedRPCServer returns an array of node rpc address from favorite
+// node file. Timeout is in unit of millisecond.
+func GetFavoriteSeedRPCServer(path, filenamePrefix string, timeout int32) ([]string, error) {
 	measureStorage := storage.NewMeasureStorage(path, filenamePrefix)
 	err := measureStorage.Load()
 	if err != nil {
@@ -201,22 +205,32 @@ func GetFavoriteSeedRpcServer(path, filenamePrefix string) ([]string, error) {
 		return nil, nil
 	}
 
-	nodes := make(types.Nodes, 0, measureStorage.FavoriteNodes.Len())
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+	rpcAddrs := make([]string, 0, measureStorage.FavoriteNodes.Len())
+
 	for _, node := range measureStorage.FavoriteNodes.GetData() {
-		nodes = append(nodes, &types.Node{
-			Metadata: &pb.ServiceMetadata{
-				Ip:      node.(*storage.FavoriteNode).IP,
-				TcpPort: nodeRPCPort,
-			},
-		})
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			nodeState, err := nkn.GetNodeState(&nkn.RPCConfig{
+				SeedRPCServerAddr: nkn.NewStringArray(addr),
+				RPCTimeout:        timeout,
+			})
+			if err != nil {
+				return
+			}
+			if nodeState.SyncState != nknPb.SyncState_name[int32(nknPb.SyncState_PERSIST_FINISHED)] {
+				log.Printf("Skip rpc node %s in state %s\n", addr, nodeState.SyncState)
+				return
+			}
+			lock.Lock()
+			rpcAddrs = append(rpcAddrs, addr)
+			lock.Unlock()
+		}(fmt.Sprintf("http://%s:%d", node.(*storage.FavoriteNode).IP, nodeRPCPort))
 	}
 
-	nodesWithDelay := measureDelay(nodes, len(nodes), len(nodes), defaultMeasureDelayTimeout)
-
-	rpcAddrs := make([]string, 0, len(nodesWithDelay))
-	for _, node := range nodesWithDelay {
-		rpcAddrs = append(rpcAddrs, fmt.Sprintf("http://%s:%d", node.Metadata.Ip, nodeRPCPort))
-	}
+	wg.Wait()
 
 	return rpcAddrs, nil
 }

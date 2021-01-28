@@ -49,7 +49,7 @@ func (e *ExitCommand) Execute(args []string) error {
 	} else if config.Reverse && len(config.MeasureStoragePath) > 0 {
 		c, err := tuna.MergedExitConfig(config)
 		if err == nil {
-			rpcAddrs, err := tuna.GetFavoriteSeedRpcServer(config.MeasureStoragePath, c.SubscriptionPrefix+c.ReverseServiceName)
+			rpcAddrs, err := tuna.GetFavoriteSeedRPCServer(config.MeasureStoragePath, c.SubscriptionPrefix+c.ReverseServiceName, 3000)
 			if err == nil {
 				seedRPCServerAddr = nkn.NewStringArray(append(rpcAddrs, nkn.DefaultSeedRPCServerAddr...)...)
 			}
@@ -58,6 +58,7 @@ func (e *ExitCommand) Execute(args []string) error {
 
 	walletConfig := &nkn.WalletConfig{
 		SeedRPCServerAddr: seedRPCServerAddr,
+		RPCConcurrency:    4,
 	}
 
 	wallet, err := nkn.NewWallet(&nkn.Account{account}, walletConfig)
