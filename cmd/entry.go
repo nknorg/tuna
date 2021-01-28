@@ -50,7 +50,7 @@ func (e *EntryCommand) Execute(args []string) error {
 		c, err := tuna.MergedEntryConfig(config)
 		if err == nil {
 			for serviceName := range c.Services {
-				rpcAddrs, err := tuna.GetFavoriteSeedRpcServer(c.MeasureStoragePath, c.SubscriptionPrefix+serviceName)
+				rpcAddrs, err := tuna.GetFavoriteSeedRPCServer(c.MeasureStoragePath, c.SubscriptionPrefix+serviceName, 3000)
 				if err == nil {
 					seedRPCServerAddr = nkn.NewStringArray(append(rpcAddrs, nkn.DefaultSeedRPCServerAddr...)...)
 					break
@@ -61,6 +61,7 @@ func (e *EntryCommand) Execute(args []string) error {
 
 	walletConfig := &nkn.WalletConfig{
 		SeedRPCServerAddr: seedRPCServerAddr,
+		RPCConcurrency:    4,
 	}
 
 	wallet, err := nkn.NewWallet(&nkn.Account{account}, walletConfig)
