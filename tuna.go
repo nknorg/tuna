@@ -772,8 +772,9 @@ func (c *Common) filterSubscribers(allSubscribers []string, subscriberRaw map[st
 		}
 
 		filterSubs = append(filterSubs, &types.Node{
-			Address:  subscriber,
-			Metadata: metadata,
+			Address:     subscriber,
+			Metadata:    metadata,
+			MetadataRaw: metadataString,
 		})
 	}
 
