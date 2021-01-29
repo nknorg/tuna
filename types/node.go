@@ -5,10 +5,11 @@ import (
 )
 
 type Node struct {
-	Address   string
-	Metadata  *pb.ServiceMetadata
-	Delay     float32 // ms
-	Bandwidth float32 // byte/s
+	Address     string
+	Metadata    *pb.ServiceMetadata
+	MetadataRaw string
+	Delay       float32 // ms
+	Bandwidth   float32 // byte/s
 }
 
 type Nodes []*Node
