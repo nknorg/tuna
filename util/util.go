@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,17 +54,21 @@ func Exists(path string) bool {
 	return true
 }
 
-func DownloadJsonFile(url, filename string) error {
+func DownloadJsonFile(ctx context.Context, url, filename string) error {
 	f, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
 	client := http.Client{
 		Timeout: 60 * time.Second,
 	}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

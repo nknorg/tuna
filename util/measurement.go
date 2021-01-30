@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"math/rand"
 	"net"
 	"time"
@@ -12,9 +13,13 @@ const (
 )
 
 func DelayMeasurement(network, address string, timeout time.Duration) (time.Duration, error) {
+	return DelayMeasurementContext(context.Background(), network, address, timeout)
+}
+
+func DelayMeasurementContext(ctx context.Context, network, address string, timeout time.Duration) (time.Duration, error) {
 	now := time.Now()
 	d := net.Dialer{Timeout: timeout}
-	conn, err := d.Dial(network, address)
+	conn, err := d.DialContext(ctx, network, address)
 	delay := time.Since(now)
 	if err != nil {
 		return delay, err
@@ -26,6 +31,10 @@ func DelayMeasurement(network, address string, timeout time.Duration) (time.Dura
 }
 
 func BandwidthMeasurementClient(conn net.Conn, bytesDownlink int, timeout time.Duration) (float32, float32, error) {
+	return BandwidthMeasurementClientContext(context.Background(), conn, bytesDownlink, timeout)
+}
+
+func BandwidthMeasurementClientContext(ctx context.Context, conn net.Conn, bytesDownlink int, timeout time.Duration) (float32, float32, error) {
 	timeStart := time.Now()
 	var timeToFirstByte time.Duration
 
@@ -35,6 +44,15 @@ func BandwidthMeasurementClient(conn net.Conn, bytesDownlink int, timeout time.D
 			return 0, 0, err
 		}
 	}
+
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			conn.SetDeadline(time.Now())
+		case <-done:
+		}
+	}()
 
 	b := make([]byte, readBufferSize)
 	for bytesRead := 0; bytesRead < bytesDownlink; {
@@ -52,6 +70,8 @@ func BandwidthMeasurementClient(conn net.Conn, bytesDownlink int, timeout time.D
 		bytesRead += m
 	}
 
+	close(done)
+
 	timeToLastByte := time.Since(timeStart)
 	bps := float32(bytesDownlink) / float32(timeToLastByte) * float32(time.Second)
 	bpsRead := float32(bytesDownlink) / float32(timeToLastByte-timeToFirstByte) * float32(time.Second)
@@ -60,12 +80,25 @@ func BandwidthMeasurementClient(conn net.Conn, bytesDownlink int, timeout time.D
 }
 
 func BandwidthMeasurementServer(conn net.Conn, bytesDownlink int, timeout time.Duration) error {
+	return BandwidthMeasurementServerContext(context.Background(), conn, bytesDownlink, timeout)
+}
+
+func BandwidthMeasurementServerContext(ctx context.Context, conn net.Conn, bytesDownlink int, timeout time.Duration) error {
 	if timeout > 0 {
 		err := conn.SetWriteDeadline(time.Now().Add(timeout))
 		if err != nil {
 			return err
 		}
 	}
+
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			conn.SetDeadline(time.Now())
+		case <-done:
+		}
+	}()
 
 	b := make([]byte, writeBufferSize)
 	for bytesWritten := 0; bytesWritten < bytesDownlink; {
@@ -80,6 +113,8 @@ func BandwidthMeasurementServer(conn net.Conn, bytesDownlink int, timeout time.D
 		}
 		bytesWritten += m
 	}
+
+	close(done)
 
 	return nil
 }

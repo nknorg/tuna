@@ -1,6 +1,7 @@
 package tuna
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -195,6 +196,10 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 // GetFavoriteSeedRPCServer returns an array of node rpc address from favorite
 // node file. Timeout is in unit of millisecond.
 func GetFavoriteSeedRPCServer(path, filenamePrefix string, timeout int32) ([]string, error) {
+	return GetFavoriteSeedRPCServerContext(context.Background(), path, filenamePrefix, timeout)
+}
+
+func GetFavoriteSeedRPCServerContext(ctx context.Context, path, filenamePrefix string, timeout int32) ([]string, error) {
 	measureStorage := storage.NewMeasureStorage(path, filenamePrefix)
 	err := measureStorage.Load()
 	if err != nil {
@@ -230,7 +235,17 @@ func GetFavoriteSeedRPCServer(path, filenamePrefix string, timeout int32) ([]str
 		}(fmt.Sprintf("http://%s:%d", node.(*storage.FavoriteNode).IP, nodeRPCPort))
 	}
 
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-done:
+	}
 
 	return rpcAddrs, nil
 }

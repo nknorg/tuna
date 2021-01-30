@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"context"
 	"errors"
 	"io/ioutil"
 	"log"
@@ -22,6 +23,10 @@ func NewIP2CProvider() *IP2CProvider {
 }
 
 func (p *IP2CProvider) MaybeUpdate() error {
+	return p.MaybeUpdateContext(context.Background())
+}
+
+func (p *IP2CProvider) MaybeUpdateContext(ctx context.Context) error {
 	return nil
 }
 

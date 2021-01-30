@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"log"
@@ -45,6 +46,10 @@ func NewMaxMindProvider(path string) *MaxMindProvider {
 }
 
 func (p *MaxMindProvider) MaybeUpdate() error {
+	return p.MaybeUpdateContext(context.Background())
+}
+
+func (p *MaxMindProvider) MaybeUpdateContext(ctx context.Context) error {
 	geoLock.Lock()
 	defer geoLock.Unlock()
 	if !p.NeedUpdate() && p.DB != nil {
@@ -59,10 +64,14 @@ func (p *MaxMindProvider) MaybeUpdate() error {
 		defer os.Remove(tmpFile.Name())
 		defer tmpFile.Close()
 
+		req, err := http.NewRequestWithContext(ctx, "GET", Geolite2Url, nil)
+		if err != nil {
+			return err
+		}
 		client := http.Client{
 			Timeout: 300 * time.Second,
 		}
-		resp, err := client.Get(Geolite2Url)
+		resp, err := client.Do(req)
 		if err != nil {
 			return err
 		}
