@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"context"
 	"log"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ type GeoProvider interface {
 	LastUpdate() time.Time
 	NeedUpdate() bool
 	MaybeUpdate() error
+	MaybeUpdateContext(ctx context.Context) error
 	Ready() bool
 	SetReady(bool)
 	SetFileName(string)
@@ -185,11 +187,15 @@ func (f *IPFilter) GetProviders() []GeoProvider {
 }
 
 func (f *IPFilter) UpdateDataFile() {
+	f.UpdateDataFileContext(context.Background())
+}
+
+func (f *IPFilter) UpdateDataFileContext(ctx context.Context) {
 	for _, p := range f.providers {
 		if len(p.FileName()) == 0 {
 			continue
 		}
-		err := p.MaybeUpdate()
+		err := p.MaybeUpdateContext(ctx)
 		if err != nil {
 			log.Print(err)
 			continue

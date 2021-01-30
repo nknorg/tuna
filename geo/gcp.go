@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"context"
 	"io/ioutil"
 	"log"
 	"net"
@@ -75,6 +76,10 @@ func NewGCPProvider(path string) *GCPProvider {
 }
 
 func (p *GCPProvider) MaybeUpdate() error {
+	return p.MaybeUpdateContext(context.Background())
+}
+
+func (p *GCPProvider) MaybeUpdateContext(ctx context.Context) error {
 	geoLock.Lock()
 	defer geoLock.Unlock()
 	if !p.NeedUpdate() && p.Info != nil {
@@ -88,7 +93,7 @@ func (p *GCPProvider) MaybeUpdate() error {
 		}
 		defer os.Remove(tmpFile.Name())
 		defer tmpFile.Close()
-		err = util.DownloadJsonFile(p.url, tmpFile.Name())
+		err = util.DownloadJsonFile(ctx, p.url, tmpFile.Name())
 		if err != nil {
 			return err
 		}
