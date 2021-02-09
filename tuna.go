@@ -1344,7 +1344,10 @@ func nanoPayClaim(txBytes []byte, npc *nkn.NanoPayClaimer) (*nkn.Amount, error) 
 
 func checkNanoPayClaim(session *smux.Session, npc *nkn.NanoPayClaimer, onErr *nkn.OnError, isClosed *bool) {
 	for {
-		err := <-onErr.C
+		err, ok := <-onErr.C
+		if !ok {
+			break
+		}
 		if err != nil {
 			log.Println("Couldn't claim nano pay:", err)
 			if npc.IsClosed() {
