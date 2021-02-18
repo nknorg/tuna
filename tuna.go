@@ -596,6 +596,7 @@ func (c *Common) CreateServerConn(force bool) error {
 				err = c.UpdateServerConn(remotePublicKey)
 				if err != nil {
 					log.Println(err)
+					time.Sleep(time.Second)
 					continue
 				}
 
