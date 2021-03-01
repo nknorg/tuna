@@ -10,7 +10,7 @@
   "services": {
     "httpproxy": {
       "address": "127.0.0.1",
-      "price": "0.001"
+      "price": "0.01"
     }
   },
   "reverse": false,
