@@ -1,7 +1,7 @@
 {
   "services": {
     "httpproxy": {
-      "maxPrice": "0.001",
+      "maxPrice": "0.01",
       "ipFilter": {
         "allow": [
           {"countryCode": ""}
