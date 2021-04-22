@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -20,7 +21,9 @@ import (
 )
 
 const (
-	nodeRPCPort = 30003
+	nodeRPCPort            = 30003
+	randomIdentifierChars  = "abcdefghijklmnopqrstuvwxyz0123456789"
+	randomIdentifierLength = 8
 )
 
 var encryptionAlgoMap = map[string]pb.EncryptionAlgo{
@@ -193,12 +196,14 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 	return nil
 }
 
-// GetFavoriteSeedRPCServer returns an array of node rpc address from favorite
-// node file. Timeout is in unit of millisecond.
+// GetFavoriteSeedRPCServer wraps GetFavoriteSeedRPCServerContext with
+// background context.
 func GetFavoriteSeedRPCServer(path, filenamePrefix string, timeout int32) ([]string, error) {
 	return GetFavoriteSeedRPCServerContext(context.Background(), path, filenamePrefix, timeout)
 }
 
+// GetFavoriteSeedRPCServerContext returns an array of node rpc address from
+// favorite node file. Timeout is in unit of millisecond.
 func GetFavoriteSeedRPCServerContext(ctx context.Context, path, filenamePrefix string, timeout int32) ([]string, error) {
 	measureStorage := storage.NewMeasureStorage(path, filenamePrefix)
 	err := measureStorage.Load()
@@ -218,7 +223,7 @@ func GetFavoriteSeedRPCServerContext(ctx context.Context, path, filenamePrefix s
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()
-			nodeState, err := nkn.GetNodeState(&nkn.RPCConfig{
+			nodeState, err := nkn.GetNodeStateContext(ctx, &nkn.RPCConfig{
 				SeedRPCServerAddr: nkn.NewStringArray(addr),
 				RPCTimeout:        timeout,
 			})
@@ -248,4 +253,12 @@ func GetFavoriteSeedRPCServerContext(ctx context.Context, path, filenamePrefix s
 	}
 
 	return rpcAddrs, nil
+}
+
+func randomIdentifier() string {
+	b := make([]byte, randomIdentifierLength)
+	for i := range b {
+		b[i] = randomIdentifierChars[rand.Intn(len(randomIdentifierChars))]
+	}
+	return string(b)
 }

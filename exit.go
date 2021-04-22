@@ -82,6 +82,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		service,
 		serviceInfo,
 		wallet,
+		config.SeedRPCServerAddr,
 		config.DialTimeout,
 		subscriptionPrefix,
 		config.Reverse,
@@ -160,7 +161,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	}
 
 	if !te.config.Reverse {
-		npc, err = te.Wallet.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.MinFlushAmount, onErr)
+		npc, err = te.Client.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.MinFlushAmount, onErr)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -410,7 +411,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort, udpPort uint32) error 
 			te.config.SubscriptionPrefix,
 			uint32(te.config.SubscriptionDuration),
 			te.config.SubscriptionFee,
-			te.Wallet,
+			te.Client,
 			te.closeChan,
 		)
 	}
