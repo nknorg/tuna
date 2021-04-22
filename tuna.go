@@ -59,6 +59,7 @@ const (
 	maxStreamMetadataSize         = 1024
 	maxServiceMetadataSize        = 4096
 	maxNanoPayTxnSize             = 4096
+	numRPCClients                 = 4
 )
 
 var (
@@ -86,6 +87,7 @@ type Common struct {
 	Service                        *Service
 	ServiceInfo                    *ServiceInfo
 	Wallet                         *nkn.Wallet
+	Client                         *nkn.MultiClient
 	DialTimeout                    int32
 	SubscriptionPrefix             string
 	Reverse                        bool
@@ -134,6 +136,7 @@ func NewCommon(
 	service *Service,
 	serviceInfo *ServiceInfo,
 	wallet *nkn.Wallet,
+	seedRPCServerAddr []string,
 	dialTimeout int32,
 	subscriptionPrefix string,
 	reverse, isServer bool,
@@ -158,6 +161,14 @@ func NewCommon(
 		}
 	}
 
+	clientConfig := &nkn.ClientConfig{
+		SeedRPCServerAddr: nkn.NewStringArray(seedRPCServerAddr...),
+	}
+	client, err := nkn.NewMultiClient(wallet.Account(), randomIdentifier(), numRPCClients, false, clientConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	var sk [ed25519.PrivateKeySize]byte
 	copy(sk[:], ed25519.GetPrivateKeyFromSeed(wallet.Seed()))
 	curveSecretKey := ed25519.PrivateKeyToCurve25519PrivateKey(&sk)
@@ -177,6 +188,7 @@ func NewCommon(
 		Service:                        service,
 		ServiceInfo:                    serviceInfo,
 		Wallet:                         wallet,
+		Client:                         client,
 		DialTimeout:                    dialTimeout,
 		SubscriptionPrefix:             subscriptionPrefix,
 		Reverse:                        reverse,
@@ -677,7 +689,7 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 			if len(f.Metadata) > 0 {
 				subscriberRaw[f.Address] = f.Metadata
 			} else {
-				subscription, err := c.Wallet.GetSubscriptionContext(ctx, topic, f.Address)
+				subscription, err := c.Client.GetSubscriptionContext(ctx, topic, f.Address)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -690,7 +702,7 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 			return nil, nil, errors.New("none of the NKN address whitelist can provide service")
 		}
 	} else {
-		subscribersCount, err := c.Wallet.GetSubscribersCountContext(ctx, topic)
+		subscribersCount, err := c.Client.GetSubscribersCountContext(ctx, topic)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -699,7 +711,7 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 		}
 
 		offset := rand.Intn((subscribersCount-1)/c.GetSubscribersBatchSize + 1)
-		subscribers, err := c.Wallet.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false)
+		subscribers, err := c.Client.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -991,7 +1003,7 @@ func (c *Common) startPayment(
 
 		paymentReceiver := c.GetPaymentReceiver()
 		if np == nil || np.Recipient() != paymentReceiver {
-			np, err = c.Wallet.NewNanoPay(paymentReceiver, nanoPayFee, defaultNanoPayDuration)
+			np, err = c.Client.NewNanoPay(paymentReceiver, nanoPayFee, defaultNanoPayDuration)
 			if err != nil {
 				log.Printf("Create nanopay err: %v", err)
 				continue
@@ -1133,7 +1145,7 @@ func UpdateMetadata(
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
 	subscriptionFee string,
-	wallet *nkn.Wallet,
+	client *nkn.MultiClient,
 	closeChan chan struct{},
 ) {
 	metadataRaw := CreateRawMetadata(serviceID, serviceTCP, serviceUDP, ip, tcpPort, udpPort, price, beneficiaryAddr)
@@ -1147,7 +1159,7 @@ func UpdateMetadata(
 
 	go func() {
 		func() {
-			sub, err := wallet.GetSubscription(topic, address.MakeAddressString(wallet.PubKey(), identifier))
+			sub, err := client.GetSubscription(topic, address.MakeAddressString(client.PubKey(), identifier))
 			if err != nil {
 				log.Println("Get existing subscription error:", err)
 				return
@@ -1162,7 +1174,7 @@ func UpdateMetadata(
 				return
 			}
 
-			height, err := wallet.GetHeight()
+			height, err := client.GetHeight()
 			if err != nil {
 				log.Println("Get current height error:", err)
 				return
@@ -1185,7 +1197,7 @@ func UpdateMetadata(
 			case <-closeChan:
 				return
 			}
-			addToSubscribeQueue(wallet, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
+			addToSubscribeQueue(client, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
 			nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * float64(subInterval)))
 		}
 	}()

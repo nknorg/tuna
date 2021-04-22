@@ -30,6 +30,7 @@ const (
 )
 
 type EntryConfiguration struct {
+	SeedRPCServerAddr              []string               `json:"seedRPCServerAddr"`
 	Services                       map[string]ServiceInfo `json:"services"`
 	DialTimeout                    int32                  `json:"dialTimeout"`
 	UDPTimeout                     int32                  `json:"udpTimeout"`
@@ -78,6 +79,7 @@ func DefaultEntryConfig() *EntryConfiguration {
 }
 
 type ExitConfiguration struct {
+	SeedRPCServerAddr              []string                   `json:"seedRPCServerAddr"`
 	BeneficiaryAddr                string                     `json:"beneficiaryAddr"`
 	ListenTCP                      int32                      `json:"listenTCP"`
 	ListenUDP                      int32                      `json:"listenUDP"`

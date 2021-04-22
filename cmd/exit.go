@@ -46,6 +46,8 @@ func (e *ExitCommand) Execute(args []string) error {
 	var seedRPCServerAddr *nkn.StringArray
 	if len(opts.SeedRPCServerAddr) > 0 {
 		seedRPCServerAddr = nkn.NewStringArrayFromString(strings.ReplaceAll(opts.SeedRPCServerAddr, ",", " "))
+	} else if len(config.SeedRPCServerAddr) > 0 {
+		seedRPCServerAddr = nkn.NewStringArray(config.SeedRPCServerAddr...)
 	} else if config.Reverse && len(config.MeasureStoragePath) > 0 {
 		c, err := tuna.MergedExitConfig(config)
 		if err == nil {
@@ -56,12 +58,12 @@ func (e *ExitCommand) Execute(args []string) error {
 		}
 	}
 
+	config.SeedRPCServerAddr = seedRPCServerAddr.Elems()
+
 	walletConfig := &nkn.WalletConfig{
 		SeedRPCServerAddr: seedRPCServerAddr,
-		RPCConcurrency:    4,
 	}
-
-	wallet, err := nkn.NewWallet(&nkn.Account{account}, walletConfig)
+	wallet, err := nkn.NewWallet(&nkn.Account{Account: account}, walletConfig)
 	if err != nil {
 		log.Fatalln("Create wallet error:", err)
 	}

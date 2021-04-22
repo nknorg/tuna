@@ -13,7 +13,7 @@ const (
 )
 
 type subscribeData struct {
-	wallet     *nkn.Wallet
+	client     *nkn.MultiClient
 	identifier string
 	topic      string
 	duration   int
@@ -28,7 +28,7 @@ func init() {
 	go func() {
 		for subData := range subQueue {
 			for i := 0; i < maxRetry; i++ {
-				txnHash, err := subData.wallet.Subscribe(subData.identifier, subData.topic, subData.duration, subData.meta, subData.config)
+				txnHash, err := subData.client.Subscribe(subData.identifier, subData.topic, subData.duration, subData.meta, subData.config)
 				if err != nil {
 					log.Println("subscribe to topic", subData.topic, "error:", err)
 					time.Sleep(time.Second)
@@ -42,9 +42,9 @@ func init() {
 	}()
 }
 
-func addToSubscribeQueue(wallet *nkn.Wallet, identifier string, topic string, duration int, meta string, config *nkn.TransactionConfig) {
+func addToSubscribeQueue(client *nkn.MultiClient, identifier string, topic string, duration int, meta string, config *nkn.TransactionConfig) {
 	subData := &subscribeData{
-		wallet:     wallet,
+		client:     client,
 		identifier: identifier,
 		topic:      topic,
 		duration:   duration,

@@ -51,6 +51,7 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		&service,
 		&serviceInfo,
 		wallet,
+		config.SeedRPCServerAddr,
 		config.DialTimeout,
 		config.SubscriptionPrefix,
 		config.Reverse,
@@ -200,7 +201,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	npc, err := te.Wallet.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.ReverseMinFlushAmount, onErr)
+	npc, err := te.Client.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.ReverseMinFlushAmount, onErr)
 	if err != nil {
 		return err
 	}
@@ -534,6 +535,14 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		return err
 	}
 
+	clientConfig := &nkn.ClientConfig{
+		SeedRPCServerAddr: nkn.NewStringArray(config.SeedRPCServerAddr...),
+	}
+	client, err := nkn.NewMultiClient(wallet.Account(), randomIdentifier(), numRPCClients, false, clientConfig)
+	if err != nil {
+		return err
+	}
+
 	udpReadChans := make(map[string]chan []byte)
 	udpCloseChan := make(chan struct{})
 
@@ -674,7 +683,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 			config.ReverseSubscriptionPrefix,
 			uint32(config.ReverseSubscriptionDuration),
 			config.ReverseSubscriptionFee,
-			wallet,
+			client,
 			make(chan struct{}),
 		)
 	}
