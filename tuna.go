@@ -561,6 +561,19 @@ func (c *Common) CreateServerConn(force bool) error {
 
 			for _, subscriber := range candidateSubs {
 				metadata := subscriber.Metadata
+
+				subscription, err := c.Client.GetSubscription(c.SubscriptionPrefix+c.Service.Name, subscriber.Address)
+				if err == nil {
+					latestMeta, err := ReadMetadata(subscription.Meta)
+					if err == nil {
+						metadata = latestMeta
+					} else {
+						log.Println(err)
+					}
+				} else {
+					log.Println(err)
+				}
+
 				c.SetMetadata(metadata)
 
 				log.Printf("IP: %s, address: %s, delay: %.3f ms, bandwidth: %f KB/s", metadata.Ip, subscriber.Address, subscriber.Delay, subscriber.Bandwidth/1024)
@@ -702,23 +715,49 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 			return nil, nil, errors.New("none of the NKN address whitelist can provide service")
 		}
 	} else {
-		subscribersCount, err := c.Client.GetSubscribersCountContext(ctx, topic)
+		// check if there is at least one service provider with low cost
+		subscribers, err := c.Client.GetSubscribersContext(ctx, topic, 0, 1, false, false, nil)
 		if err != nil {
 			return nil, nil, err
 		}
-		if subscribersCount == 0 {
+		if subscribers.Subscribers.Len() == 0 {
 			return nil, nil, errors.New("there is no service providers for " + c.Service.Name)
 		}
 
-		offset := rand.Intn((subscribersCount-1)/c.GetSubscribersBatchSize + 1)
-		subscribers, err := c.Client.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false)
-		if err != nil {
-			return nil, nil, err
+		allPrefix := make([]byte, 256)
+		for i := 0; i < 256; i++ {
+			allPrefix[i] = byte(i)
+		}
+		rand.Shuffle(len(allPrefix), func(i, j int) {
+			allPrefix[i], allPrefix[j] = allPrefix[j], allPrefix[i]
+		})
+
+		subscriberRaw = make(map[string]string)
+		subscriberCount := 0
+		for i := 0; i < len(allPrefix); i++ {
+			count, err := c.Client.GetSubscribersCountContext(ctx, topic, allPrefix[i:i+1])
+			if err != nil {
+				return nil, nil, err
+			}
+			if count == 0 {
+				continue
+			}
+
+			offset := rand.Intn((count-1)/c.GetSubscribersBatchSize + 1)
+			subscribers, err := c.Client.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false, allPrefix[i:i+1])
+			if err != nil {
+				return nil, nil, err
+			}
+
+			for subscriber, meta := range subscribers.Subscribers.Map {
+				subscriberRaw[subscriber] = meta
+				subscriberCount++
+			}
+			if subscriberCount >= c.GetSubscribersBatchSize {
+				break
+			}
 		}
 
-		subscriberRaw = subscribers.Subscribers.Map
-
-		allSubscribers = make([]string, 0, len(subscriberRaw))
 		if c.measureStorage != nil {
 			nodes := c.measureStorage.FavoriteNodes.GetData()
 			for _, v := range nodes {
@@ -727,6 +766,8 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 				log.Printf("Use favorite node: %s", item.IP)
 			}
 		}
+
+		allSubscribers = make([]string, 0, len(subscriberRaw))
 		for subscriber := range subscriberRaw {
 			allSubscribers = append(allSubscribers, subscriber)
 		}
