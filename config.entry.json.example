@@ -1,7 +1,7 @@
 {
   "services": {
     "httpproxy": {
-      "maxPrice": "0.01",
+      "maxPrice": "0.001",
       "ipFilter": {
         "allow": [
           {"countryCode": ""}
@@ -21,7 +21,7 @@
   "reverseBeneficiaryAddr": "",
   "reverseTCP": 30020,
   "reverseUDP": 30021,
-  "reversePrice": "0.001",
+  "reversePrice": "0.0002",
   "reverseClaimInterval": 3600,
   "reverseSubscriptionDuration": 40000,
   "reverseSubscriptionFee": "0"
