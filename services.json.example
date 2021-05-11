@@ -3,5 +3,10 @@
     "name": "httpproxy",
     "tcp": [30080],
     "encryption": "xsalsa20-poly1305"
+  },
+  {
+    "name": "socksproxy",
+    "tcp": [30489],
+    "encryption": "xsalsa20-poly1305"
   }
 ]
