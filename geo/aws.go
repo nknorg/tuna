@@ -95,7 +95,7 @@ func (p *AWSProvider) MaybeUpdateContext(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		err = os.Rename(tmpFile.Name(), p.fileName)
+		err = util.CopyFile(tmpFile.Name(), p.fileName)
 		if err != nil {
 			return err
 		}
