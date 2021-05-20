@@ -161,8 +161,9 @@ func NewCommon(
 		}
 	}
 
-	clientConfig := &nkn.ClientConfig{
-		SeedRPCServerAddr: nkn.NewStringArray(seedRPCServerAddr...),
+	clientConfig := &nkn.ClientConfig{}
+	if len(seedRPCServerAddr) > 0 {
+		clientConfig.SeedRPCServerAddr = nkn.NewStringArray(seedRPCServerAddr...)
 	}
 	client, err := nkn.NewMultiClient(wallet.Account(), randomIdentifier(), numRPCClients, false, clientConfig)
 	if err != nil {
