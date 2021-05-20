@@ -535,8 +535,9 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		return err
 	}
 
-	clientConfig := &nkn.ClientConfig{
-		SeedRPCServerAddr: nkn.NewStringArray(config.SeedRPCServerAddr...),
+	clientConfig := &nkn.ClientConfig{}
+	if len(config.SeedRPCServerAddr) > 0 {
+		clientConfig.SeedRPCServerAddr = nkn.NewStringArray(config.SeedRPCServerAddr...)
 	}
 	client, err := nkn.NewMultiClient(wallet.Account(), randomIdentifier(), numRPCClients, false, clientConfig)
 	if err != nil {
