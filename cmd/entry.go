@@ -43,7 +43,7 @@ func (e *EntryCommand) Execute(args []string) error {
 		log.Fatalln("Load or create account error:", err)
 	}
 
-	var seedRPCServerAddr *nkn.StringArray
+	seedRPCServerAddr := nkn.NewStringArray(nkn.DefaultSeedRPCServerAddr...)
 	if len(opts.SeedRPCServerAddr) > 0 {
 		seedRPCServerAddr = nkn.NewStringArrayFromString(strings.ReplaceAll(opts.SeedRPCServerAddr, ",", " "))
 	} else if len(config.SeedRPCServerAddr) > 0 {
