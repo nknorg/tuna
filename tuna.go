@@ -717,7 +717,7 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 		}
 	} else {
 		// check if there is at least one service provider with low cost
-		subscribers, err := c.Client.GetSubscribersContext(ctx, topic, 0, 1, false, false, nil)
+		subscribers, err := c.Client.GetSubscribersContext(ctx, topic, 0, c.GetSubscribersBatchSize, false, false, nil)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -725,10 +725,16 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 			return nil, nil, errors.New("there is no service providers for " + c.Service.Name)
 		}
 
-		allPrefix := make([]byte, 256)
-		for i := 0; i < 256; i++ {
-			allPrefix[i] = byte(i)
+		var allPrefix []byte
+		if subscribers.Subscribers.Len() < c.GetSubscribersBatchSize {
+			allPrefix = make([]byte, 1)
+		} else {
+			allPrefix = make([]byte, 256)
+			for i := 0; i < 256; i++ {
+				allPrefix[i] = byte(i)
+			}
 		}
+
 		rand.Shuffle(len(allPrefix), func(i, j int) {
 			allPrefix[i], allPrefix[j] = allPrefix[j], allPrefix[i]
 		})
