@@ -725,13 +725,13 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 			return nil, nil, errors.New("there is no service providers for " + c.Service.Name)
 		}
 
-		var allPrefix []byte
+		var allPrefix [][]byte
 		if subscribers.Subscribers.Len() < c.GetSubscribersBatchSize {
-			allPrefix = make([]byte, 1)
+			allPrefix = make([][]byte, 1)
 		} else {
-			allPrefix = make([]byte, 256)
+			allPrefix = make([][]byte, 256)
 			for i := 0; i < 256; i++ {
-				allPrefix[i] = byte(i)
+				allPrefix[i] = []byte{byte(i)}
 			}
 		}
 
@@ -742,7 +742,7 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 		subscriberRaw = make(map[string]string)
 		subscriberCount := 0
 		for i := 0; i < len(allPrefix); i++ {
-			count, err := c.Client.GetSubscribersCountContext(ctx, topic, allPrefix[i:i+1])
+			count, err := c.Client.GetSubscribersCountContext(ctx, topic, allPrefix[i])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -751,7 +751,7 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 			}
 
 			offset := rand.Intn((count-1)/c.GetSubscribersBatchSize + 1)
-			subscribers, err := c.Client.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false, allPrefix[i:i+1])
+			subscribers, err := c.Client.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false, allPrefix[i])
 			if err != nil {
 				return nil, nil, err
 			}

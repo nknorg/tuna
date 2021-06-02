@@ -18,7 +18,7 @@ const (
 	defaultNanoPayMinFlushAmount             = "0.01"
 	defaultServiceListenIP                   = "127.0.0.1"
 	defaultReverseServiceListenIP            = "0.0.0.0"
-	defaultGetSubscribersBatchSize           = 256
+	defaultGetSubscribersBatchSize           = 128
 	defaultEncryptionAlgo                    = pb.EncryptionAlgo_ENCRYPTION_NONE
 	defaultMeasureDelayTimeout               = 1 * time.Second
 	defaultMeasureDelayConcurrentWorkers     = 64
