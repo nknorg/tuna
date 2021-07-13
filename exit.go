@@ -549,6 +549,25 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			continue
 		}
 
+		reverseIP := tcpConn.RemoteAddr().(*net.TCPAddr).IP
+		reverseTCP := reverseMetadata.ServiceTcp
+		if len(reverseTCP) > 0 {
+			go func() {
+				net.DialTimeout(tcp, fmt.Sprintf("%s:%d", reverseIP.String(), reverseTCP[0]), defaultReverseTestTimeout)
+			}()
+
+			session.SetDeadline(time.Now().Add(defaultReverseTestTimeout))
+
+			_, err = session.AcceptStream()
+			if err != nil {
+				log.Println("Couldn't accept stream test conn from reverse entry:", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			session.SetDeadline(time.Time{})
+		}
+
 		paymentStream, err := openPaymentStream(session)
 		if err != nil {
 			log.Println("Couldn't open payment stream:", err)
@@ -561,8 +580,8 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			te.RUnlock()
 			return nil
 		}
-		te.reverseIP = tcpConn.RemoteAddr().(*net.TCPAddr).IP
-		te.reverseTCP = reverseMetadata.ServiceTcp
+		te.reverseIP = reverseIP
+		te.reverseTCP = reverseTCP
 		te.reverseUDP = reverseMetadata.ServiceUdp
 		te.OnConnect.receive()
 		te.RUnlock()
