@@ -27,6 +27,7 @@ const (
 	defaultMeasureBandwidthWorkersTimeout    = 8  // second
 	defaultMeasurementBytesDownLink          = 256 << 10
 	defaultMaxMeasureWorkerPoolSize          = 64
+	defaultReverseTestTimeout                = 3 * time.Second
 )
 
 type EntryConfiguration struct {
