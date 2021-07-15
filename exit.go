@@ -553,17 +553,23 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		reverseTCP := reverseMetadata.ServiceTcp
 		if len(reverseTCP) > 0 {
 			go func() {
-				net.DialTimeout(tcp, fmt.Sprintf("%s:%d", reverseIP.String(), reverseTCP[0]), defaultReverseTestTimeout)
+				conn, err := net.DialTimeout(tcp, fmt.Sprintf("%s:%d", reverseIP.String(), reverseTCP[0]), defaultReverseTestTimeout)
+				if err == nil {
+					time.Sleep(defaultReverseTestTimeout)
+					conn.Close()
+				}
 			}()
 
 			session.SetDeadline(time.Now().Add(defaultReverseTestTimeout))
 
-			_, err = session.AcceptStream()
+			stream, err := session.AcceptStream()
 			if err != nil {
 				log.Println("Couldn't accept stream test conn from reverse entry:", err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
+
+			stream.Close()
 
 			session.SetDeadline(time.Time{})
 		}
