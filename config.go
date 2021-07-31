@@ -1,6 +1,7 @@
 package tuna
 
 import (
+	"github.com/nknorg/tuna/filter"
 	"time"
 
 	"github.com/imdario/mergo"
@@ -103,6 +104,7 @@ type ExitConfiguration struct {
 	DownloadGeoDB                  bool                       `json:"downloadGeoDB"`
 	GetSubscribersBatchSize        int32                      `json:"getSubscribersBatchSize"`
 	ReverseIPFilter                geo.IPFilter               `json:"reverseIPFilter"`
+	ReverseNknFilter               filter.NknFilter           `json:"reverseNknFilter"`
 	MeasureBandwidth               bool                       `json:"measureBandwidth"`
 	MeasureBandwidthTimeout        int32                      `json:"measureBandwidthTimeout"`
 	MeasureBandwidthWorkersTimeout int32                      `json:"measureBandwidthWorkersTimeout"`

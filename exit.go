@@ -67,8 +67,9 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		}
 
 		serviceInfo = &ServiceInfo{
-			MaxPrice: config.ReverseMaxPrice,
-			IPFilter: &config.ReverseIPFilter,
+			MaxPrice:  config.ReverseMaxPrice,
+			IPFilter:  &config.ReverseIPFilter,
+			NknFilter: &config.ReverseNknFilter,
 		}
 
 		reverseMetadata = &pb.ServiceMetadata{}
