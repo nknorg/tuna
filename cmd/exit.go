@@ -81,7 +81,7 @@ func (e *ExitCommand) Execute(args []string) error {
 			if _, ok := config.Services[service.Name]; ok {
 				go func(service tuna.Service) {
 					for {
-						te, err := tuna.NewTunaExit([]tuna.Service{service}, wallet, config)
+						te, err := tuna.NewTunaExit([]tuna.Service{service}, wallet, nil, config)
 						if err != nil {
 							log.Fatalln(err)
 						}
@@ -101,7 +101,7 @@ func (e *ExitCommand) Execute(args []string) error {
 			}
 		}
 	} else {
-		te, err := tuna.NewTunaExit(services, wallet, config)
+		te, err := tuna.NewTunaExit(services, wallet, nil, config)
 		if err != nil {
 			log.Fatalln(err)
 		}

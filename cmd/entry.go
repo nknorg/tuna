@@ -91,7 +91,7 @@ func (e *EntryCommand) Execute(args []string) error {
 				if service.Name == serviceName {
 					go func(service tuna.Service, serviceInfo tuna.ServiceInfo) {
 						for {
-							te, err := tuna.NewTunaEntry(service, serviceInfo, wallet, config)
+							te, err := tuna.NewTunaEntry(service, serviceInfo, wallet, nil, config)
 							if err != nil {
 								log.Fatalln(err)
 							}
