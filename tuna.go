@@ -136,6 +136,7 @@ func NewCommon(
 	service *Service,
 	serviceInfo *ServiceInfo,
 	wallet *nkn.Wallet,
+	client *nkn.MultiClient,
 	seedRPCServerAddr []string,
 	dialTimeout int32,
 	subscriptionPrefix string,
@@ -161,13 +162,15 @@ func NewCommon(
 		}
 	}
 
-	clientConfig := &nkn.ClientConfig{}
-	if len(seedRPCServerAddr) > 0 {
-		clientConfig.SeedRPCServerAddr = nkn.NewStringArray(seedRPCServerAddr...)
-	}
-	client, err := nkn.NewMultiClient(wallet.Account(), randomIdentifier(), numRPCClients, false, clientConfig)
-	if err != nil {
-		return nil, err
+	if client == nil {
+		clientConfig := &nkn.ClientConfig{}
+		if len(seedRPCServerAddr) > 0 {
+			clientConfig.SeedRPCServerAddr = nkn.NewStringArray(seedRPCServerAddr...)
+		}
+		client, err = nkn.NewMultiClient(wallet.Account(), randomIdentifier(), numRPCClients, false, clientConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var sk [ed25519.PrivateKeySize]byte

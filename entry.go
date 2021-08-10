@@ -41,7 +41,7 @@ type TunaEntry struct {
 	sessionLock        sync.Mutex
 }
 
-func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, config *EntryConfiguration) (*TunaEntry, error) {
+func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, client *nkn.MultiClient, config *EntryConfiguration) (*TunaEntry, error) {
 	config, err := MergedEntryConfig(config)
 	if err != nil {
 		return nil, err
@@ -51,6 +51,7 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		&service,
 		&serviceInfo,
 		wallet,
+		client,
 		config.SeedRPCServerAddr,
 		config.DialTimeout,
 		config.SubscriptionPrefix,
@@ -585,7 +586,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				err := func() error {
 					defer Close(tcpConn)
 
-					te, err := NewTunaEntry(Service{}, ServiceInfo{ListenIP: serviceListenIP}, wallet, config)
+					te, err := NewTunaEntry(Service{}, ServiceInfo{ListenIP: serviceListenIP}, wallet, client, config)
 					if err != nil {
 						return err
 					}

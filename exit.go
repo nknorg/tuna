@@ -44,7 +44,7 @@ type TunaExit struct {
 	reverseUDP  []uint32
 }
 
-func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfiguration) (*TunaExit, error) {
+func NewTunaExit(services []Service, wallet *nkn.Wallet, client *nkn.MultiClient, config *ExitConfiguration) (*TunaExit, error) {
 	config, err := MergedExitConfig(config)
 	if err != nil {
 		return nil, err
@@ -83,6 +83,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, config *ExitConfigurati
 		service,
 		serviceInfo,
 		wallet,
+		client,
 		config.SeedRPCServerAddr,
 		config.DialTimeout,
 		subscriptionPrefix,
