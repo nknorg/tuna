@@ -1014,7 +1014,7 @@ func (c *Common) startPayment(
 	bytesEntryToExitUsed, bytesExitToEntryUsed *uint64,
 	bytesEntryToExitPaid, bytesExitToEntryPaid *uint64,
 	nanoPayFee string,
-	getPaymentStream func() (*smux.Stream, error),
+	getPaymentStreamRecipient func() (*smux.Stream, string, error),
 ) {
 	var np *nkn.NanoPay
 	var bytesEntryToExit, bytesExitToEntry uint64
@@ -1046,13 +1046,16 @@ func (c *Common) startPayment(
 		}
 		costTimeStamp := time.Now()
 
-		paymentStream, err := getPaymentStream()
+		paymentStream, paymentReceiver, err := getPaymentStreamRecipient()
 		if err != nil {
 			log.Printf("Get payment stream err: %v", err)
 			continue
 		}
 
-		paymentReceiver := c.GetPaymentReceiver()
+		if len(paymentReceiver) == 0 {
+			continue
+		}
+
 		if np == nil || np.Recipient() != paymentReceiver {
 			np, err = c.Client.NewNanoPay(paymentReceiver, nanoPayFee, defaultNanoPayDuration)
 			if err != nil {

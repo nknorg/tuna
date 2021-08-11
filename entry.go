@@ -148,11 +148,16 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			}
 		}()
 
+		getPaymentStreamRecipient := func() (*smux.Stream, string, error) {
+			ps, err := te.getPaymentStream()
+			return ps, te.GetPaymentReceiver(), err
+		}
+
 		go te.startPayment(
 			&te.bytesEntryToExit, &te.bytesExitToEntry,
 			&te.bytesEntryToExitPaid, &te.bytesExitToEntryPaid,
 			te.config.NanoPayFee,
-			te.getPaymentStream,
+			getPaymentStreamRecipient,
 		)
 
 		break
