@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -454,7 +455,14 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		return err
 	}
 
+	var paymentStream *smux.Stream
+	var recipient string
+	getPaymentStreamRecipient := func() (*smux.Stream, string, error) {
+		return paymentStream, recipient, nil
+	}
+
 	var tcpConn net.Conn
+	var payOnce sync.Once
 	for {
 		err := te.Common.CreateServerConn(true)
 		if err != nil {
@@ -576,12 +584,14 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			session.SetDeadline(time.Time{})
 		}
 
-		paymentStream, err := openPaymentStream(session)
+		ps, err := openPaymentStream(session)
 		if err != nil {
 			log.Println("Couldn't open payment stream:", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
+
+		paymentStream, recipient = ps, te.GetPaymentReceiver()
 
 		te.RLock()
 		if te.isClosed {
@@ -599,16 +609,14 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			te.readUDP()
 		}
 
-		getPaymentStream := func() (*smux.Stream, error) {
-			return paymentStream, nil
-		}
-
-		go te.Common.startPayment(
-			&te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry,
-			&te.reverseBytesEntryToExitPaid, &te.reverseBytesExitToEntryPaid,
-			te.config.ReverseNanoPayFee,
-			getPaymentStream,
-		)
+		payOnce.Do(func() {
+			go te.Common.startPayment(
+				&te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry,
+				&te.reverseBytesEntryToExitPaid, &te.reverseBytesExitToEntryPaid,
+				te.config.ReverseNanoPayFee,
+				getPaymentStreamRecipient,
+			)
+		})
 
 		te.handleSession(session)
 
