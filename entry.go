@@ -593,18 +593,22 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 					te, err := NewTunaEntry(Service{}, ServiceInfo{ListenIP: serviceListenIP}, wallet, client, config)
 					if err != nil {
-						return err
+						return fmt.Errorf("create tuna entry error: %v", err)
 					}
 
 					encryptedConn, connMetadata, err := te.wrapConn(tcpConn, nil, nil)
 					if err != nil {
-						return err
+						return fmt.Errorf("wrap conn error: %v", err)
 					}
 
 					defer Close(encryptedConn)
 
 					if connMetadata.IsMeasurement {
-						return util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), 0)
+						err = util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), 0)
+						if err != nil {
+							return fmt.Errorf("bandwidth measurement server error: %v", err)
+						}
+						return nil
 					}
 
 					te.session, err = smux.Server(encryptedConn, nil)
@@ -664,7 +668,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 					err = te.StartReverse(stream)
 					if err != nil {
-						log.Println(err)
+						return fmt.Errorf("start reverse error: %v", err)
 					}
 
 					return nil
