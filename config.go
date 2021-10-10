@@ -1,8 +1,9 @@
 package tuna
 
 import (
-	"github.com/nknorg/tuna/filter"
 	"time"
+
+	"github.com/nknorg/tuna/filter"
 
 	"github.com/imdario/mergo"
 	"github.com/nknorg/tuna/geo"
@@ -29,6 +30,7 @@ const (
 	defaultMeasurementBytesDownLink          = 256 << 10
 	defaultMaxMeasureWorkerPoolSize          = 64
 	defaultReverseTestTimeout                = 3 * time.Second
+	maxMeasureBandwidthTimeout               = 30 * time.Second
 )
 
 type EntryConfiguration struct {

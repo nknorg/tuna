@@ -106,7 +106,10 @@ func BandwidthMeasurementServerContext(ctx context.Context, conn net.Conn, bytes
 		if n > len(b) {
 			n = len(b)
 		}
-		rand.Read(b[:n])
+		_, err := rand.Read(b[:n])
+		if err != nil {
+			return err
+		}
 		m, err := conn.Write(b[:n])
 		if err != nil {
 			return err
