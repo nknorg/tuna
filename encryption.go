@@ -20,7 +20,7 @@ func computeEncryptKey(connNonce []byte, sharedKey []byte) *[encryptKeySize]byte
 	return &encryptKey
 }
 
-func encryptConn(conn net.Conn, encryptKey *[encryptKeySize]byte, encryptionAlgo pb.EncryptionAlgo) (net.Conn, error) {
+func encryptConn(conn net.Conn, encryptKey *[encryptKeySize]byte, encryptionAlgo pb.EncryptionAlgo, initiator bool) (net.Conn, error) {
 	var cipher stream.Cipher
 	var err error
 	switch encryptionAlgo {
@@ -37,7 +37,10 @@ func encryptConn(conn net.Conn, encryptKey *[encryptKeySize]byte, encryptionAlgo
 		return nil, fmt.Errorf("unsupported encryption algo %v", encryptionAlgo)
 	}
 	config := &stream.Config{
-		Cipher: cipher,
+		Cipher:                   cipher,
+		Initiator:                initiator,
+		SequentialNonce:          true,
+		DisableNonceVerification: true, // for compatibility with old version, will be removed in the future
 	}
 	return stream.NewEncryptedStream(conn, config)
 }

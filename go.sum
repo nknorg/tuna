@@ -240,8 +240,8 @@ github.com/namedotcom/go v0.0.0-20180403034216-08470befbe04/go.mod h1:5sN+Lt1CaY
 github.com/nbio/st v0.0.0-20140626010706-e9e8d9816f32/go.mod h1:9wM+0iRr9ahx58uYLpLIr5fm8diHn0JbqRycJi6w0Ms=
 github.com/nknorg/consequential v0.0.0-20190823093205-a45aff4a218a h1:DXTCQnVV2EsTWEVk/YhVGb2QxdgW8JzB2GEsNntDlaU=
 github.com/nknorg/consequential v0.0.0-20190823093205-a45aff4a218a/go.mod h1:H7XeI/XOPpWVmqM+ScT75RLMn7jWnlZDwHRahSxNxo0=
-github.com/nknorg/encrypted-stream v1.0.0 h1:3rwesebVKD28Wrhczd10uqBefRPvY3geuH/Iqo++8KI=
-github.com/nknorg/encrypted-stream v1.0.0/go.mod h1:VXJDhlUoF3uJSFLwIWnRLkiX5QPFB3E8oe2EUBwPoU0=
+github.com/nknorg/encrypted-stream v1.0.1 h1:lyWouCwUY3WUOfYaoez0wNEudsZJ3qc9Knxxi4Ysjeo=
+github.com/nknorg/encrypted-stream v1.0.1/go.mod h1:VXJDhlUoF3uJSFLwIWnRLkiX5QPFB3E8oe2EUBwPoU0=
 github.com/nknorg/go-nat v1.0.1 h1:4dFK0oDyqkIE0it03Y4pMgBQpl1Y0mrYHEp+j/nZ910=
 github.com/nknorg/go-nat v1.0.1/go.mod h1:dblX1Ac2j08rTUGs5CKCAfjHGN5eDFhbeqt2rccSP3Y=
 github.com/nknorg/ncp-go v1.0.3 h1:VMsOB8hZ7Tz/Y8oESzPvThxjXmLz8Ob7jKLloS8baUQ=
