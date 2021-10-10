@@ -6,7 +6,7 @@ require (
 	github.com/golang/protobuf v1.4.1
 	github.com/imdario/mergo v0.3.9
 	github.com/jessevdk/go-flags v1.4.0
-	github.com/nknorg/encrypted-stream v1.0.0
+	github.com/nknorg/encrypted-stream v1.0.1
 	github.com/nknorg/nkn-sdk-go v1.3.7-0.20210520085335-6a2cf0700b0c
 	github.com/nknorg/nkn/v2 v2.0.6
 	github.com/oschwald/geoip2-golang v1.4.0

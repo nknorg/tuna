@@ -486,7 +486,7 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 
 	encryptKey := computeEncryptKey(connNonce, sharedKey[:])
 
-	encryptedConn, err := encryptConn(conn, encryptKey, encryptionAlgo)
+	encryptedConn, err := encryptConn(conn, encryptKey, encryptionAlgo, len(remotePublicKey) > 0)
 	if err != nil {
 		return nil, nil, err
 	}
