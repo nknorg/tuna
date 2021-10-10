@@ -604,7 +604,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 					defer Close(encryptedConn)
 
 					if connMetadata.IsMeasurement {
-						err = util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), 0)
+						err = util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), maxMeasureBandwidthTimeout)
 						if err != nil {
 							return fmt.Errorf("bandwidth measurement server error: %v", err)
 						}

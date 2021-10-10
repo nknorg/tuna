@@ -276,18 +276,22 @@ func (te *TunaExit) listenTCP(port int) error {
 
 					encryptedConn, connMetadata, err := te.wrapConn(conn, nil, nil)
 					if err != nil {
-						return err
+						return fmt.Errorf("wrap conn error: %v", err)
 					}
 
 					defer Close(encryptedConn)
 
 					if connMetadata.IsMeasurement {
-						return util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), 0)
+						err = util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), maxMeasureBandwidthTimeout)
+						if err != nil {
+							return fmt.Errorf("bandwidth measurement server error: %v", err)
+						}
+						return nil
 					}
 
 					session, err := smux.Server(encryptedConn, nil)
 					if err != nil {
-						return err
+						return fmt.Errorf("create session error: %v", err)
 					}
 
 					te.handleSession(session)
