@@ -117,7 +117,12 @@ func ReadVarBytes(reader io.Reader, maxMsgSize uint32) ([]byte, error) {
 		return nil, err
 	}
 
-	b = make([]byte, int(binary.LittleEndian.Uint32(b)))
+	msgSize := binary.LittleEndian.Uint32(b)
+	if msgSize > maxMsgSize {
+		return nil, fmt.Errorf("msg size %d is larger than %d bytes", msgSize, maxMsgSize)
+	}
+
+	b = make([]byte, msgSize)
 	_, err = io.ReadFull(reader, b)
 	if err != nil {
 		return nil, err
