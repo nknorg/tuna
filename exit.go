@@ -164,7 +164,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	}
 
 	if !te.config.Reverse {
-		npc, err = te.Client.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.MinFlushAmount, onErr)
+		npc, err = te.Client.NewNanoPayClaimer(te.config.BeneficiaryAddr, int32(claimInterval/time.Millisecond), int32(nanoPayClaimerLinger/time.Millisecond), te.config.MinFlushAmount, onErr)
 		if err != nil {
 			log.Fatalln(err)
 		}
