@@ -31,6 +31,7 @@ const (
 	defaultMaxMeasureWorkerPoolSize          = 64
 	defaultReverseTestTimeout                = 3 * time.Second
 	maxMeasureBandwidthTimeout               = 30 * time.Second
+	nanoPayClaimerLinger                     = 24 * time.Hour
 )
 
 type EntryConfiguration struct {

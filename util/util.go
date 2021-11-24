@@ -55,12 +55,6 @@ func Exists(path string) bool {
 }
 
 func DownloadJsonFile(ctx context.Context, url, filename string) error {
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -74,9 +68,17 @@ func DownloadJsonFile(ctx context.Context, url, filename string) error {
 	}
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
 	if !json.Valid(b) {
 		return errors.New("invalid json")
 	}
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 	_, err = f.Write(b)
 	if err != nil {
 		os.Remove(filename)

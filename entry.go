@@ -207,7 +207,7 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 		return err
 	}
 
-	npc, err := te.Client.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), te.config.ReverseMinFlushAmount, onErr)
+	npc, err := te.Client.NewNanoPayClaimer(te.config.ReverseBeneficiaryAddr, int32(claimInterval/time.Millisecond), int32(nanoPayClaimerLinger/time.Millisecond), te.config.ReverseMinFlushAmount, onErr)
 	if err != nil {
 		return err
 	}
