@@ -759,7 +759,7 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 				return nil, nil, err
 			}
 
-			for subscriber, meta := range subscribers.Subscribers.Map {
+			for subscriber, meta := range subscribers.Subscribers.Map() {
 				subscriberRaw[subscriber] = meta
 				subscriberCount++
 			}
