@@ -24,7 +24,6 @@ import (
 	"github.com/nknorg/tuna/storage"
 	"github.com/nknorg/tuna/types"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/nkn/v2/config"
@@ -39,6 +38,7 @@ import (
 	tunaUtil "github.com/nknorg/tuna/util"
 	"github.com/xtaci/smux"
 	"golang.org/x/crypto/nacl/box"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
