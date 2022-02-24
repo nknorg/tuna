@@ -11,13 +11,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
 	nknPb "github.com/nknorg/nkn/v2/pb"
 	"github.com/nknorg/tuna/pb"
 	"github.com/nknorg/tuna/storage"
 	"github.com/xtaci/smux"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
