@@ -1014,6 +1014,8 @@ func (c *Common) startPayment(
 	bytesEntryToExitUsed, bytesExitToEntryUsed *uint64,
 	bytesEntryToExitPaid, bytesExitToEntryPaid *uint64,
 	nanoPayFee string,
+	minNanoPayFee string,
+	nanoPayFeePercentage float64,
 	getPaymentStreamRecipient func() (*smux.Stream, string, error),
 ) {
 	var np *nkn.NanoPay
@@ -1064,7 +1066,21 @@ func (c *Common) startPayment(
 			}
 		}
 
-		err = sendNanoPay(np, paymentStream, cost)
+		if nanoPayFee == "" {
+			fee := common.Fixed64(float64(cost.GetData()) * nanoPayFeePercentage)
+
+			minTxFee, err := common.StringToFixed64(minNanoPayFee)
+			if err != nil {
+				log.Printf("minNanoPayFee to Fixed64 err: %v", err)
+				return
+			}
+			if fee < minTxFee {
+				fee = minTxFee
+			}
+			nanoPayFee = fee.String()
+		}
+
+		err = sendNanoPay(np, paymentStream, cost, nanoPayFee)
 		if err != nil {
 			log.Printf("Send nanopay err: %v", err)
 			return
@@ -1363,14 +1379,14 @@ func openPaymentStream(session *smux.Session) (*smux.Stream, error) {
 	return stream, nil
 }
 
-func sendNanoPay(np *nkn.NanoPay, paymentStream *smux.Stream, cost common.Fixed64) error {
+func sendNanoPay(np *nkn.NanoPay, paymentStream *smux.Stream, cost common.Fixed64, nanoPayFee string) error {
 	var tx *transaction.Transaction
 	var err error
 	for i := 0; i < 3; i++ {
 		if i > 0 {
 			time.Sleep(1 * time.Second)
 		}
-		tx, err = np.IncrementAmount(cost.String())
+		tx, err = np.IncrementAmount(cost.String(), nanoPayFee)
 		if err == nil {
 			break
 		}
