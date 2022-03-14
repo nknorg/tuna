@@ -40,6 +40,8 @@ type EntryConfiguration struct {
 	DialTimeout                    int32                  `json:"dialTimeout"`
 	UDPTimeout                     int32                  `json:"udpTimeout"`
 	NanoPayFee                     string                 `json:"nanoPayFee"`
+	MinNanoPayFee                  string                 `json:"minNanoPayFee"`
+	NanoPayFeeRatio                float64                `json:"nanoPayFeeRatio"`
 	SubscriptionPrefix             string                 `json:"subscriptionPrefix"`
 	Reverse                        bool                   `json:"reverse"`
 	ReverseBeneficiaryAddr         string                 `json:"reverseBeneficiaryAddr"`
@@ -100,6 +102,8 @@ type ExitConfiguration struct {
 	ReverseRandomPorts             bool                       `json:"reverseRandomPorts"`
 	ReverseMaxPrice                string                     `json:"reverseMaxPrice"`
 	ReverseNanoPayFee              string                     `json:"reverseNanopayfee"`
+	MinReverseNanoPayFee           string                     `json:"minReverseNanoPayFee"`
+	ReverseNanoPayFeeRatio         float64                    `json:"reverseNanopayfeeRatio"`
 	ReverseServiceName             string                     `json:"reverseServiceName"`
 	ReverseSubscriptionPrefix      string                     `json:"reverseSubscriptionPrefix"`
 	ReverseEncryption              string                     `json:"reverseEncryption"`
