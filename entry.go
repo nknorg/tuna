@@ -46,6 +46,16 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 	if err != nil {
 		return nil, err
 	}
+	if !config.Reverse {
+		_, err = common.StringToFixed64(config.NanoPayFee)
+		if err != nil {
+			log.Fatalln("Parse NanoPayFee error:", err)
+		}
+		_, err = common.StringToFixed64(config.MinNanoPayFee)
+		if err != nil {
+			log.Fatalln("Parse MinNanoPayFee error:", err)
+		}
+	}
 
 	c, err := NewCommon(
 		&service,
@@ -157,6 +167,8 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			&te.bytesEntryToExit, &te.bytesExitToEntry,
 			&te.bytesEntryToExitPaid, &te.bytesExitToEntryPaid,
 			te.config.NanoPayFee,
+			te.config.MinNanoPayFee,
+			te.config.NanoPayFeeRatio,
 			getPaymentStreamRecipient,
 		)
 

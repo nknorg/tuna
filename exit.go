@@ -76,6 +76,14 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, client *nkn.MultiClient
 		reverseMetadata = &pb.ServiceMetadata{}
 		reverseMetadata.ServiceTcp = services[0].TCP
 		reverseMetadata.ServiceUdp = services[0].UDP
+		_, err = common.StringToFixed64(config.ReverseNanoPayFee)
+		if err != nil {
+			return nil, err
+		}
+		_, err = common.StringToFixed64(config.MinReverseNanoPayFee)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		subscriptionPrefix = config.SubscriptionPrefix
 	}
@@ -614,10 +622,12 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		}
 
 		payOnce.Do(func() {
-			go te.Common.startPayment(
+			go te.startPayment(
 				&te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry,
 				&te.reverseBytesEntryToExitPaid, &te.reverseBytesExitToEntryPaid,
 				te.config.ReverseNanoPayFee,
+				te.config.MinReverseNanoPayFee,
+				te.config.ReverseNanoPayFeeRatio,
 				getPaymentStreamRecipient,
 			)
 		})
