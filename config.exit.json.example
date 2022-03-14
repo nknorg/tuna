@@ -16,7 +16,9 @@
   "reverse": false,
   "reverseRandomPorts": true,
   "reverseMaxPrice": "0.001",
-  "reverseNanoPayFee": "0",
+  "reverseNanoPayFee": "",
+  "minReverseNanoPayFee": "0.00001",
+  "reverseNanoPayFeeRatio": 0.1,
   "reverseIPFilter": {
     "allow": [
       {"countryCode": ""}
