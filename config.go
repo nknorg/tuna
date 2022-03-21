@@ -32,6 +32,7 @@ const (
 	defaultReverseTestTimeout                = 3 * time.Second
 	maxMeasureBandwidthTimeout               = 30 * time.Second
 	nanoPayClaimerLinger                     = 24 * time.Hour
+	maxCheckSubscribeInterval                = time.Hour
 )
 
 type EntryConfiguration struct {
