@@ -26,5 +26,6 @@
   "reversePrice": "0.0002",
   "reverseClaimInterval": 3600,
   "reverseSubscriptionDuration": 40000,
-  "reverseSubscriptionFee": "0.00001"
+  "reverseSubscriptionFee": "0.00001",
+  "reverseSubscriptionReplaceTxPool": false
 }

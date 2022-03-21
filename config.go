@@ -36,36 +36,37 @@ const (
 )
 
 type EntryConfiguration struct {
-	SeedRPCServerAddr              []string               `json:"seedRPCServerAddr"`
-	Services                       map[string]ServiceInfo `json:"services"`
-	DialTimeout                    int32                  `json:"dialTimeout"`
-	UDPTimeout                     int32                  `json:"udpTimeout"`
-	NanoPayFee                     string                 `json:"nanoPayFee"`
-	MinNanoPayFee                  string                 `json:"minNanoPayFee"`
-	NanoPayFeeRatio                float64                `json:"nanoPayFeeRatio"`
-	SubscriptionPrefix             string                 `json:"subscriptionPrefix"`
-	Reverse                        bool                   `json:"reverse"`
-	ReverseBeneficiaryAddr         string                 `json:"reverseBeneficiaryAddr"`
-	ReverseTCP                     int32                  `json:"reverseTCP"`
-	ReverseUDP                     int32                  `json:"reverseUDP"`
-	ReverseServiceListenIP         string                 `json:"reverseServiceListenIP"`
-	ReversePrice                   string                 `json:"reversePrice"`
-	ReverseClaimInterval           int32                  `json:"reverseClaimInterval"`
-	ReverseMinFlushAmount          string                 `json:"reverseMinFlushAmount"`
-	ReverseServiceName             string                 `json:"reverseServiceName"`
-	ReverseSubscriptionPrefix      string                 `json:"reverseSubscriptionPrefix"`
-	ReverseSubscriptionDuration    int32                  `json:"reverseSubscriptionDuration"`
-	ReverseSubscriptionFee         string                 `json:"reverseSubscriptionFee"`
-	GeoDBPath                      string                 `json:"geoDBPath"`
-	DownloadGeoDB                  bool                   `json:"downloadGeoDB"`
-	GetSubscribersBatchSize        int32                  `json:"getSubscribersBatchSize"`
-	MeasureBandwidth               bool                   `json:"measureBandwidth"`
-	MeasureBandwidthTimeout        int32                  `json:"measureBandwidthTimeout"`
-	MeasureBandwidthWorkersTimeout int32                  `json:"measureBandwidthWorkersTimeout"`
-	MeasurementBytesDownLink       int32                  `json:"measurementBytesDownLink"`
-	MeasureStoragePath             string                 `json:"measureStoragePath"`
-	MaxMeasureWorkerPoolSize       int32                  `json:"maxMeasureWorkerPoolSize"`
-	SortMeasuredNodes              func(types.Nodes)      `json:"-"`
+	SeedRPCServerAddr                []string               `json:"seedRPCServerAddr"`
+	Services                         map[string]ServiceInfo `json:"services"`
+	DialTimeout                      int32                  `json:"dialTimeout"`
+	UDPTimeout                       int32                  `json:"udpTimeout"`
+	NanoPayFee                       string                 `json:"nanoPayFee"`
+	MinNanoPayFee                    string                 `json:"minNanoPayFee"`
+	NanoPayFeeRatio                  float64                `json:"nanoPayFeeRatio"`
+	SubscriptionPrefix               string                 `json:"subscriptionPrefix"`
+	Reverse                          bool                   `json:"reverse"`
+	ReverseBeneficiaryAddr           string                 `json:"reverseBeneficiaryAddr"`
+	ReverseTCP                       int32                  `json:"reverseTCP"`
+	ReverseUDP                       int32                  `json:"reverseUDP"`
+	ReverseServiceListenIP           string                 `json:"reverseServiceListenIP"`
+	ReversePrice                     string                 `json:"reversePrice"`
+	ReverseClaimInterval             int32                  `json:"reverseClaimInterval"`
+	ReverseMinFlushAmount            string                 `json:"reverseMinFlushAmount"`
+	ReverseServiceName               string                 `json:"reverseServiceName"`
+	ReverseSubscriptionPrefix        string                 `json:"reverseSubscriptionPrefix"`
+	ReverseSubscriptionDuration      int32                  `json:"reverseSubscriptionDuration"`
+	ReverseSubscriptionFee           string                 `json:"reverseSubscriptionFee"`
+	ReverseSubscriptionReplaceTxPool bool                   `json:"reverseSubscriptionReplaceTxPool"`
+	GeoDBPath                        string                 `json:"geoDBPath"`
+	DownloadGeoDB                    bool                   `json:"downloadGeoDB"`
+	GetSubscribersBatchSize          int32                  `json:"getSubscribersBatchSize"`
+	MeasureBandwidth                 bool                   `json:"measureBandwidth"`
+	MeasureBandwidthTimeout          int32                  `json:"measureBandwidthTimeout"`
+	MeasureBandwidthWorkersTimeout   int32                  `json:"measureBandwidthWorkersTimeout"`
+	MeasurementBytesDownLink         int32                  `json:"measurementBytesDownLink"`
+	MeasureStoragePath               string                 `json:"measureStoragePath"`
+	MaxMeasureWorkerPoolSize         int32                  `json:"maxMeasureWorkerPoolSize"`
+	SortMeasuredNodes                func(types.Nodes)      `json:"-"`
 }
 
 var defaultEntryConfiguration = EntryConfiguration{
@@ -96,6 +97,7 @@ type ExitConfiguration struct {
 	SubscriptionPrefix             string                     `json:"subscriptionPrefix"`
 	SubscriptionDuration           int32                      `json:"subscriptionDuration"`
 	SubscriptionFee                string                     `json:"subscriptionFee"`
+	SubscriptionReplaceTxPool      bool                       `json:"subscriptionReplaceTxPool"`
 	ClaimInterval                  int32                      `json:"claimInterval"`
 	MinFlushAmount                 string                     `json:"minFlushAmount"`
 	Services                       map[string]ExitServiceInfo `json:"services"`

@@ -706,6 +706,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 			config.ReverseSubscriptionPrefix,
 			uint32(config.ReverseSubscriptionDuration),
 			config.ReverseSubscriptionFee,
+			config.ReverseSubscriptionReplaceTxPool,
 			client,
 			make(chan struct{}),
 		)

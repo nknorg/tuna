@@ -13,12 +13,13 @@ const (
 )
 
 type subscribeData struct {
-	client     *nkn.MultiClient
-	identifier string
-	topic      string
-	duration   int
-	meta       string
-	config     *nkn.TransactionConfig
+	client        *nkn.MultiClient
+	identifier    string
+	topic         string
+	duration      int
+	meta          string
+	config        *nkn.TransactionConfig
+	replaceTxPool bool
 }
 
 var subQueue chan *subscribeData
@@ -28,12 +29,23 @@ func init() {
 	go func() {
 		for subData := range subQueue {
 			for i := 0; i < maxRetry; i++ {
+				if subData.replaceTxPool {
+					nonce, err := subData.client.GetNonce(false)
+					if err != nil {
+						log.Println("get nonce error:", err)
+						time.Sleep(time.Second)
+						continue
+					}
+					subData.config.Nonce = nonce
+				}
+
 				txnHash, err := subData.client.Subscribe(subData.identifier, subData.topic, subData.duration, subData.meta, subData.config)
 				if err != nil {
 					log.Println("subscribe to topic", subData.topic, "error:", err)
 					time.Sleep(time.Second)
 					continue
 				}
+
 				log.Println("Subscribed to topic", subData.topic, "success:", txnHash)
 				break
 			}
@@ -42,14 +54,15 @@ func init() {
 	}()
 }
 
-func addToSubscribeQueue(client *nkn.MultiClient, identifier string, topic string, duration int, meta string, config *nkn.TransactionConfig) {
+func addToSubscribeQueue(client *nkn.MultiClient, identifier string, topic string, duration int, meta string, config *nkn.TransactionConfig, replaceTxPool bool) {
 	subData := &subscribeData{
-		client:     client,
-		identifier: identifier,
-		topic:      topic,
-		duration:   duration,
-		meta:       meta,
-		config:     config,
+		client:        client,
+		identifier:    identifier,
+		topic:         topic,
+		duration:      duration,
+		meta:          meta,
+		config:        config,
+		replaceTxPool: replaceTxPool,
 	}
 	select {
 	case subQueue <- subData:
