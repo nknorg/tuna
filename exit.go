@@ -426,6 +426,7 @@ func (te *TunaExit) updateAllMetadata(ip string, tcpPort, udpPort uint32) error 
 			te.config.SubscriptionPrefix,
 			uint32(te.config.SubscriptionDuration),
 			te.config.SubscriptionFee,
+			te.config.SubscriptionReplaceTxPool,
 			te.Client,
 			te.closeChan,
 		)

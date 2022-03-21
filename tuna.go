@@ -1215,6 +1215,7 @@ func UpdateMetadata(
 	subscriptionPrefix string,
 	subscriptionDuration uint32,
 	subscriptionFee string,
+	subscriptionReplaceTxPool bool,
 	client *nkn.MultiClient,
 	closeChan chan struct{},
 ) {
@@ -1286,7 +1287,7 @@ func UpdateMetadata(
 				}
 			}
 
-			addToSubscribeQueue(client, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subFee.String()})
+			addToSubscribeQueue(client, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subFee.String()}, subscriptionReplaceTxPool)
 
 			nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * float64(subInterval)))
 
