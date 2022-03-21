@@ -1270,7 +1270,23 @@ func UpdateMetadata(
 				return
 			}
 
-			addToSubscribeQueue(client, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
+			subFee, err := common.StringToFixed64(subscriptionFee)
+			if err != nil {
+				log.Println("Parse subscription fee error:", err)
+			}
+
+			if subFee > 0 {
+				balance, err := client.Balance()
+				if err != nil {
+					log.Println("Get balance error:", err)
+				} else {
+					if subFee > balance.ToFixed64() {
+						subFee = balance.ToFixed64()
+					}
+				}
+			}
+
+			addToSubscribeQueue(client, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subFee.String()})
 
 			nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * float64(subInterval)))
 
