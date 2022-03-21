@@ -1225,50 +1225,61 @@ func UpdateMetadata(
 	if subscriptionDuration > 3 {
 		subInterval = time.Duration(subscriptionDuration-3) * config.ConsensusDuration
 	}
-	nextSub := time.After(0)
+	var nextSub <-chan time.Time
 
 	go func() {
-		func() {
-			sub, err := client.GetSubscription(topic, address.MakeAddressString(client.PubKey(), identifier))
-			if err != nil {
-				log.Println("Get existing subscription error:", err)
-				return
-			}
-
-			if len(sub.Meta) == 0 && sub.ExpiresAt == 0 {
-				return
-			}
-
-			if sub.Meta != string(metadataRaw) {
-				log.Println("Existing subscription meta need update.")
-				return
-			}
-
-			height, err := client.GetHeight()
-			if err != nil {
-				log.Println("Get current height error:", err)
-				return
-			}
-
-			if sub.ExpiresAt-height < 3 {
-				log.Println("Existing subscription is expiring")
-				return
-			}
-
-			log.Println("Existing subscription expires after", sub.ExpiresAt-height, "blocks")
-
-			maxSubDuration := float64(sub.ExpiresAt-height) * float64(config.ConsensusDuration)
-			nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * maxSubDuration))
-		}()
-
 		for {
+			nextSub = time.After(0)
+
+			func() {
+				sub, err := client.GetSubscription(topic, address.MakeAddressString(client.PubKey(), identifier))
+				if err != nil {
+					log.Println("Get existing subscription error:", err)
+					return
+				}
+
+				if len(sub.Meta) == 0 && sub.ExpiresAt == 0 {
+					return
+				}
+
+				if sub.Meta != string(metadataRaw) {
+					log.Println("Existing subscription meta need update.")
+					return
+				}
+
+				height, err := client.GetHeight()
+				if err != nil {
+					log.Println("Get current height error:", err)
+					return
+				}
+
+				if sub.ExpiresAt-height < 3 {
+					log.Println("Existing subscription is expiring")
+					return
+				}
+
+				log.Println("Existing subscription expires after", sub.ExpiresAt-height, "blocks")
+
+				maxSubDuration := float64(sub.ExpiresAt-height) * float64(config.ConsensusDuration)
+				nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * maxSubDuration))
+			}()
+
 			select {
 			case <-nextSub:
 			case <-closeChan:
 				return
 			}
+
 			addToSubscribeQueue(client, identifier, topic, int(subscriptionDuration), string(metadataRaw), &nkn.TransactionConfig{Fee: subscriptionFee})
+
 			nextSub = time.After(time.Duration((1 - rand.Float64()*subscribeDurationRandomFactor) * float64(subInterval)))
+
+			select {
+			case <-nextSub:
+			case <-time.After(maxCheckSubscribeInterval):
+			case <-closeChan:
+				return
+			}
 		}
 	}()
 }
