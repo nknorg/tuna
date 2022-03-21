@@ -6,7 +6,7 @@
   "udpTimeout": 60,
   "claimInterval": 3600,
   "subscriptionDuration": 40000,
-  "subscriptionFee": "0",
+  "subscriptionFee": "0.00001",
   "services": {
     "httpproxy": {
       "address": "127.0.0.1",
