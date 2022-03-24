@@ -60,6 +60,7 @@ const (
 	maxServiceMetadataSize        = 4096
 	maxNanoPayTxnSize             = 4096
 	numRPCClients                 = 4
+	maxRPCRequests                = 8
 )
 
 var (
@@ -749,22 +750,31 @@ func (c *Common) nknFilterContext(ctx context.Context) ([]string, map[string]str
 			if err != nil {
 				return nil, nil, err
 			}
-			if count == 0 {
-				continue
+
+			if count > 0 {
+				offset := rand.Intn((count-1)/c.GetSubscribersBatchSize + 1)
+				subscribers, err := c.Client.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false, allPrefix[i])
+				if err != nil {
+					return nil, nil, err
+				}
+
+				for subscriber, meta := range subscribers.Subscribers.Map() {
+					if _, ok := subscriberRaw[subscriber]; !ok {
+						subscriberRaw[subscriber] = meta
+						subscriberCount++
+					}
+				}
+				if subscriberCount >= c.GetSubscribersBatchSize {
+					break
+				}
 			}
 
-			offset := rand.Intn((count-1)/c.GetSubscribersBatchSize + 1)
-			subscribers, err := c.Client.GetSubscribersContext(ctx, topic, offset*c.GetSubscribersBatchSize, c.GetSubscribersBatchSize, true, false, allPrefix[i])
-			if err != nil {
-				return nil, nil, err
-			}
-
-			for subscriber, meta := range subscribers.Subscribers.Map() {
-				subscriberRaw[subscriber] = meta
-				subscriberCount++
-			}
-			if subscriberCount >= c.GetSubscribersBatchSize {
-				break
+			if i+maxRPCRequests < len(allPrefix) {
+				estimatedRemainingRequests := float64(c.GetSubscribersBatchSize-subscriberCount) / (float64(subscriberCount+1) / float64(i+1))
+				if estimatedRemainingRequests > maxRPCRequests {
+					i = len(allPrefix) - 1
+					allPrefix = append(allPrefix, nil)
+				}
 			}
 		}
 
