@@ -37,6 +37,7 @@ func init() {
 						continue
 					}
 					subData.config.Nonce = nonce
+					subData.config.FixNonce = true
 				}
 
 				txnHash, err := subData.client.Subscribe(subData.identifier, subData.topic, subData.duration, subData.meta, subData.config)
