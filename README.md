@@ -105,13 +105,13 @@ on iOS/Android without any modification. You can use `gomobile bind` to compile
 it to Objective-C framework for iOS:
 
 ```shell
-gomobile bind -target=ios -ldflags "-s -w" github.com/nknorg/tuna github.com/nknorg/nkn-sdk-go
+gomobile bind -target=ios -ldflags "-s -w" github.com/nknorg/tuna github.com/nknorg/nkn-sdk-go github.com/nknorg/nkngomobile
 ```
 
 and Java AAR for Android:
 
 ```shell
-gomobile bind -target=android -ldflags "-s -w" github.com/nknorg/tuna github.com/nknorg/nkn-sdk-go
+gomobile bind -target=android -ldflags "-s -w" github.com/nknorg/tuna github.com/nknorg/nkn-sdk-go github.com/nknorg/nkngomobile
 ```
 
 More likely you might want to write a simple wrapper uses tuna and compile it
