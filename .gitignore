@@ -4,13 +4,13 @@ vendor
 .DS_Store
 build
 tuna
-wallet.json
-wallet.pswd
+wallet*.json
+wallet*.pswd
 config.entry.json
 config.exit.json
 services.json
 aws-ip.json
 gcp-ip.json
-geolite2-country.mmdb
+geolite2-country.mmdb*
 *.favorite-node.json
 *.avoid-node.json
