@@ -88,7 +88,10 @@ func (e *ExitCommand) Execute(args []string) error {
 
 						go func() {
 							for range te.OnConnect.C {
-								log.Printf("Service: %s, Address: %v:%v\n", service.Name, te.GetReverseIP(), te.GetReverseTCPPorts())
+								log.Printf("Service: %s, Type: TCP, Address: %v:%v\n", service.Name, te.GetReverseIP(), te.GetReverseTCPPorts())
+								if len(service.UDP) > 0 {
+									log.Printf("Service: %s, Type: UDP, Address: %v:%v\n", service.Name, te.GetReverseIP(), te.GetReverseUDPPorts())
+								}
 							}
 						}()
 

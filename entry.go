@@ -1,8 +1,11 @@
 package tuna
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"github.com/nknorg/tuna/udp"
+	"github.com/rdegges/go-ipify"
 	"log"
 	"net"
 	"strconv"
@@ -16,7 +19,6 @@ import (
 	"github.com/nknorg/tuna/pb"
 	"github.com/nknorg/tuna/util"
 	"github.com/patrickmn/go-cache"
-	"github.com/rdegges/go-ipify"
 	"github.com/xtaci/smux"
 )
 
@@ -103,33 +105,6 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 func (te *TunaEntry) Start(shouldReconnect bool) error {
 	defer te.Close()
 
-	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
-	if listenIP == nil {
-		listenIP = net.ParseIP(defaultServiceListenIP)
-	}
-
-	tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
-	if err != nil {
-		return err
-	}
-	if len(tcpPorts) > 0 {
-		log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
-	}
-
-	udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
-	if err != nil {
-		return err
-	}
-	if len(udpPorts) > 0 {
-		log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
-	}
-
-	geoCloseChan := make(chan struct{})
-	defer close(geoCloseChan)
-	if len(te.ServiceInfo.IPFilter.GetProviders()) > 0 {
-		go te.ServiceInfo.IPFilter.StartUpdateDataFile(geoCloseChan)
-	}
-
 	for {
 		if te.IsClosed() {
 			return nil
@@ -141,7 +116,9 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
+		if te.udpConn != nil {
+			te.StartUDPReaderWriter(te.udpConn, nil, &te.bytesExitToEntry, &te.bytesEntryToExit)
+		}
 		go func() {
 			for {
 				session, err := te.getSession()
@@ -178,12 +155,39 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 		break
 	}
 
+	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
+	if listenIP == nil {
+		listenIP = net.ParseIP(defaultServiceListenIP)
+	}
+
+	tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
+	if err != nil {
+		return err
+	}
+	if len(tcpPorts) > 0 {
+		log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
+	}
+
+	udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
+	if err != nil {
+		return err
+	}
+	if len(udpPorts) > 0 {
+		log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
+	}
+
+	geoCloseChan := make(chan struct{})
+	defer close(geoCloseChan)
+	if te.ServiceInfo.IPFilter != nil && len(te.ServiceInfo.IPFilter.GetProviders()) > 0 {
+		go te.ServiceInfo.IPFilter.StartUpdateDataFile(geoCloseChan)
+	}
+
 	<-te.closeChan
 
 	return nil
 }
 
-func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
+func (te *TunaEntry) StartReverse(stream *smux.Stream, connMetadata *pb.ConnectionMetadata) error {
 	defer te.Close()
 
 	metadata := te.GetMetadata()
@@ -195,9 +199,16 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	if err != nil {
 		return err
 	}
-	udpPorts, err := te.listenUDP(listenIP, metadata.ServiceUdp)
-	if err != nil {
-		return err
+
+	var udpPorts []uint32
+	if len(metadata.ServiceUdp) > 0 {
+		if len(te.Service.UDP) > 0 || metadata.ServiceUdp[0] == 0 {
+			metadata.ServiceUdp = tcpPorts // same ports with tcp if udp ports not specific
+		}
+		udpPorts, err = te.listenUDP(listenIP, metadata.ServiceUdp)
+		if err != nil {
+			return err
+		}
 	}
 
 	serviceMetadata := CreateRawMetadata(0, tcpPorts, udpPorts, "", 0, 0, "", te.config.ReverseBeneficiaryAddr)
@@ -228,12 +239,23 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream) error {
 	}
 
 	defer npc.Close()
+	k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
 
 	getTotalCost := func() (common.Fixed64, common.Fixed64) {
-		bytesEntryToExit := common.Fixed64(atomic.LoadUint64(&te.reverseBytesEntryToExit))
-		bytesExitToEntry := common.Fixed64(atomic.LoadUint64(&te.reverseBytesExitToEntry))
-		cost := entryToExitPrice*bytesEntryToExit/TrafficUnit + exitToEntryPrice*bytesExitToEntry/TrafficUnit
-		totalBytes := bytesEntryToExit + bytesExitToEntry
+		cost, totalBytes := common.Fixed64(0), common.Fixed64(0)
+		for i := range te.Common.reverseBytesEntryToExit[k] {
+			entryToExit := common.Fixed64(atomic.LoadUint64(&te.Common.reverseBytesEntryToExit[k][i]))
+			exitToEntry := common.Fixed64(atomic.LoadUint64(&te.Common.reverseBytesExitToEntry[k][i]))
+			if entryToExit == 0 && exitToEntry == 0 {
+				continue
+			}
+			cost += entryToExitPrice*entryToExit/TrafficUnit + exitToEntryPrice*exitToEntry/TrafficUnit
+			totalBytes += entryToExit + exitToEntry
+		}
+		tcpBytesEntryToExit := common.Fixed64(atomic.LoadUint64(&te.reverseBytesEntryToExit))
+		tcpBytesExitToEntry := common.Fixed64(atomic.LoadUint64(&te.reverseBytesExitToEntry))
+		totalBytes += tcpBytesEntryToExit + tcpBytesExitToEntry
+		cost += entryToExitPrice*tcpBytesEntryToExit/TrafficUnit + exitToEntryPrice*tcpBytesExitToEntry/TrafficUnit
 		return cost, totalBytes
 	}
 
@@ -292,6 +314,7 @@ func (te *TunaEntry) Close() {
 	for _, conn := range te.serviceConn {
 		Close(conn)
 	}
+	te.session.Close()
 	te.OnConnect.close()
 }
 
@@ -386,7 +409,7 @@ func (te *TunaEntry) openServiceStream(portID byte) (*smux.Stream, error) {
 func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 	assignedPorts := make([]uint32, 0, len(ports))
 	for i, _port := range ports {
-		listener, err := net.ListenTCP(tcp, &net.TCPAddr{IP: ip, Port: int(_port)})
+		listener, err := net.ListenTCP(tcp4, &net.TCPAddr{IP: ip, Port: int(_port)})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
@@ -459,6 +482,11 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 
 			data := <-serverReadChan
 
+			if len(data) < udp.PrefixLen {
+				log.Println("empty udp packet received")
+				te.Close()
+				return
+			}
 			portID := data[3]
 			port := ConnIDToPort(data)
 			connID := strconv.Itoa(int(port))
@@ -477,7 +505,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 			}
 			clientAddr := x.(*net.UDPAddr)
 
-			_, err = serviceConn.WriteToUDP(data, clientAddr)
+			_, _, err = serviceConn.WriteMsgUDP(data[udp.PrefixLen:], nil, clientAddr)
 			if err != nil {
 				log.Println("Couldn't send data to client:", err)
 			}
@@ -485,11 +513,19 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 	}()
 
 	for i, _port := range ports {
-		localConn, err := net.ListenUDP(udp, &net.UDPAddr{IP: ip, Port: int(_port)})
+		localConn, err := net.ListenUDP(udp4, &net.UDPAddr{IP: ip, Port: int(_port)})
 		if err != nil {
 			log.Println("Couldn't bind listener:", err)
 			return nil, err
 		}
+
+		bs := te.Service.UDPBufferSize
+		if te.Reverse {
+			bs = udp.MaxUDPBufferSize
+		}
+		localConn.SetWriteBuffer(bs)
+		localConn.SetReadBuffer(bs)
+
 		port := localConn.LocalAddr().(*net.UDPAddr).Port
 		portID := byte(i)
 		assignedPorts = append(assignedPorts, uint32(port))
@@ -497,7 +533,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 		te.serviceConn[portID] = localConn
 
 		go func() {
-			localBuffer := make([]byte, 2048)
+			localBuffer := make([]byte, bs)
 			for {
 				if te.IsClosed() {
 					return
@@ -543,18 +579,100 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 	ip, err := ipify.GetIp()
 	if err != nil {
-		return fmt.Errorf("Couldn't get IP: %v", err)
+		return fmt.Errorf("couldn't get IP: %v", err)
 	}
 
-	listener, err := net.ListenTCP(tcp, &net.TCPAddr{Port: int(config.ReverseTCP)})
+	listener, err := net.ListenTCP(tcp4, &net.TCPAddr{Port: int(config.ReverseTCP)})
 	if err != nil {
 		return err
 	}
 
-	udpConn, err := net.ListenUDP(udp, &net.UDPAddr{Port: int(config.ReverseUDP)})
+	uConn, err := net.ListenUDP(udp4, &net.UDPAddr{Port: int(config.ReverseUDP)})
 	if err != nil {
 		return err
 	}
+	encConn := udp.NewEncryptUDPConn(uConn)
+	encKeys := new(sync.Map)
+	udpEntrys := new(sync.Map)
+	tcpEntrys := new(sync.Map)
+	addrToKey := make(map[string]string)
+	connReady := make(map[string]chan struct{})
+	var addrToKeyLock sync.RWMutex
+	var connReadyLock sync.RWMutex
+	go func() {
+		if encConn.IsClosed() {
+			return
+		}
+		buffer := make([]byte, udp.MaxUDPBufferSize)
+		for {
+			n, from, err := encConn.ReadFromUDP(buffer)
+			if err != nil {
+				log.Println("Couldn't receive exit's data:", err)
+				continue
+			}
+			if bytes.Equal(buffer[:udp.PrefixLen], []byte{udp.PrefixLen - 1: 0}) && n > 0 {
+				connMetadata, err := parseUDPConnMetadata(buffer[udp.PrefixLen:n])
+				if err != nil {
+					log.Println("Couldn't read udp metadata from client:", err)
+					return
+				}
+				k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
+				connReadyLock.Lock()
+				readyChan, ok := connReady[k]
+				if !ok {
+					readyChan = make(chan struct{}, 1)
+					connReady[k] = readyChan
+				}
+				connReadyLock.Unlock()
+				if connMetadata.EncryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
+					<-readyChan
+					encryptKey, ok := encKeys.Load(k)
+					if !ok {
+						log.Println("no encrypt key found")
+						return
+					}
+					key := encryptKey.(*[encryptKeySize]byte)
+					err = encConn.AddCodec(from, key, connMetadata.EncryptionAlgo, false)
+					if err != nil {
+						log.Println(err)
+						return
+					}
+				}
+
+				te, ok := tcpEntrys.Load(k)
+				if !ok {
+					log.Println("no encrypt key found from tcp conn")
+					continue
+				}
+				t := te.(*TunaEntry)
+				t.Common.reverseBytesEntryToExit[k] = make([]uint64, 256)
+				t.Common.reverseBytesExitToEntry[k] = make([]uint64, 256)
+				udpEntrys.Store(from.String(), te)
+				addrToKeyLock.Lock()
+				addrToKey[from.String()] = k
+				addrToKeyLock.Unlock()
+				continue
+			}
+			entry, ok := udpEntrys.Load(from.String())
+			if !ok {
+				log.Println("no entry found for udp data")
+				continue
+			}
+			te := entry.(*TunaEntry)
+			udpReadchan, err := te.GetServerUDPReadChan(false)
+			if err != nil {
+				log.Println("Couldn't get udp read chan:", err)
+				continue
+			}
+			if n > 0 {
+				udpReadchan <- buffer[:n]
+				addrToKeyLock.RLock()
+				k := addrToKey[from.String()]
+				addrToKeyLock.RUnlock()
+				atomic.AddUint64(&te.Common.reverseBytesEntryToExit[k][buffer[2]], uint64(n))
+			}
+		}
+	}()
 
 	clientConfig := &nkn.ClientConfig{
 		HttpDialContext: config.HttpDialContext,
@@ -569,29 +687,6 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	}
 
 	udpReadChans := make(map[string]chan []byte)
-	udpCloseChan := make(chan struct{})
-
-	go func() {
-		for {
-			buffer := make([]byte, 2048)
-			n, addr, err := udpConn.ReadFromUDP(buffer)
-			if err != nil {
-				log.Println("Couldn't receive data from server:", err)
-				if strings.Contains(err.Error(), "use of closed network connection") {
-					udpCloseChan <- struct{}{}
-					return
-				}
-				continue
-			}
-
-			data := make([]byte, n)
-			copy(data, buffer)
-
-			if udpReadChan, ok := udpReadChans[addr.String()]; ok {
-				udpReadChan <- data
-			}
-		}
-	}()
 
 	go func() {
 		for {
@@ -607,19 +702,38 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 			go func() {
 				err := func() error {
-					defer Close(tcpConn)
-
 					te, err := NewTunaEntry(Service{}, ServiceInfo{ListenIP: serviceListenIP}, wallet, client, config)
 					if err != nil {
 						return fmt.Errorf("create tuna entry error: %v", err)
 					}
-
 					encryptedConn, connMetadata, err := te.wrapConn(tcpConn, nil, nil)
 					if err != nil {
 						return fmt.Errorf("wrap conn error: %v", err)
 					}
 
-					defer Close(encryptedConn)
+					connKey := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
+					tcpEntrys.Store(connKey, te)
+					k, _ := te.encryptKeys.Load(connKey)
+					encKeys.Store(connKey, k)
+					connReadyLock.Lock()
+					readyChan, ok := connReady[connKey]
+					if !ok {
+						readyChan = make(chan struct{}, 1)
+						connReady[connKey] = readyChan
+					}
+					connReadyLock.Unlock()
+					readyChan <- struct{}{}
+
+					defer func() {
+						Close(encryptedConn)
+						te, ok := tcpEntrys.Load(k)
+						if ok {
+							t := te.(*TunaEntry)
+							t.Close()
+						}
+						tcpEntrys.Delete(connKey)
+						encKeys.Delete(connKey)
+					}()
 
 					if connMetadata.IsMeasurement {
 						err = util.BandwidthMeasurementServer(encryptedConn, int(connMetadata.MeasurementBytesDownlink), maxMeasureBandwidthTimeout)
@@ -636,7 +750,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 					stream, err := te.session.AcceptStream()
 					if err != nil {
-						te.session.Close()
+						te.Close()
 						return fmt.Errorf("couldn't accept stream: %v", err)
 					}
 
@@ -657,7 +771,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 					if metadata.UdpPort > 0 {
 						ip, _, err := net.SplitHostPort(encryptedConn.RemoteAddr().String())
 						if err != nil {
-							return fmt.Errorf("Parse host error: %v", err)
+							return fmt.Errorf("parse host error: %v", err)
 						}
 
 						udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
@@ -666,26 +780,41 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 						go func() {
 							for {
+								if te.isClosed {
+									return
+								}
 								select {
-								case data := <-udpWriteChan:
-									_, err := udpConn.WriteToUDP(data, &udpAddr)
+								case data := <-te.udpWriteChan:
+									n, _, err := encConn.WriteMsgUDP(data, nil, &udpAddr)
 									if err != nil {
-										log.Println("Couldn't send data to server:", err)
+										log.Println("couldn't send udp data to server:", err)
+										continue
 									}
-								case <-udpCloseChan:
+									addrToKeyLock.RLock()
+									_, ok = addrToKey[udpAddr.String()]
+									addrToKeyLock.RUnlock()
+									if !ok || len(data) < 2 {
+										log.Println("no key found from this udp addr:", udpAddr.String())
+										return
+									}
+									addrToKeyLock.RLock()
+									key := addrToKey[udpAddr.String()]
+									addrToKeyLock.RUnlock()
+									atomic.AddUint64(&te.Common.reverseBytesExitToEntry[key][data[2]], uint64(n))
+								case <-te.udpCloseChan:
 									return
 								}
 							}
 						}()
 
 						udpReadChans[udpAddr.String()] = udpReadChan
-
 						te.SetServerUDPReadChan(udpReadChan)
 						te.SetServerUDPWriteChan(udpWriteChan)
 					}
 
-					err = te.StartReverse(stream)
+					err = te.StartReverse(stream, connMetadata)
 					if err != nil {
+						te.Close()
 						return fmt.Errorf("start reverse error: %v", err)
 					}
 

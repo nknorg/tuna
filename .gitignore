@@ -4,8 +4,8 @@ vendor
 .DS_Store
 build
 tuna
-wallet*.json
-wallet*.pswd
+wallet.json
+wallet.pswd
 config.entry.json
 config.exit.json
 services.json

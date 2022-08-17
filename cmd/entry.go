@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/nknorg/tuna/udp"
 	"log"
 	"strings"
 
@@ -90,6 +91,9 @@ func (e *EntryCommand) Execute(args []string) error {
 			for _, service := range services {
 				if service.Name == serviceName {
 					go func(service tuna.Service, serviceInfo tuna.ServiceInfo) {
+						if len(service.UDP) > 0 && service.UDPBufferSize == 0 {
+							service.UDPBufferSize = udp.DefaultUDPBufferSize
+						}
 						for {
 							te, err := tuna.NewTunaEntry(service, serviceInfo, wallet, nil, config)
 							if err != nil {
