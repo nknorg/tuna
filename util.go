@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/nknorg/tuna/udp"
 	"io"
 	"log"
 	"math/rand"
@@ -170,6 +171,25 @@ func writeConnMetadata(conn net.Conn, connMetadata *pb.ConnectionMetadata) error
 	}
 
 	return WriteVarBytes(conn, b)
+}
+
+func parseUDPConnMetadata(metadata []byte) (*pb.ConnectionMetadata, error) {
+	connMetadata := new(pb.ConnectionMetadata)
+	err := proto.Unmarshal(metadata, connMetadata)
+	if err != nil {
+		return nil, err
+	}
+	return connMetadata, nil
+}
+
+func writeUDPConnMetadata(conn udp.Conn, addr *net.UDPAddr, connMetadata *pb.ConnectionMetadata) error {
+	b, err := proto.Marshal(connMetadata)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = conn.WriteMsgUDP(append([]byte{udp.PrefixLen - 1: 0}, b...), nil, addr)
+	return err
 }
 
 func readStreamMetadata(stream *smux.Stream) (*pb.StreamMetadata, error) {

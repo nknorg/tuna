@@ -3,6 +3,8 @@ package tuna
 import (
 	"errors"
 	"fmt"
+	"github.com/nknorg/tuna/udp"
+	"github.com/rdegges/go-ipify"
 	"log"
 	"net"
 	"strconv"
@@ -16,7 +18,6 @@ import (
 	"github.com/nknorg/tuna/pb"
 	"github.com/nknorg/tuna/util"
 	"github.com/patrickmn/go-cache"
-	"github.com/rdegges/go-ipify"
 	"github.com/xtaci/smux"
 )
 
@@ -39,7 +40,6 @@ type TunaExit struct {
 	services    []Service
 	serviceConn *cache.Cache
 	tcpListener net.Listener
-	udpConn     *net.UDPConn
 	reverseIP   net.IP
 	reverseTCP  []uint32
 	reverseUDP  []uint32
@@ -63,8 +63,12 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, client *nkn.MultiClient
 		subscriptionPrefix = config.ReverseSubscriptionPrefix
 
 		service = &Service{
-			Name:       config.ReverseServiceName,
-			Encryption: services[0].Encryption,
+			Name:          config.ReverseServiceName,
+			Encryption:    services[0].Encryption,
+			UDPBufferSize: services[0].UDPBufferSize,
+		}
+		if service.UDPBufferSize == 0 {
+			service.UDPBufferSize = udp.DefaultUDPBufferSize
 		}
 
 		serviceInfo = &ServiceInfo{
@@ -138,9 +142,10 @@ func (te *TunaExit) getServiceID(serviceName string) (byte, error) {
 	return 0, errors.New("Service " + serviceName + " not found")
 }
 
-func (te *TunaExit) handleSession(session *smux.Session) {
+func (te *TunaExit) handleSession(session *smux.Session, connMetadata *pb.ConnectionMetadata) {
 	bytesEntryToExit := make([]uint64, 256)
 	bytesExitToEntry := make([]uint64, 256)
+	var k string
 
 	var npc *nkn.NanoPayClaimer
 	var lastPaymentAmount, bytesPaid common.Fixed64
@@ -149,10 +154,14 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 	onErr := nkn.NewOnError(1, nil)
 	lastPaymentTime := time.Now()
 	isClosed := false
+	if connMetadata != nil {
+		k = string(append(connMetadata.PublicKey, connMetadata.Nonce...))
+		te.Common.reverseBytesEntryToExit[k] = bytesEntryToExit
+		te.Common.reverseBytesExitToEntry[k] = bytesExitToEntry
+	}
 
 	getTotalCost := func() (common.Fixed64, common.Fixed64) {
-		cost := common.Fixed64(0)
-		totalBytes := common.Fixed64(0)
+		cost, totalBytes := common.Fixed64(0), common.Fixed64(0)
 		for i := range bytesEntryToExit {
 			entryToExit := common.Fixed64(atomic.LoadUint64(&bytesEntryToExit[i]))
 			exitToEntry := common.Fixed64(atomic.LoadUint64(&bytesExitToEntry[i]))
@@ -218,10 +227,10 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				var protocol string
 				var port int
 				if portID < tcpPortsCount {
-					protocol = tcp
+					protocol = tcp4
 					port = int(service.TCP[portID])
 				} else if portID-tcpPortsCount < udpPortsCount {
-					protocol = udp
+					protocol = udp4
 					portID -= tcpPortsCount
 					port = int(service.UDP[portID])
 				} else {
@@ -231,7 +240,7 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 				serviceInfo := te.config.Services[service.Name]
 				host := serviceInfo.Address + ":" + strconv.Itoa(port)
 
-				conn, err := net.DialTimeout(string(protocol), host, time.Duration(te.config.DialTimeout)*time.Second)
+				conn, err := net.DialTimeout(protocol, host, time.Duration(te.config.DialTimeout)*time.Second)
 				if err != nil {
 					return err
 				}
@@ -240,8 +249,8 @@ func (te *TunaExit) handleSession(session *smux.Session) {
 					go te.pipe(conn, stream, &te.reverseBytesEntryToExit)
 					go te.pipe(stream, conn, &te.reverseBytesExitToEntry)
 				} else {
-					go te.pipe(conn, stream, &bytesEntryToExit[serviceID])
-					go te.pipe(stream, conn, &bytesExitToEntry[serviceID])
+					go te.pipe(conn, stream, &te.Common.reverseBytesEntryToExit[k][serviceID])
+					go te.pipe(stream, conn, &te.Common.reverseBytesExitToEntry[k][serviceID])
 				}
 
 				return nil
@@ -305,7 +314,7 @@ func (te *TunaExit) listenTCP(port int) error {
 						return fmt.Errorf("create session error: %v", err)
 					}
 
-					te.handleSession(session)
+					te.handleSession(session, connMetadata)
 
 					return nil
 				}()
@@ -326,8 +335,8 @@ func (te *TunaExit) getService(serviceID byte) (*Service, error) {
 	return &te.services[serviceID], nil
 }
 
-func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connID []byte, serviceID byte, portID byte) (*net.UDPConn, error) {
-	connKey := addr.String() + ":" + strconv.Itoa(int(ConnIDToPort(connID)))
+func (te *TunaExit) getServiceConn(connID []byte, serviceID byte, portID byte) (*net.UDPConn, error) {
+	connKey := strconv.Itoa(int(ConnIDToPort(connID)))
 	var conn *net.UDPConn
 	var x interface{}
 	var ok bool
@@ -341,31 +350,34 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connID []byte, serviceID b
 			return nil, fmt.Errorf("UDP portID %v out of range", portID)
 		}
 		port := service.UDP[portID]
-		conn, err = net.DialUDP("udp", nil, &net.UDPAddr{Port: int(port)})
+		conn, err = net.DialUDP(udp4, nil, &net.UDPAddr{Port: int(port)})
 		if err != nil {
 			log.Println("Couldn't connect to local UDP port", port, "with error:", err)
-			Close(conn)
-			return conn, err
+			return nil, err
 		}
+
+		if service.UDPBufferSize == 0 {
+			service.UDPBufferSize = udp.DefaultUDPBufferSize
+		}
+		conn.SetWriteBuffer(service.UDPBufferSize)
+		conn.SetReadBuffer(service.UDPBufferSize)
 
 		te.serviceConn.Set(connKey, conn, cache.DefaultExpiration)
 
 		prefix := []byte{connID[0], connID[1], serviceID, portID}
 		go func() {
-			serviceBuffer := make([]byte, 2048)
+			defer te.serviceConn.Delete(connKey)
+			serviceBuffer := make([]byte, service.UDPBufferSize)
+
 			for {
-				n, err := conn.Read(serviceBuffer)
+				n, _, err := conn.ReadFromUDP(serviceBuffer)
 				if err != nil {
 					log.Println("Couldn't receive data from service:", err)
 					Close(conn)
 					break
 				}
-				_, err = te.udpConn.WriteToUDP(append(prefix, serviceBuffer[:n]...), addr)
-				if err != nil {
-					log.Println("Couldn't send data to client:", err)
-					Close(conn)
-					break
-				}
+
+				te.udpWriteChan <- append(prefix, serviceBuffer[:n]...)
 			}
 		}()
 	} else {
@@ -376,33 +388,47 @@ func (te *TunaExit) getServiceConn(addr *net.UDPAddr, connID []byte, serviceID b
 }
 
 func (te *TunaExit) listenUDP(port int) error {
-	var err error
-	te.udpConn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
+	conn, err := net.ListenUDP(udp4, &net.UDPAddr{Port: port})
 	if err != nil {
 		log.Println("Couldn't bind listener:", err)
 		return err
 	}
+	encConn := udp.NewEncryptUDPConn(conn)
+	udpConn, err := te.wrapUDPConn(encConn, nil, nil, nil)
+	if err != nil {
+		log.Println("wrap udp conn err:", err)
+		return err
+	}
+	te.StartUDPReaderWriter(udpConn, nil, nil, nil)
+	te.udpConn = udpConn
 	te.readUDP()
 	return nil
 }
 
 func (te *TunaExit) readUDP() {
 	go func() {
-		clientBuffer := make([]byte, 2048)
 		for {
-			n, addr, err := te.udpConn.ReadFromUDP(clientBuffer)
+			if te.IsClosed() {
+				return
+			}
+			serverReadChan, err := te.GetServerUDPReadChan(false)
 			if err != nil {
-				log.Println("Couldn't receive data from client:", err)
-				if strings.Contains(err.Error(), "use of closed network connection") {
-					return
-				}
+				log.Println("Couldn't get server connection:", err)
 				continue
 			}
-			serviceConn, err := te.getServiceConn(addr, clientBuffer[0:2], clientBuffer[2], clientBuffer[3])
+			data := <-serverReadChan
+			if len(data) < udp.PrefixLen {
+				log.Println("empty udp packet received")
+				te.Close()
+				return
+			}
+
+			serviceConn, err := te.getServiceConn(data[0:2], data[2], data[3])
 			if err != nil {
+				log.Println("get service conn error:", err)
 				continue
 			}
-			_, err = serviceConn.Write(clientBuffer[4:n])
+			_, _, err = serviceConn.WriteMsgUDP(data[udp.PrefixLen:], nil, nil)
 			if err != nil {
 				log.Println("Couldn't send data to service:", err)
 			}
@@ -480,7 +506,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 	var tcpConn net.Conn
 	var payOnce sync.Once
 	for {
-		err := te.Common.CreateServerConn(true)
+		err = te.Common.CreateServerConn(true)
 		if err != nil {
 			if err == ErrClosed {
 				return nil
@@ -489,9 +515,12 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			time.Sleep(1 * time.Second)
 			continue
 		}
+		if te.udpConn != nil {
+			te.StartUDPReaderWriter(te.udpConn, nil, &te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry)
+		}
 
 		udpPort := 0
-		var udpConn *net.UDPConn
+		var udpConn udp.Conn
 		if len(service.UDP) > 0 {
 			udpConn, err = te.Common.GetServerUDPConn(false)
 			if err != nil {
@@ -582,7 +611,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		reverseTCP := reverseMetadata.ServiceTcp
 		if len(reverseTCP) > 0 {
 			go func() {
-				conn, err := net.DialTimeout(tcp, fmt.Sprintf("%s:%d", reverseIP.String(), reverseTCP[0]), defaultReverseTestTimeout)
+				conn, err := net.DialTimeout(tcp4, fmt.Sprintf("%s:%d", reverseIP.String(), reverseTCP[0]), defaultReverseTestTimeout)
 				if err == nil {
 					time.Sleep(defaultReverseTestTimeout)
 					conn.Close()
@@ -624,7 +653,6 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		te.RUnlock()
 
 		if udpConn != nil {
-			te.udpConn = udpConn
 			te.readUDP()
 		}
 
@@ -639,9 +667,11 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			)
 		})
 
-		te.handleSession(session)
+		te.handleSession(session, nil)
 
 		Close(tcpConn)
+		Close(udpConn)
+		te.CloseUDPConn()
 
 		if !shouldReconnect {
 			break
@@ -687,7 +717,18 @@ func (te *TunaExit) Close() {
 	Close(te.udpConn)
 	Close(te.Common.tcpConn)
 	Close(te.Common.udpConn)
+
+	te.CloseUDPConn()
 	te.OnConnect.close()
+}
+
+func (te *TunaExit) CloseUDPConn() {
+	items := te.serviceConn.Items()
+	for k, v := range items {
+		conn := v.Object.(*net.UDPConn)
+		te.serviceConn.Delete(k)
+		Close(conn)
+	}
 }
 
 func (te *TunaExit) IsClosed() bool {

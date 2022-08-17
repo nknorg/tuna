@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/nknorg/tuna/udp"
 	"io"
 	"io/ioutil"
 	"log"
@@ -44,8 +45,8 @@ import (
 const (
 	TrafficUnit = 1024 * 1024
 
-	tcp                           = "tcp"
-	udp                           = "udp"
+	tcp4                          = "tcp"
+	udp4                          = "udp"
 	trafficPaymentThreshold       = 32
 	maxTrafficUnpaid              = 1
 	minTrafficCoverage            = 0.9
@@ -78,10 +79,11 @@ type ServiceInfo struct {
 }
 
 type Service struct {
-	Name       string   `json:"name"`
-	TCP        []uint32 `json:"tcp"`
-	UDP        []uint32 `json:"udp"`
-	Encryption string   `json:"encryption"`
+	Name          string   `json:"name"`
+	TCP           []uint32 `json:"tcp"`
+	UDP           []uint32 `json:"udp"`
+	UDPBufferSize int      `json:"udpBufferSize"`
+	Encryption    string   `json:"encryption"`
 }
 
 type Common struct {
@@ -122,18 +124,26 @@ type Common struct {
 	sessionsWaitGroup                 *sync.WaitGroup
 
 	sync.RWMutex
-	paymentReceiver  string
-	entryToExitPrice common.Fixed64
-	exitToEntryPrice common.Fixed64
-	metadata         *pb.ServiceMetadata
-	connected        bool
-	tcpConn          net.Conn
-	udpConn          *net.UDPConn
-	isClosed         bool
-	sharedKeys       map[string]*[sharedKeySize]byte
-	remoteNknAddress string
-	activeSessions   int
-	linger           time.Duration
+	udpReadWriteChanLock sync.RWMutex
+	udpReadyChanLock     sync.RWMutex
+	paymentReceiver      string
+	entryToExitPrice     common.Fixed64
+	exitToEntryPrice     common.Fixed64
+	metadata             *pb.ServiceMetadata
+	connected            bool
+	tcpConn              net.Conn
+	udpConn              udp.Conn
+	isClosed             bool
+	sharedKeys           map[string]*[sharedKeySize]byte
+	encryptKeys          sync.Map
+	remoteNknAddress     string
+	activeSessions       int
+	linger               time.Duration
+	presetNode           *types.Node
+	connReadyChan        map[string]chan struct{}
+
+	reverseBytesExitToEntry map[string][]uint64
+	reverseBytesEntryToExit map[string][]uint64
 }
 
 func NewCommon(
@@ -230,6 +240,13 @@ func NewCommon(
 		measureBandwidthConcurrentWorkers: measureBandwidthConcurrentWorkers,
 		sortMeasuredNodes:                 sortMeasuredNodes,
 		sessionsWaitGroup:                 &wg,
+
+		reverseBytesEntryToExit: make(map[string][]uint64),
+		reverseBytesExitToEntry: make(map[string][]uint64),
+
+		udpReadChan:   make(chan []byte),
+		udpWriteChan:  make(chan []byte),
+		connReadyChan: make(map[string]chan struct{}),
 	}
 
 	if !c.IsServer && c.ServiceInfo.IPFilter.NeedGeoInfo() {
@@ -255,13 +272,13 @@ func (c *Common) SetServerTCPConn(conn net.Conn) {
 	c.tcpConn = conn
 }
 
-func (c *Common) GetUDPConn() *net.UDPConn {
+func (c *Common) GetUDPConn() udp.Conn {
 	c.RLock()
 	defer c.RUnlock()
 	return c.udpConn
 }
 
-func (c *Common) SetServerUDPConn(conn *net.UDPConn) {
+func (c *Common) SetServerUDPConn(conn udp.Conn) {
 	c.Lock()
 	defer c.Unlock()
 	c.udpConn = conn
@@ -291,7 +308,7 @@ func (c *Common) GetServerTCPConn(force bool) (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *Common) GetServerUDPConn(force bool) (*net.UDPConn, error) {
+func (c *Common) GetServerUDPConn(force bool) (udp.Conn, error) {
 	err := c.CreateServerConn(force)
 	if err != nil {
 		return nil, err
@@ -310,6 +327,8 @@ func (c *Common) SetServerUDPWriteChan(udpWriteChan chan []byte) {
 }
 
 func (c *Common) GetServerUDPReadChan(force bool) (chan []byte, error) {
+	c.udpReadWriteChanLock.Lock()
+	defer c.udpReadWriteChanLock.Unlock()
 	err := c.CreateServerConn(force)
 	if err != nil {
 		return nil, err
@@ -318,6 +337,8 @@ func (c *Common) GetServerUDPReadChan(force bool) (chan []byte, error) {
 }
 
 func (c *Common) GetServerUDPWriteChan(force bool) (chan []byte, error) {
+	c.udpReadWriteChanLock.Lock()
+	defer c.udpReadWriteChanLock.Unlock()
 	err := c.CreateServerConn(force)
 	if err != nil {
 		return nil, err
@@ -373,32 +394,102 @@ func (c *Common) GetPrice() (common.Fixed64, common.Fixed64) {
 	return c.entryToExitPrice, c.exitToEntryPrice
 }
 
-func (c *Common) StartUDPReaderWriter(conn *net.UDPConn) {
+func (c *Common) StartUDPReaderWriter(conn udp.Conn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
+	from := new(net.UDPAddr)
+	n := 0
+	var err error
+	addrToKey := make(map[string]string)
+	var addrToKeyLock sync.RWMutex
+
 	go func() {
+		buffer := make([]byte, udp.MaxUDPBufferSize)
 		for {
-			buffer := make([]byte, 2048)
-			n, err := conn.Read(buffer)
+			if c.isClosed {
+				return
+			}
+			n, from, err = conn.ReadFromUDP(buffer)
 			if err != nil {
-				log.Println("Couldn't receive data from server:", err)
+				log.Println("Couldn't receive data:", err)
 				if strings.Contains(err.Error(), "use of closed network connection") {
 					c.udpCloseChan <- struct{}{}
-					return
+				}
+			}
+			if bytes.Equal(buffer[:udp.PrefixLen], []byte{udp.PrefixLen - 1: 0}) && c.IsServer && n > 0 {
+				connMetadata, err := parseUDPConnMetadata(buffer[udp.PrefixLen:n])
+				if connMetadata.EncryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
+					connKey := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
+					c.udpReadyChanLock.Lock()
+					readyChan, ok := c.connReadyChan[connKey]
+					if !ok {
+						readyChan = make(chan struct{}, 1)
+						c.connReadyChan[connKey] = readyChan
+					}
+					c.udpReadyChanLock.Unlock()
+					<-readyChan
+					encryptKey, ok := c.encryptKeys.Load(connKey)
+					if !ok {
+						log.Println("no encrypt key found")
+						continue
+					}
+					k := encryptKey.(*[encryptKeySize]byte)
+					encConn := conn.(*udp.EncryptUDPConn)
+					err = encConn.AddCodec(from, k, connMetadata.EncryptionAlgo, false)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+				}
+
+				if err != nil {
+					log.Println("Couldn't read udp metadata from client:", err)
+					continue
+				}
+				if in == nil && out == nil {
+					k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
+					addrToKeyLock.Lock()
+					addrToKey[from.String()] = k
+					addrToKeyLock.Unlock()
 				}
 				continue
 			}
 
-			data := make([]byte, n)
-			copy(data, buffer)
-			c.udpReadChan <- data
+			if n > 0 {
+				c.udpReadChan <- buffer[:n]
+				if in != nil {
+					atomic.AddUint64(in, uint64(n))
+				} else {
+					addrToKeyLock.RLock()
+					k := addrToKey[from.String()]
+					addrToKeyLock.RUnlock()
+					atomic.AddUint64(&c.reverseBytesEntryToExit[k][buffer[2]], uint64(n))
+				}
+			}
 		}
 	}()
+
 	go func() {
 		for {
+			if c.isClosed {
+				return
+			}
+			to := toAddr
 			select {
 			case data := <-c.udpWriteChan:
-				_, err := conn.Write(data)
+				if conn.RemoteAddr() == nil && from != nil && toAddr == nil {
+					to = from
+				}
+				n, _, err := conn.WriteMsgUDP(data, nil, to)
 				if err != nil {
 					log.Println("Couldn't send data to server:", err)
+					continue
+				}
+				if out != nil {
+					atomic.AddUint64(out, uint64(n))
+				} else {
+					addrToKeyLock.RLock()
+					k := addrToKey[from.String()]
+					addrToKeyLock.RUnlock()
+					atomic.AddUint64(&c.reverseBytesExitToEntry[k][data[2]], uint64(n))
 				}
 			case <-c.udpCloseChan:
 				return
@@ -464,11 +555,11 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 		if err != nil {
 			return nil, nil, err
 		}
-
 		connNonce = remoteConnMetadata.Nonce
 	} else {
 		connNonce = util.RandomBytes(connNonceSize)
 		localConnMetadata.Nonce = connNonce
+		localConnMetadata.PublicKey = c.Wallet.PubKey()
 
 		err := writeConnMetadata(conn, localConnMetadata)
 		if err != nil {
@@ -479,6 +570,7 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 		if err != nil {
 			return nil, nil, err
 		}
+		remoteConnMetadata.Nonce = connNonce
 
 		if len(remoteConnMetadata.PublicKey) != ed25519.PublicKeySize {
 			return nil, nil, fmt.Errorf("invalid pubkey size %d", len(remoteConnMetadata.PublicKey))
@@ -498,6 +590,22 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	}
 
 	encryptKey := computeEncryptKey(connNonce, sharedKey[:])
+	k := string(append(remotePublicKey, connNonce...))
+	c.encryptKeys.Store(k, encryptKey)
+
+	if c.IsServer {
+		c.udpReadyChanLock.Lock()
+		readyChan, ok := c.connReadyChan[k]
+		if !ok {
+			readyChan = make(chan struct{}, 1)
+			c.connReadyChan[k] = readyChan
+		}
+		c.udpReadyChanLock.Unlock()
+		select {
+		case readyChan <- struct{}{}:
+		default:
+		}
+	}
 
 	encryptedConn, err := encryptConn(conn, encryptKey, encryptionAlgo, len(remotePublicKey) > 0)
 	if err != nil {
@@ -507,59 +615,102 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	return encryptedConn, remoteConnMetadata, nil
 }
 
+func (c *Common) wrapUDPConn(conn udp.Conn, addr *net.UDPAddr, remotePublicKey []byte, connNonce []byte) (udp.Conn, error) {
+	localConnMetadata := new(pb.ConnectionMetadata)
+	var err error
+	var encryptionAlgo pb.EncryptionAlgo
+	encConn := new(udp.EncryptUDPConn)
+	encryptionAlgo = c.encryptionAlgo
+
+	conn.SetWriteBuffer(udp.MaxUDPBufferSize)
+	conn.SetReadBuffer(udp.MaxUDPBufferSize)
+
+	if c.IsServer {
+		encConn = conn.(*udp.EncryptUDPConn)
+	} else {
+		encConn = udp.NewEncryptUDPConn(conn)
+	}
+
+	if len(remotePublicKey) > 0 {
+		localConnMetadata.EncryptionAlgo = c.encryptionAlgo
+		localConnMetadata.PublicKey = c.Wallet.PubKey()
+		localConnMetadata.Nonce = connNonce
+		for i := 0; i < 3; i++ {
+			err = writeUDPConnMetadata(conn, nil, localConnMetadata)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if encryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
+			encryptKey, ok := c.encryptKeys.Load(string(append(remotePublicKey, connNonce...)))
+			if !ok || encryptKey == nil {
+				return nil, fmt.Errorf("encrypted key for UDP conn not found")
+			}
+			k := encryptKey.(*[encryptKeySize]byte)
+			err = encConn.AddCodec(addr, k, encryptionAlgo, true)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return encConn, nil
+}
+
 func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
-	hasTCP := len(c.Service.TCP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceTcp) > 0)
 	hasUDP := len(c.Service.UDP) > 0 || (c.ReverseMetadata != nil && len(c.ReverseMetadata.ServiceUdp) > 0)
 	metadata := c.GetMetadata()
 
-	if hasTCP {
-		Close(c.GetTCPConn())
-		addr := metadata.Ip + ":" + strconv.Itoa(int(metadata.TcpPort))
-		var tcpConn net.Conn
-		var err error
-		if c.TcpDialContext != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.DialTimeout)*time.Second)
-			defer cancel()
-			tcpConn, err = c.TcpDialContext(ctx, tcp, addr)
-		} else {
-			tcpConn, err = net.DialTimeout(
-				tcp,
-				addr,
-				time.Duration(c.DialTimeout)*time.Second,
-			)
-		}
+	Close(c.GetTCPConn())
 
-		if err != nil {
-			return err
-		}
-
-		encryptedConn, _, err := c.wrapConn(tcpConn, remotePublicKey, nil)
-		if err != nil {
-			Close(tcpConn)
-			return err
-		}
-
-		c.SetServerTCPConn(encryptedConn)
-
-		log.Println("Connected to TCP at", addr)
+	addr := metadata.Ip + ":" + strconv.Itoa(int(metadata.TcpPort))
+	var tcpConn net.Conn
+	var err error
+	if c.TcpDialContext != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.DialTimeout)*time.Second)
+		defer cancel()
+		tcpConn, err = c.TcpDialContext(ctx, tcp4, addr)
+	} else {
+		tcpConn, err = net.DialTimeout(
+			tcp4,
+			addr,
+			time.Duration(c.DialTimeout)*time.Second,
+		)
 	}
+	if err != nil {
+		return err
+	}
+
+	encryptedConn, remoteMetadata, err := c.wrapConn(tcpConn, remotePublicKey, nil)
+	if err != nil {
+		Close(tcpConn)
+		return err
+	}
+
+	c.SetServerTCPConn(encryptedConn)
+
+	log.Println("Connected to TCP at", addr)
+
 	if hasUDP {
 		udpConn := c.GetUDPConn()
 		Close(udpConn)
 
-		addr := net.UDPAddr{IP: net.ParseIP(metadata.Ip), Port: int(metadata.UdpPort)}
-		udpConn, err := net.DialUDP(
-			udp,
+		addr := &net.UDPAddr{IP: net.ParseIP(metadata.Ip), Port: int(metadata.UdpPort)}
+		udpConn, err = net.DialUDP(
+			udp4,
 			nil,
-			&addr,
+			addr,
 		)
 		if err != nil {
 			return err
 		}
-		c.SetServerUDPConn(udpConn)
+		uConn, err := c.wrapUDPConn(udpConn, addr, remotePublicKey, remoteMetadata.Nonce)
+		if err != nil {
+			return err
+		}
+		c.SetServerUDPConn(uConn)
 		log.Println("Connected to UDP at", addr.String())
-
-		c.StartUDPReaderWriter(udpConn)
 	}
 
 	c.SetConnected(true)
@@ -590,17 +741,18 @@ func (c *Common) CreateServerConn(force bool) error {
 
 			for _, subscriber := range candidateSubs {
 				metadata := subscriber.Metadata
-
-				subscription, err := c.Client.GetSubscription(c.SubscriptionPrefix+c.Service.Name, subscriber.Address)
-				if err == nil {
-					latestMeta, err := ReadMetadata(subscription.Meta)
+				if c.presetNode == nil {
+					subscription, err := c.Client.GetSubscription(c.SubscriptionPrefix+c.Service.Name, subscriber.Address)
 					if err == nil {
-						metadata = latestMeta
+						latestMeta, err := ReadMetadata(subscription.Meta)
+						if err == nil {
+							metadata = latestMeta
+						} else {
+							log.Println(err)
+						}
 					} else {
 						log.Println(err)
 					}
-				} else {
-					log.Println(err)
 				}
 
 				c.SetMetadata(metadata)
@@ -663,6 +815,9 @@ func (c *Common) CreateServerConn(force bool) error {
 }
 
 func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nodes, error) {
+	if c.presetNode != nil {
+		return types.Nodes{c.presetNode}, nil
+	}
 	return c.GetTopPerformanceNodesContext(context.Background(), measureBandwidth, n)
 }
 
@@ -891,7 +1046,7 @@ func measureDelay(ctx context.Context, nodes types.Nodes, concurrentWorkers, num
 			wg.Add(1)
 			tunaUtil.Enqueue(measurementDelayJobChan, func() {
 				addr := node.Metadata.Ip + ":" + strconv.Itoa(int(node.Metadata.TcpPort))
-				delay, err := tunaUtil.DelayMeasurementContext(ctx, tcp, addr, timeout, dialContext)
+				delay, err := tunaUtil.DelayMeasurementContext(ctx, tcp4, addr, timeout, dialContext)
 				if err != nil {
 					if _, ok := err.(net.Error); !ok {
 						log.Println(err)
@@ -950,7 +1105,7 @@ func (c *Common) measureBandwidth(ctx context.Context, nodes types.Nodes, n int,
 			if c.TcpDialContext != nil {
 				dialContext = c.TcpDialContext
 			}
-			conn, err := dialContext(ctx, tcp, addr)
+			conn, err := dialContext(ctx, tcp4, addr)
 			if err != nil {
 				if _, ok := err.(net.Error); !ok {
 					log.Println(err)
@@ -1198,6 +1353,10 @@ func (c *Common) WaitSessions() {
 	case <-waitChan:
 	case <-timeoutChan:
 	}
+}
+
+func (c *Common) SetRemoteNode(node *types.Node) {
+	c.presetNode = node
 }
 
 func ReadMetadata(metadataString string) (*pb.ServiceMetadata, error) {
@@ -1564,7 +1723,10 @@ func handlePaymentStream(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastPayme
 			return fmt.Errorf("couldn't read payment stream: %v", err)
 		}
 
-		_, totalBytes := getTotalCost()
+		totalCost, totalBytes := getTotalCost()
+		if totalCost == 0 {
+			continue
+		}
 
 		var amount *nkn.Amount
 		for i := 0; i < 3; i++ {
@@ -1588,6 +1750,6 @@ func handlePaymentStream(stream *smux.Stream, npc *nkn.NanoPayClaimer, lastPayme
 
 		*lastPaymentAmount = amount.ToFixed64()
 		*lastPaymentTime = time.Now()
-		*bytesPaid = totalBytes
+		*bytesPaid = totalBytes * (npc.Amount().Fixed64 / totalCost)
 	}
 }
