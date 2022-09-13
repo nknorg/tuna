@@ -203,13 +203,13 @@ func writeStreamMetadata(stream *smux.Stream, streamMetadata *pb.StreamMetadata)
 
 // GetFavoriteSeedRPCServer wraps GetFavoriteSeedRPCServerContext with
 // background context.
-func GetFavoriteSeedRPCServer(path, filenamePrefix string, timeout int32) ([]string, error) {
-	return GetFavoriteSeedRPCServerContext(context.Background(), path, filenamePrefix, timeout)
+func GetFavoriteSeedRPCServer(path, filenamePrefix string, timeout int32, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) ([]string, error) {
+	return GetFavoriteSeedRPCServerContext(context.Background(), path, filenamePrefix, timeout, dialContext)
 }
 
 // GetFavoriteSeedRPCServerContext returns an array of node rpc address from
 // favorite node file. Timeout is in unit of millisecond.
-func GetFavoriteSeedRPCServerContext(ctx context.Context, path, filenamePrefix string, timeout int32) ([]string, error) {
+func GetFavoriteSeedRPCServerContext(ctx context.Context, path, filenamePrefix string, timeout int32, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) ([]string, error) {
 	measureStorage := storage.NewMeasureStorage(path, filenamePrefix)
 	err := measureStorage.Load()
 	if err != nil {
@@ -231,6 +231,7 @@ func GetFavoriteSeedRPCServerContext(ctx context.Context, path, filenamePrefix s
 			nodeState, err := nkn.GetNodeStateContext(ctx, &nkn.RPCConfig{
 				SeedRPCServerAddr: nkn.NewStringArray(addr),
 				RPCTimeout:        timeout,
+				HttpDialContext:   dialContext,
 			})
 			if err != nil {
 				return

@@ -942,7 +942,11 @@ func (c *Common) measureBandwidth(ctx context.Context, nodes types.Nodes, n int,
 
 			d := net.Dialer{Timeout: defaultMeasureDelayTimeout}
 			addr := sub.Metadata.Ip + ":" + strconv.Itoa(int(sub.Metadata.TcpPort))
-			conn, err := d.DialContext(ctx, tcp, addr)
+			var dialContext = d.DialContext
+			if c.TcpDialContext != nil {
+				dialContext = c.TcpDialContext
+			}
+			conn, err := dialContext(ctx, tcp, addr)
 			if err != nil {
 				if _, ok := err.(net.Error); !ok {
 					log.Println(err)
