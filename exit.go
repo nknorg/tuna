@@ -107,6 +107,9 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, client *nkn.MultiClient
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
 		config.MaxMeasureWorkerPoolSize,
+		config.TcpDialContext,
+		config.HttpDialContext,
+		config.WsDialContext,
 		config.SortMeasuredNodes,
 		reverseMetadata,
 	)
