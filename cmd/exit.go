@@ -51,7 +51,7 @@ func (e *ExitCommand) Execute(args []string) error {
 	} else if config.Reverse && len(config.MeasureStoragePath) > 0 {
 		c, err := tuna.MergedExitConfig(config)
 		if err == nil {
-			rpcAddrs, err := tuna.GetFavoriteSeedRPCServer(config.MeasureStoragePath, c.SubscriptionPrefix+c.ReverseServiceName, 3000)
+			rpcAddrs, err := tuna.GetFavoriteSeedRPCServer(config.MeasureStoragePath, c.SubscriptionPrefix+c.ReverseServiceName, 3000, config.HttpDialContext)
 			if err == nil {
 				seedRPCServerAddr = nkn.NewStringArray(append(rpcAddrs, nkn.DefaultSeedRPCServerAddr...)...)
 			}

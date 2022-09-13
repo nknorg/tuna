@@ -52,7 +52,7 @@ func (e *EntryCommand) Execute(args []string) error {
 		c, err := tuna.MergedEntryConfig(config)
 		if err == nil {
 			for serviceName := range c.Services {
-				rpcAddrs, err := tuna.GetFavoriteSeedRPCServer(c.MeasureStoragePath, c.SubscriptionPrefix+serviceName, 3000)
+				rpcAddrs, err := tuna.GetFavoriteSeedRPCServer(c.MeasureStoragePath, c.SubscriptionPrefix+serviceName, 3000, c.HttpDialContext)
 				if err == nil {
 					seedRPCServerAddr = nkn.NewStringArray(append(rpcAddrs, nkn.DefaultSeedRPCServerAddr...)...)
 					break
