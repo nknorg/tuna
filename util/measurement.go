@@ -12,14 +12,22 @@ const (
 	writeBufferSize = 1024
 )
 
-func DelayMeasurement(network, address string, timeout time.Duration) (time.Duration, error) {
-	return DelayMeasurementContext(context.Background(), network, address, timeout)
+func DelayMeasurement(network, address string, timeout time.Duration, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (time.Duration, error) {
+	return DelayMeasurementContext(context.Background(), network, address, timeout, dialContext)
 }
 
-func DelayMeasurementContext(ctx context.Context, network, address string, timeout time.Duration) (time.Duration, error) {
+func DelayMeasurementContext(ctx context.Context, network, address string, timeout time.Duration, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (time.Duration, error) {
 	now := time.Now()
-	d := net.Dialer{Timeout: timeout}
-	conn, err := d.DialContext(ctx, network, address)
+
+	var conn net.Conn
+	var err error
+	if dialContext != nil {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		conn, err = dialContext(ctx, network, address)
+	} else {
+		conn, err = net.DialTimeout(network, address, timeout)
+	}
 	delay := time.Since(now)
 	if err != nil {
 		return delay, err

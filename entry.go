@@ -76,6 +76,9 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		config.MeasurementBytesDownLink,
 		config.MeasureStoragePath,
 		config.MaxMeasureWorkerPoolSize,
+		config.TcpDialContext,
+		config.HttpDialContext,
+		config.WsDialContext,
 		config.SortMeasuredNodes,
 		nil,
 	)
@@ -553,7 +556,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		return err
 	}
 
-	clientConfig := &nkn.ClientConfig{}
+	clientConfig := &nkn.ClientConfig{
+		HttpDialContext: config.HttpDialContext,
+		WsDialContext:   config.WsDialContext,
+	}
 	if len(config.SeedRPCServerAddr) > 0 {
 		clientConfig.SeedRPCServerAddr = nkn.NewStringArray(config.SeedRPCServerAddr...)
 	}

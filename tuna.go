@@ -104,6 +104,9 @@ type Common struct {
 	MeasurementBytesDownLink       int32
 	MeasureStoragePath             string
 	MaxPoolSize                    int32
+	TcpDialContext                 func(ctx context.Context, network, addr string) (net.Conn, error)
+	HttpDialContext                func(ctx context.Context, network, addr string) (net.Conn, error)
+	WsDialContext                  func(ctx context.Context, network, addr string) (net.Conn, error)
 
 	udpReadChan                       chan []byte
 	udpWriteChan                      chan []byte
@@ -151,6 +154,9 @@ func NewCommon(
 	measurementBytes int32,
 	measureStoragePath string,
 	maxPoolSize int32,
+	tcpDialContext func(ctx context.Context, network, addr string) (net.Conn, error),
+	httpDialContext func(ctx context.Context, network, addr string) (net.Conn, error),
+	wsDialContext func(ctx context.Context, network, addr string) (net.Conn, error),
 	sortMeasuredNodes func(types.Nodes),
 	reverseMetadata *pb.ServiceMetadata,
 ) (*Common, error) {
@@ -164,7 +170,10 @@ func NewCommon(
 	}
 
 	if client == nil {
-		clientConfig := &nkn.ClientConfig{}
+		clientConfig := &nkn.ClientConfig{
+			HttpDialContext: httpDialContext,
+			WsDialContext:   wsDialContext,
+		}
 		if len(seedRPCServerAddr) > 0 {
 			clientConfig.SeedRPCServerAddr = nkn.NewStringArray(seedRPCServerAddr...)
 		}
@@ -209,6 +218,9 @@ func NewCommon(
 		MeasurementBytesDownLink:       measurementBytes,
 		MeasureStoragePath:             measureStoragePath,
 		MaxPoolSize:                    maxPoolSize,
+		TcpDialContext:                 tcpDialContext,
+		HttpDialContext:                httpDialContext,
+		WsDialContext:                  wsDialContext,
 
 		curveSecretKey:                    curveSecretKey,
 		encryptionAlgo:                    encryptionAlgo,
@@ -502,13 +514,21 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 
 	if hasTCP {
 		Close(c.GetTCPConn())
-
 		addr := metadata.Ip + ":" + strconv.Itoa(int(metadata.TcpPort))
-		tcpConn, err := net.DialTimeout(
-			tcp,
-			addr,
-			time.Duration(c.DialTimeout)*time.Second,
-		)
+		var tcpConn net.Conn
+		var err error
+		if c.TcpDialContext != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.DialTimeout)*time.Second)
+			defer cancel()
+			tcpConn, err = c.TcpDialContext(ctx, tcp, addr)
+		} else {
+			tcpConn, err = net.DialTimeout(
+				tcp,
+				addr,
+				time.Duration(c.DialTimeout)*time.Second,
+			)
+		}
+
 		if err != nil {
 			return err
 		}
@@ -671,7 +691,7 @@ func (c *Common) GetTopPerformanceNodesContext(ctx context.Context, measureBandw
 	} else if len(filterSubs) == 1 {
 		candidateSubs = filterSubs
 	} else {
-		delayMeasuredSubs := measureDelay(ctx, filterSubs, c.measureDelayConcurrentWorkers, measureDelayTopDelayCount, defaultMeasureDelayTimeout)
+		delayMeasuredSubs := measureDelay(ctx, filterSubs, c.measureDelayConcurrentWorkers, measureDelayTopDelayCount, defaultMeasureDelayTimeout, c.TcpDialContext)
 		if measureBandwidth {
 			candidateSubs = c.measureBandwidth(ctx, delayMeasuredSubs, n, c.MeasureBandwidthWorkersTimeout)
 		} else {
@@ -855,7 +875,7 @@ func (c *Common) filterSubscribers(allSubscribers []string, subscriberRaw map[st
 	return filterSubs
 }
 
-func measureDelay(ctx context.Context, nodes types.Nodes, concurrentWorkers, numResults int, timeout time.Duration) types.Nodes {
+func measureDelay(ctx context.Context, nodes types.Nodes, concurrentWorkers, numResults int, timeout time.Duration, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) types.Nodes {
 	timeStart := time.Now()
 	var lock sync.Mutex
 	delayMeasuredSubs := make(types.Nodes, 0, len(nodes))
@@ -867,7 +887,7 @@ func measureDelay(ctx context.Context, nodes types.Nodes, concurrentWorkers, num
 			wg.Add(1)
 			tunaUtil.Enqueue(measurementDelayJobChan, func() {
 				addr := node.Metadata.Ip + ":" + strconv.Itoa(int(node.Metadata.TcpPort))
-				delay, err := tunaUtil.DelayMeasurementContext(ctx, tcp, addr, timeout)
+				delay, err := tunaUtil.DelayMeasurementContext(ctx, tcp, addr, timeout, dialContext)
 				if err != nil {
 					if _, ok := err.(net.Error); !ok {
 						log.Println(err)
