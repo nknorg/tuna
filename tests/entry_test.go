@@ -1,0 +1,77 @@
+package tests
+
+import (
+	"github.com/nknorg/nkn/v2/crypto"
+	"net"
+	"os"
+	"strconv"
+	"testing"
+	"time"
+)
+
+func TestMain(m *testing.M) {
+	server := NewServer("0.0.0.0", "54321")
+	go server.RunUDPEchoServer()
+	go server.RunTCPEchoServer()
+	os.Exit(m.Run())
+}
+
+func TestForwardProxy(t *testing.T) {
+	exitPubKey, exitPrivKey, _ := crypto.GenKeyPair()
+	exitSeed := crypto.GetSeedFromPrivateKey(exitPrivKey)
+
+	_, entryPrivKey, _ := crypto.GenKeyPair()
+	entrySeed := crypto.GetSeedFromPrivateKey(entryPrivKey)
+
+	go runForwardExit(exitSeed)
+	go runForwardEntry(entrySeed, exitPubKey)
+	time.Sleep(10 * time.Second)
+	tcpConn, err := net.Dial("tcp", "127.0.0.1:12345")
+	if err != nil {
+		t.Fatal("dial err:", err)
+	}
+	err = testTCP(tcpConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+		IP:   net.ParseIP("127.0.0.1"),
+		Port: 12345,
+	})
+	err = testUDP(udpConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReverseProxy(t *testing.T) {
+	_, exitPrivKey, _ := crypto.GenKeyPair()
+	exitSeed := crypto.GetSeedFromPrivateKey(exitPrivKey)
+
+	entryPubKey, entryPrivKey, _ := crypto.GenKeyPair()
+	entrySeed := crypto.GetSeedFromPrivateKey(entryPrivKey)
+
+	go runReverseEntry(entrySeed)
+	time.Sleep(10 * time.Second)
+	tcpPort := 0
+	udpPort := 0
+	go runReverseExit(&tcpPort, &udpPort, exitSeed, entryPubKey)
+	time.Sleep(5 * time.Second)
+	tcpAddr := "127.0.0.1:" + strconv.Itoa(tcpPort)
+	tcpConn, err := net.Dial("tcp", tcpAddr)
+	if err != nil {
+		t.Fatal("dial err:", err)
+	}
+	err = testTCP(tcpConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+		IP:   net.ParseIP("127.0.0.1"),
+		Port: udpPort,
+	})
+	err = testUDP(udpConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

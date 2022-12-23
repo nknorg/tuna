@@ -1,0 +1,9 @@
+[
+  {
+    "name": "test",
+    "udp": [54321],
+    "tcp": [54321],
+    "udpBufferSize": 65536,
+    "encryption": "xsalsa20-poly1305"
+  }
+]
