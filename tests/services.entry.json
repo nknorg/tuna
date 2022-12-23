@@ -1,0 +1,8 @@
+[
+  {
+    "name": "test",
+    "tcp": [12345],
+    "udp": [12345],
+    "encryption": "xsalsa20-poly1305"
+  }
+]
