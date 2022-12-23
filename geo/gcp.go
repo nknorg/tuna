@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	GCPGeoUrl  = "https://www.gstatic.com/ipranges/cloud.json"
+	GCPGeoUrl  = "https://gstatic.nkn.org/ipranges/cloud.json"
 	GCPExpired = 7 * 24 * time.Hour
 	GCPFile    = "gcp-ip.json"
 )
