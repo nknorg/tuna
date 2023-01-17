@@ -1,10 +1,13 @@
 # TUNA 🐟
 
-TUNA (Tunnel Using NKN for any Application) allows anyone to tunnel any network
-based services through NKN. Node will receive payment for tunneled traffic
-directly from user.
-
-Note: UDP mode is still work in progress. Please use TCP-only services for now.
+TUNA software is a decentralized, peer-to-peer networking software that enables users to share their unused network
+bandwidth with others.
+It is designed to create a more efficient and decentralized internet by allowing users to earn rewards for sharing their
+resources.
+The TUNA software is integrated with NKN blockchain technology, which allows for secure and transparent transactions
+between users.
+Based services through NKN. Node will receive payment for tunneled traffic
+directly from user
 
 ## Build
 
@@ -17,10 +20,43 @@ Either entry mode or exit mode will need a service definition file
 service file defines what services to use or provide, which ports a service
 uses, and various configurations like encryption.
 
-### Entry Mode
+## How to use
+
+### Forward mode
+
+If you want to use a forward proxy, whether it's an HTTP proxy or a SOCKS5 proxy,
+you can configure it by modifying the `services.json` file from `services.json.example` and starting the TUNA entry.
+By modifying this file, you can specify the type of proxy you want to use (i.e. HTTP or SOCKS5), as well as the port
+listening on your local machine.
+
+For example, the following configuration can be used to start TUNA entry client(forward mode)
+The TUNA entry client automatically searches for TUNA entry servers that provide `httpproxy` services in the network,
+and selects the node with the best speed for connection, then listens on the local port `30080`.
+It provides TCP proxy services. With this functionality, the client can automatically find the best
+available proxy server based on network conditions and provide optimal performance for the user.
+
+Here is an example of `services.json`
+
+```json
+[
+  {
+    "name": "httpproxy",
+    "tcp": [
+      30080
+    ],
+    "encryption": "aes-gcm"
+  }
+]
+```
+
+Then you can start your entry client
 
 You will need a config file `config.entry.json`. You can start by using
-`config.entry.json.example` as template.
+`config.entry.json.example` as template. You can just run the command below
+
+```shell 
+cp config.entry.json.example config.entry.json
+```
 
 Start tuna in entry mode:
 
@@ -31,10 +67,44 @@ Start tuna in entry mode:
 Then you can start using configured services as if they're on your local machine
 (e.g. `127.0.0.1:30080` for HTTP proxy).
 
-### Exit Mode
+### Reverse mode
+
+TUNA reverse mode is a reverse proxy. Exit is the internal service that need to be exposed to public Internet.
+Entry is the service provider that provides public IP address.
+
+For example, if you have a web server running on a local network, and you want to access it from the internet, you can
+start TUNA exit to connect TUNA entry server. This way, when someone accesses the TUNA entry server with the IP address
+and port that is
+configured, TUNA will forward the request to the TUNA exit, then it will forward to the local web server.
+
+Reverse mode is a powerful feature that allows users to access devices and services that are not directly accessible
+from the internet, it can be useful for remote access to local resources, testing, and troubleshooting.
+
+Here is an example of `services.json` for reverse clients which TUNA exit need
+
+```json
+[
+  {
+    "name": "httpproxy",
+    "tcp": [
+      30081
+    ],
+    "encryption": "xsalsa20-poly1305"
+  }
+]
+```
 
 You will need a config file `config.exit.json`. You can start by using
 `config.exit.json.example` as template.
+
+Set `reverse` to `true` in `config.exit.json` and start tuna in exit mode. Then
+your service will be exposed to public network by reverse entry. Your node does
+not need to have public IP address or open port at all.
+
+If you want to use specific port on reverse entry, you need to set `reverseRandomPorts` == `true` in `config.exit.json`,
+otherwise, you will be assigned to a random port.
+
+If the client side does not set the TCP and UDP ports, then the TUNA server will automatically allocate random ports.
 
 Start tuna in exit mode:
 
@@ -42,24 +112,68 @@ Start tuna in exit mode:
 ./tuna exit
 ```
 
-Then users can connect to your services through their tuna entry and pay you NKN
-based on bandwidth comsumption.
+## How to become a TUNA service provider and earn NKN from it
 
-### Reverse Entry Mode
+There are two ways for users to earn NKN by providing services using TUNA.
+
+### Entry Mode
+
+**The first way is to use the reverse mode of the entry to provide reverse proxy services**
+
+```shell
+./tuna -b=[YOUR_BENEFICIARY_ADDR] entry --reverse
+```
 
 Set `reverse` to `true` in `config.entry.json` and start tuna in entry mode.
 Then users can use your node as reverse proxy and pay you NKN based on bandwidth
-comsumption.
+consumption.
 
-### Reverse Exit Mode
+Or you can set `reverseBeneficiaryAddr` in `config.entry.json`
 
-Set `reverse` to `true` in `config.exit.json` and start tuna in exit mode. Then
-your service will be exposed to public network by reverse entry. Your node does
-not need to have public IP address or open port at all.
+You can also change the default listening port by setting `reverseTCP` & `reverseUDP` in entry config file.
+
+Remember to set your price of your services by setting `reversePrice` default value is 0.0002 NKN per MB.
+
+### Exit Mode
+
+**The second way to earn revenue using TUNA is by using the forward mode of the exit to provide forward proxy services**
+
+Here is an example of `services.json`
+
+```json
+[
+  {
+    "name": "httpproxy",
+    "tcp": [
+      30080
+    ],
+    "encryption": "xsalsa20-poly1305"
+  },
+  {
+    "name": "socksproxy",
+    "tcp": [
+      30489
+    ],
+    "udp": [
+      30489
+    ],
+    "encryption": "xsalsa20-poly1305"
+  }
+]
+```
+
+Then you can start your exit server by `./tuna -b=[YOUR_BENEFICIARY_ADDR] exit`
+
+Don't forget to deploy your proxy services at port 30080 & 30489.
+
+You can change the port as long as you ensure that the listening port is consistent with `services.json`
+
+Then users can connect to your services through their tuna entry and pay you NKN
+based on bandwidth consumption.
 
 ### Config
 
-Entry mode config `config.entry.json`:
+#### Entry mode config `config.entry.json`:
 
 * `services` services you want to use
 * `dialTimeout` timeout for NKN node connection
@@ -74,7 +188,7 @@ Entry mode config `config.entry.json`:
 * `reverseSubscriptionDuration` duration for subscription in blocks
 * `reverseSubscriptionFee` fee used for subscription
 
-Exit mode config `config.exit.json`:
+#### Exit mode config `config.exit.json`:
 
 * `beneficiaryAddr` beneficiary address (NKN wallet address to receive rewards)
 * `listenTCP` TCP port to listen for connections
@@ -86,16 +200,29 @@ Exit mode config `config.exit.json`:
 * `subscriptionFee` fee used for subscription
 * `services` services you want to provide
 * `reverse` should be used if you don't have public IP and want to use another `server` for accepting clients
-* `reverseRandomPorts` meaning reverse entry can use random ports instead of specified ones (useful when service has dynamic ports)
+* `reverseRandomPorts` meaning reverse entry can use random ports instead of specified ones (useful when service has
+  dynamic ports)
 * `reverseMaxPrice` max accepted price for reverse service, unit is NKN per MB traffic
 * `reverseNanoPayFee` nanoPay transaction fee for reverse service
 * `reverseIPFilter` reverse service IP address filter
 
-## Use as library
+### encryption
+
+TUNA supports AES and Salsa20 encryption algorithms, you can refer to the JSON configuration example above.
+
+### Service filter
+
+Users can configure several settings for the services offered by TUNA, such as setting a maximum price for the service,
+creating IP whitelists and blacklists, creating a whitelist and blacklist of service provider public keys and specifying
+the geographical location of the server. Remember using same service name in `services.json`
+and `config.exit(or entry).json` when you set those settings
+You can check `geo.IPFilter` and `filter.NknFilter` for more details.
+
+## Use TUNA as library
 
 Most of them times you just need to run tuna entry/exit as a separate program
 together with the services, but you can also use tuna as a library. See
-[cmd/entry.go](cmd/entry.go) and [cmd/exit.go](cmd/exit.go) for examples.
+[tests/util.go](tests/util.go) for entry/exit & forward/reverse examples.
 
 ## Compiling to iOS/Android native library
 
