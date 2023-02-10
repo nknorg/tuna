@@ -573,7 +573,7 @@ func (c *Common) CreateServerConn(force bool) error {
 	if !c.IsServer && (!c.GetConnected() || force) {
 		for {
 			if c.isClosed {
-				return errors.New("closed")
+				return ErrClosed
 			}
 
 			err := c.SetPaymentReceiver("")
