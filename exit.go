@@ -482,6 +482,9 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 	for {
 		err := te.Common.CreateServerConn(true)
 		if err != nil {
+			if err == ErrClosed {
+				return nil
+			}
 			log.Println("Couldn't connect to reverse entry:", err)
 			time.Sleep(1 * time.Second)
 			continue
