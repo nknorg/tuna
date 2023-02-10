@@ -572,6 +572,10 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 func (c *Common) CreateServerConn(force bool) error {
 	if !c.IsServer && (!c.GetConnected() || force) {
 		for {
+			if c.isClosed {
+				return errors.New("closed")
+			}
+
 			err := c.SetPaymentReceiver("")
 			if err != nil {
 				return err
