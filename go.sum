@@ -249,8 +249,8 @@ github.com/nknorg/encrypted-stream v1.0.1/go.mod h1:VXJDhlUoF3uJSFLwIWnRLkiX5QPF
 github.com/nknorg/go-nat v1.0.1/go.mod h1:dblX1Ac2j08rTUGs5CKCAfjHGN5eDFhbeqt2rccSP3Y=
 github.com/nknorg/ncp-go v1.0.3 h1:VMsOB8hZ7Tz/Y8oESzPvThxjXmLz8Ob7jKLloS8baUQ=
 github.com/nknorg/ncp-go v1.0.3/go.mod h1:ALtnk9lKKSwoOXatbfLLQvQWGkRnJomrmbTZjvg810E=
-github.com/nknorg/nkn-sdk-go v1.4.2-0.20220913025957-d204cd062fd4 h1:V3BgMYhL/s8tFBxkzS4LQiu+xVCuWjukQ2l9F2N+faA=
-github.com/nknorg/nkn-sdk-go v1.4.2-0.20220913025957-d204cd062fd4/go.mod h1:bBeSzhOPwBnPvCzpbZmNnxz/acUTFVDDqs74NmJgPW8=
+github.com/nknorg/nkn-sdk-go v1.4.2 h1:kZseGZbfg45akCgiwU0vPVlGhl8k+hFzJRqYMZ22PlA=
+github.com/nknorg/nkn-sdk-go v1.4.2/go.mod h1:bBeSzhOPwBnPvCzpbZmNnxz/acUTFVDDqs74NmJgPW8=
 github.com/nknorg/nkn/v2 v2.1.7/go.mod h1:4xzrHJCI/FDFZmlt606Mn9ScKY4UUCFoaWydL1TzQRs=
 github.com/nknorg/nkn/v2 v2.1.8 h1:h25rqQ0E8CvlN8Jm4zF6CBBLgwdoSS7HHdrU4ZYcmjA=
 github.com/nknorg/nkn/v2 v2.1.8/go.mod h1:bKBIGARD/pVbHog5091BaXvmsFq74KIvy9jUDUkvsSs=
