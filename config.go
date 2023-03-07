@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	DefaultSubscriptionPrefix = "tuna_v1."
+	DefaultSubscriptionPrefix = "tuna_v111."
 	DefaultReverseServiceName = "reverse"
 
 	defaultNanoPayDuration                   = 4320 * 30

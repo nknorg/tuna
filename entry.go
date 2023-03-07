@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/nknorg/tuna/udp"
 	"github.com/rdegges/go-ipify"
 	"log"
 	"net"
@@ -482,7 +481,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 
 			data := <-serverReadChan
 
-			if len(data) < udp.PrefixLen {
+			if len(data) < PrefixLen {
 				log.Println("empty udp packet received")
 				te.Close()
 				return
@@ -505,7 +504,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 			}
 			clientAddr := x.(*net.UDPAddr)
 
-			_, _, err = serviceConn.WriteMsgUDP(data[udp.PrefixLen:], nil, clientAddr)
+			_, _, err = serviceConn.WriteMsgUDP(data[PrefixLen:], nil, clientAddr)
 			if err != nil {
 				log.Println("Couldn't send data to client:", err)
 			}
@@ -521,7 +520,7 @@ func (te *TunaEntry) listenUDP(ip net.IP, ports []uint32) ([]uint32, error) {
 
 		bs := te.Service.UDPBufferSize
 		if te.Reverse {
-			bs = udp.MaxUDPBufferSize
+			bs = MaxUDPBufferSize
 		}
 		localConn.SetWriteBuffer(bs)
 		localConn.SetReadBuffer(bs)
@@ -591,7 +590,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	if err != nil {
 		return err
 	}
-	encConn := udp.NewEncryptUDPConn(uConn)
+	encConn := NewEncryptUDPConn(uConn)
 	encKeys := new(sync.Map)
 	udpEntrys := new(sync.Map)
 	tcpEntrys := new(sync.Map)
@@ -603,15 +602,15 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		if encConn.IsClosed() {
 			return
 		}
-		buffer := make([]byte, udp.MaxUDPBufferSize)
+		buffer := make([]byte, MaxUDPBufferSize)
 		for {
 			n, from, err := encConn.ReadFromUDP(buffer)
 			if err != nil {
 				log.Println("Couldn't receive exit's data:", err)
 				continue
 			}
-			if bytes.Equal(buffer[:udp.PrefixLen], []byte{udp.PrefixLen - 1: 0}) && n > 0 {
-				connMetadata, err := parseUDPConnMetadata(buffer[udp.PrefixLen:n])
+			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && n > 0 {
+				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
 				if err != nil {
 					log.Println("Couldn't read udp metadata from client:", err)
 					return

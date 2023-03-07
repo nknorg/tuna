@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/nknorg/tuna/udp"
 	"io"
 	"io/ioutil"
 	"log"
@@ -132,7 +131,7 @@ type Common struct {
 	metadata             *pb.ServiceMetadata
 	connected            bool
 	tcpConn              net.Conn
-	udpConn              udp.Conn
+	udpConn              Conn
 	isClosed             bool
 	sharedKeys           map[string]*[sharedKeySize]byte
 	encryptKeys          sync.Map
@@ -272,13 +271,13 @@ func (c *Common) SetServerTCPConn(conn net.Conn) {
 	c.tcpConn = conn
 }
 
-func (c *Common) GetUDPConn() udp.Conn {
+func (c *Common) GetUDPConn() Conn {
 	c.RLock()
 	defer c.RUnlock()
 	return c.udpConn
 }
 
-func (c *Common) SetServerUDPConn(conn udp.Conn) {
+func (c *Common) SetServerUDPConn(conn Conn) {
 	c.Lock()
 	defer c.Unlock()
 	c.udpConn = conn
@@ -308,7 +307,7 @@ func (c *Common) GetServerTCPConn(force bool) (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *Common) GetServerUDPConn(force bool) (udp.Conn, error) {
+func (c *Common) GetServerUDPConn(force bool) (Conn, error) {
 	err := c.CreateServerConn(force)
 	if err != nil {
 		return nil, err
@@ -394,7 +393,7 @@ func (c *Common) GetPrice() (common.Fixed64, common.Fixed64) {
 	return c.entryToExitPrice, c.exitToEntryPrice
 }
 
-func (c *Common) StartUDPReaderWriter(conn udp.Conn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
+func (c *Common) StartUDPReaderWriter(conn Conn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
 	from := new(net.UDPAddr)
 	n := 0
 	var err error
@@ -402,7 +401,7 @@ func (c *Common) StartUDPReaderWriter(conn udp.Conn, toAddr *net.UDPAddr, in *ui
 	var addrToKeyLock sync.RWMutex
 
 	go func() {
-		buffer := make([]byte, udp.MaxUDPBufferSize)
+		buffer := make([]byte, MaxUDPBufferSize)
 		for {
 			if c.isClosed {
 				return
@@ -414,8 +413,8 @@ func (c *Common) StartUDPReaderWriter(conn udp.Conn, toAddr *net.UDPAddr, in *ui
 					c.udpCloseChan <- struct{}{}
 				}
 			}
-			if bytes.Equal(buffer[:udp.PrefixLen], []byte{udp.PrefixLen - 1: 0}) && c.IsServer && n > 0 {
-				connMetadata, err := parseUDPConnMetadata(buffer[udp.PrefixLen:n])
+			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && c.IsServer && n > 0 {
+				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
 				if connMetadata.EncryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
 					connKey := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
 					c.udpReadyChanLock.Lock()
@@ -432,7 +431,7 @@ func (c *Common) StartUDPReaderWriter(conn udp.Conn, toAddr *net.UDPAddr, in *ui
 						continue
 					}
 					k := encryptKey.(*[encryptKeySize]byte)
-					encConn := conn.(*udp.EncryptUDPConn)
+					encConn := conn.(*EncryptUDPConn)
 					err = encConn.AddCodec(from, k, connMetadata.EncryptionAlgo, false)
 					if err != nil {
 						log.Println(err)
@@ -615,20 +614,20 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	return encryptedConn, remoteConnMetadata, nil
 }
 
-func (c *Common) wrapUDPConn(conn udp.Conn, addr *net.UDPAddr, remotePublicKey []byte, connNonce []byte) (udp.Conn, error) {
+func (c *Common) wrapUDPConn(conn Conn, addr *net.UDPAddr, remotePublicKey []byte, connNonce []byte) (Conn, error) {
 	localConnMetadata := new(pb.ConnectionMetadata)
 	var err error
 	var encryptionAlgo pb.EncryptionAlgo
-	encConn := new(udp.EncryptUDPConn)
+	encConn := new(EncryptUDPConn)
 	encryptionAlgo = c.encryptionAlgo
 
-	conn.SetWriteBuffer(udp.MaxUDPBufferSize)
-	conn.SetReadBuffer(udp.MaxUDPBufferSize)
+	conn.SetWriteBuffer(MaxUDPBufferSize)
+	conn.SetReadBuffer(MaxUDPBufferSize)
 
 	if c.IsServer {
-		encConn = conn.(*udp.EncryptUDPConn)
+		encConn = conn.(*EncryptUDPConn)
 	} else {
-		encConn = udp.NewEncryptUDPConn(conn)
+		encConn = NewEncryptUDPConn(conn)
 	}
 
 	if len(remotePublicKey) > 0 {

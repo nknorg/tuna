@@ -10,7 +10,6 @@ import (
 	"github.com/nknorg/tuna"
 	"github.com/nknorg/tuna/pb"
 	"github.com/nknorg/tuna/types"
-	udpconn "github.com/nknorg/tuna/udp"
 	"github.com/nknorg/tuna/util"
 	"io"
 	"log"
@@ -100,7 +99,7 @@ func runForwardEntry(seed, exitPubKey []byte) error {
 			if service.Name == serviceName {
 				go func(service tuna.Service, serviceInfo tuna.ServiceInfo) {
 					if len(service.UDP) > 0 && service.UDPBufferSize == 0 {
-						service.UDPBufferSize = udpconn.DefaultUDPBufferSize
+						service.UDPBufferSize = tuna.DefaultUDPBufferSize
 					}
 					for {
 						te, err := tuna.NewTunaEntry(service, serviceInfo, entryWallet, nil, entryConfig)
