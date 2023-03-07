@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 const (
@@ -193,4 +194,40 @@ func (ec *EncryptUDPConn) RemoteUDPAddr() *net.UDPAddr {
 	host, portStr, _ := net.SplitHostPort(ec.RemoteAddr().String())
 	port, _ := strconv.Atoi(portStr)
 	return &net.UDPAddr{IP: net.ParseIP(host), Port: port}
+}
+
+func (ec *EncryptUDPConn) SetDeadline(t time.Time) error {
+	ec.lock.RLock()
+	defer ec.lock.RUnlock()
+
+	if ec.isClosed {
+		return ErrClosed
+	}
+
+	c := ec.conn.(*net.UDPConn)
+	return c.SetDeadline(t)
+}
+
+func (ec *EncryptUDPConn) SetReadDeadline(t time.Time) error {
+	ec.lock.RLock()
+	defer ec.lock.RUnlock()
+
+	if ec.isClosed {
+		return ErrClosed
+	}
+
+	c := ec.conn.(*net.UDPConn)
+	return c.SetReadDeadline(t)
+}
+
+func (ec *EncryptUDPConn) SetWriteDeadline(t time.Time) error {
+	ec.lock.RLock()
+	defer ec.lock.RUnlock()
+
+	if ec.isClosed {
+		return ErrClosed
+	}
+
+	c := ec.conn.(*net.UDPConn)
+	return c.SetWriteDeadline(t)
 }
