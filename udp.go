@@ -16,7 +16,7 @@ const (
 	MaxUDPBufferSize     = 65527
 )
 
-type Conn interface {
+type UDPConn interface {
 	WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error)
 	ReadFromUDP(b []byte) (n int, addr *net.UDPAddr, err error)
 
@@ -30,7 +30,7 @@ type Conn interface {
 }
 
 type EncryptUDPConn struct {
-	conn Conn
+	conn UDPConn
 
 	encoders map[string]*stream.Encoder
 	decoders map[string]*stream.Decoder
@@ -44,7 +44,7 @@ type EncryptUDPConn struct {
 	readBuffer []byte
 }
 
-func NewEncryptUDPConn(conn Conn) *EncryptUDPConn {
+func NewEncryptUDPConn(conn UDPConn) *EncryptUDPConn {
 	ec := &EncryptUDPConn{
 		conn:       conn,
 		encoders:   make(map[string]*stream.Encoder),

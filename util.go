@@ -181,7 +181,7 @@ func parseUDPConnMetadata(metadata []byte) (*pb.ConnectionMetadata, error) {
 	return connMetadata, nil
 }
 
-func writeUDPConnMetadata(conn Conn, addr *net.UDPAddr, connMetadata *pb.ConnectionMetadata) error {
+func writeUDPConnMetadata(conn UDPConn, addr *net.UDPAddr, connMetadata *pb.ConnectionMetadata) error {
 	b, err := proto.Marshal(connMetadata)
 	if err != nil {
 		return err
