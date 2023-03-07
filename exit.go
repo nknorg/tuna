@@ -3,7 +3,6 @@ package tuna
 import (
 	"errors"
 	"fmt"
-	"github.com/nknorg/tuna/udp"
 	"github.com/rdegges/go-ipify"
 	"log"
 	"net"
@@ -68,7 +67,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, client *nkn.MultiClient
 			UDPBufferSize: services[0].UDPBufferSize,
 		}
 		if service.UDPBufferSize == 0 {
-			service.UDPBufferSize = udp.DefaultUDPBufferSize
+			service.UDPBufferSize = DefaultUDPBufferSize
 		}
 
 		serviceInfo = &ServiceInfo{
@@ -357,7 +356,7 @@ func (te *TunaExit) getServiceConn(connID []byte, serviceID byte, portID byte) (
 		}
 
 		if service.UDPBufferSize == 0 {
-			service.UDPBufferSize = udp.DefaultUDPBufferSize
+			service.UDPBufferSize = DefaultUDPBufferSize
 		}
 		conn.SetWriteBuffer(service.UDPBufferSize)
 		conn.SetReadBuffer(service.UDPBufferSize)
@@ -393,7 +392,7 @@ func (te *TunaExit) listenUDP(port int) error {
 		log.Println("Couldn't bind listener:", err)
 		return err
 	}
-	encConn := udp.NewEncryptUDPConn(conn)
+	encConn := NewEncryptUDPConn(conn)
 	udpConn, err := te.wrapUDPConn(encConn, nil, nil, nil)
 	if err != nil {
 		log.Println("wrap udp conn err:", err)
@@ -417,7 +416,7 @@ func (te *TunaExit) readUDP() {
 				continue
 			}
 			data := <-serverReadChan
-			if len(data) < udp.PrefixLen {
+			if len(data) < PrefixLen {
 				log.Println("empty udp packet received")
 				te.Close()
 				return
@@ -428,7 +427,7 @@ func (te *TunaExit) readUDP() {
 				log.Println("get service conn error:", err)
 				continue
 			}
-			_, _, err = serviceConn.WriteMsgUDP(data[udp.PrefixLen:], nil, nil)
+			_, _, err = serviceConn.WriteMsgUDP(data[PrefixLen:], nil, nil)
 			if err != nil {
 				log.Println("Couldn't send data to service:", err)
 			}
@@ -520,7 +519,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		}
 
 		udpPort := 0
-		var udpConn udp.Conn
+		var udpConn Conn
 		if len(service.UDP) > 0 {
 			udpConn, err = te.Common.GetServerUDPConn(false)
 			if err != nil {
