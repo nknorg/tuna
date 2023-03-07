@@ -131,7 +131,7 @@ type Common struct {
 	metadata             *pb.ServiceMetadata
 	connected            bool
 	tcpConn              net.Conn
-	udpConn              Conn
+	udpConn              UDPConn
 	isClosed             bool
 	sharedKeys           map[string]*[sharedKeySize]byte
 	encryptKeys          sync.Map
@@ -271,13 +271,13 @@ func (c *Common) SetServerTCPConn(conn net.Conn) {
 	c.tcpConn = conn
 }
 
-func (c *Common) GetUDPConn() Conn {
+func (c *Common) GetUDPConn() UDPConn {
 	c.RLock()
 	defer c.RUnlock()
 	return c.udpConn
 }
 
-func (c *Common) SetServerUDPConn(conn Conn) {
+func (c *Common) SetServerUDPConn(conn UDPConn) {
 	c.Lock()
 	defer c.Unlock()
 	c.udpConn = conn
@@ -307,7 +307,7 @@ func (c *Common) GetServerTCPConn(force bool) (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *Common) GetServerUDPConn(force bool) (Conn, error) {
+func (c *Common) GetServerUDPConn(force bool) (UDPConn, error) {
 	err := c.CreateServerConn(force)
 	if err != nil {
 		return nil, err
@@ -393,7 +393,7 @@ func (c *Common) GetPrice() (common.Fixed64, common.Fixed64) {
 	return c.entryToExitPrice, c.exitToEntryPrice
 }
 
-func (c *Common) StartUDPReaderWriter(conn Conn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
+func (c *Common) StartUDPReaderWriter(conn UDPConn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
 	from := new(net.UDPAddr)
 	n := 0
 	var err error
@@ -614,7 +614,7 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	return encryptedConn, remoteConnMetadata, nil
 }
 
-func (c *Common) wrapUDPConn(conn Conn, addr *net.UDPAddr, remotePublicKey []byte, connNonce []byte) (Conn, error) {
+func (c *Common) wrapUDPConn(conn UDPConn, addr *net.UDPAddr, remotePublicKey []byte, connNonce []byte) (UDPConn, error) {
 	localConnMetadata := new(pb.ConnectionMetadata)
 	var err error
 	var encryptionAlgo pb.EncryptionAlgo

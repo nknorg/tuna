@@ -519,7 +519,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 		}
 
 		udpPort := 0
-		var udpConn Conn
+		var udpConn UDPConn
 		if len(service.UDP) > 0 {
 			udpConn, err = te.Common.GetServerUDPConn(false)
 			if err != nil {
