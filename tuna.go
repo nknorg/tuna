@@ -21,9 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nknorg/tuna/storage"
-	"github.com/nknorg/tuna/types"
-
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
 	"github.com/nknorg/nkn/v2/config"
@@ -35,10 +32,16 @@ import (
 	"github.com/nknorg/tuna/filter"
 	"github.com/nknorg/tuna/geo"
 	"github.com/nknorg/tuna/pb"
+	"github.com/nknorg/tuna/storage"
+	"github.com/nknorg/tuna/types"
 	tunaUtil "github.com/nknorg/tuna/util"
 	"github.com/xtaci/smux"
 	"golang.org/x/crypto/nacl/box"
 	"google.golang.org/protobuf/proto"
+
+	// blank import to prevent gomobile from being removed by go mod tidy and
+	// causing gomobile compile error
+	_ "golang.org/x/mobile/asset"
 )
 
 const (
@@ -131,7 +134,7 @@ type Common struct {
 	metadata             *pb.ServiceMetadata
 	connected            bool
 	tcpConn              net.Conn
-	udpConn              UDPConn
+	udpConn              *EncryptUDPConn
 	isClosed             bool
 	sharedKeys           map[string]*[sharedKeySize]byte
 	encryptKeys          sync.Map
@@ -271,13 +274,13 @@ func (c *Common) SetServerTCPConn(conn net.Conn) {
 	c.tcpConn = conn
 }
 
-func (c *Common) GetUDPConn() UDPConn {
+func (c *Common) GetUDPConn() *EncryptUDPConn {
 	c.RLock()
 	defer c.RUnlock()
 	return c.udpConn
 }
 
-func (c *Common) SetServerUDPConn(conn UDPConn) {
+func (c *Common) SetServerUDPConn(conn *EncryptUDPConn) {
 	c.Lock()
 	defer c.Unlock()
 	c.udpConn = conn
@@ -393,7 +396,7 @@ func (c *Common) GetPrice() (common.Fixed64, common.Fixed64) {
 	return c.entryToExitPrice, c.exitToEntryPrice
 }
 
-func (c *Common) StartUDPReaderWriter(conn UDPConn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
+func (c *Common) startUDPReaderWriter(conn UDPConn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
 	from := new(net.UDPAddr)
 	n := 0
 	var err error
@@ -614,7 +617,7 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	return encryptedConn, remoteConnMetadata, nil
 }
 
-func (c *Common) wrapUDPConn(conn UDPConn, addr *net.UDPAddr, remotePublicKey []byte, connNonce []byte) (UDPConn, error) {
+func (c *Common) wrapUDPConn(conn UDPConn, addr *net.UDPAddr, remotePublicKey []byte, connNonce []byte) (*EncryptUDPConn, error) {
 	localConnMetadata := new(pb.ConnectionMetadata)
 	var err error
 	var encryptionAlgo pb.EncryptionAlgo
@@ -627,7 +630,7 @@ func (c *Common) wrapUDPConn(conn UDPConn, addr *net.UDPAddr, remotePublicKey []
 	if c.IsServer {
 		encConn = conn.(*EncryptUDPConn)
 	} else {
-		encConn = NewEncryptUDPConn(conn)
+		encConn = NewEncryptUDPConn(conn.(*net.UDPConn))
 	}
 
 	if len(remotePublicKey) > 0 {
@@ -692,11 +695,11 @@ func (c *Common) UpdateServerConn(remotePublicKey []byte) error {
 	log.Println("Connected to TCP at", addr)
 
 	if hasUDP {
-		udpConn := c.GetUDPConn()
-		Close(udpConn)
+		oldConn := c.GetUDPConn()
+		Close(oldConn)
 
 		addr := &net.UDPAddr{IP: net.ParseIP(metadata.Ip), Port: int(metadata.UdpPort)}
-		udpConn, err = net.DialUDP(
+		udpConn, err := net.DialUDP(
 			udp4,
 			nil,
 			addr,

@@ -13,6 +13,7 @@ require (
 	github.com/rdegges/go-ipify v0.0.0-20150526035502-2d94a6a86c40
 	github.com/xtaci/smux v2.0.1+incompatible
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
+	golang.org/x/mobile v0.0.0-20230301163155-e0f57694e12c
 	google.golang.org/protobuf v1.27.1
 )
 

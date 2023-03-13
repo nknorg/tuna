@@ -398,7 +398,7 @@ func (te *TunaExit) listenUDP(port int) error {
 		log.Println("wrap udp conn err:", err)
 		return err
 	}
-	te.StartUDPReaderWriter(udpConn, nil, nil, nil)
+	te.startUDPReaderWriter(udpConn, nil, nil, nil)
 	te.udpConn = udpConn
 	te.readUDP()
 	return nil
@@ -515,7 +515,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			continue
 		}
 		if te.udpConn != nil {
-			te.StartUDPReaderWriter(te.udpConn, nil, &te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry)
+			te.startUDPReaderWriter(te.udpConn, nil, &te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry)
 		}
 
 		udpPort := 0

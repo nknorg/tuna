@@ -2,13 +2,14 @@ package tuna
 
 import (
 	"fmt"
-	"github.com/nknorg/encrypted-stream"
-	"github.com/nknorg/tuna/pb"
 	"io"
 	"net"
 	"strconv"
 	"sync"
 	"time"
+
+	stream "github.com/nknorg/encrypted-stream"
+	"github.com/nknorg/tuna/pb"
 )
 
 const (
@@ -45,7 +46,7 @@ type EncryptUDPConn struct {
 	readBuffer []byte
 }
 
-func NewEncryptUDPConn(conn UDPConn) *EncryptUDPConn {
+func NewEncryptUDPConn(conn *net.UDPConn) *EncryptUDPConn {
 	ec := &EncryptUDPConn{
 		conn:       conn,
 		encoders:   make(map[string]*stream.Encoder),
