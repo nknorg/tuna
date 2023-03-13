@@ -358,6 +358,9 @@ func (te *TunaExit) getServiceConn(connID []byte, serviceID byte, portID byte) (
 		if service.UDPBufferSize == 0 {
 			service.UDPBufferSize = DefaultUDPBufferSize
 		}
+		if te.IsServer {
+			service.UDPBufferSize = MaxUDPBufferSize
+		}
 		conn.SetWriteBuffer(service.UDPBufferSize)
 		conn.SetReadBuffer(service.UDPBufferSize)
 
@@ -518,7 +521,6 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			te.startUDPReaderWriter(te.udpConn, nil, &te.reverseBytesEntryToExit, &te.reverseBytesExitToEntry)
 		}
 
-		udpPort := 0
 		var udpConn UDPConn
 		if len(service.UDP) > 0 {
 			udpConn, err = te.Common.GetServerUDPConn(false)
@@ -526,20 +528,6 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 				log.Println(err)
 				time.Sleep(1 * time.Second)
 				continue
-			}
-			if udpConn != nil {
-				_, udpPortString, err := net.SplitHostPort(udpConn.LocalAddr().String())
-				if err != nil {
-					log.Println(err)
-					time.Sleep(1 * time.Second)
-					continue
-				}
-				udpPort, err = strconv.Atoi(udpPortString)
-				if err != nil {
-					log.Println(err)
-					time.Sleep(1 * time.Second)
-					continue
-				}
 			}
 		}
 
@@ -559,7 +547,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 			udpPorts,
 			"",
 			0,
-			uint32(udpPort),
+			0,
 			"",
 			te.config.BeneficiaryAddr,
 		)
