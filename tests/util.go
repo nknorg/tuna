@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"github.com/nknorg/tuna/util"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"strconv"
 )
@@ -293,7 +293,7 @@ func testTCP(conn net.Conn) error {
 func testUDP(conn *net.UDPConn) error {
 	send := make([]byte, 4096)
 	receive := make([]byte, 4096)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1000; i++ {
 		rand.Read(send)
 		conn.Write(send)
 		conn.Read(receive)

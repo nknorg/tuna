@@ -595,8 +595,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	udpEntrys := new(sync.Map)
 	tcpEntrys := new(sync.Map)
 	addrToKey := make(map[string]string)
+	keyToAddr := make(map[string]string)
 	connReady := make(map[string]chan struct{})
 	var addrToKeyLock sync.RWMutex
+	var keyToAddrLock sync.RWMutex
 	var connReadyLock sync.RWMutex
 	go func() {
 		if encConn.IsClosed() {
@@ -613,7 +615,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
 				if err != nil {
 					log.Println("Couldn't read udp metadata from client:", err)
-					return
+					continue
 				}
 				k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
 				connReadyLock.Lock()
@@ -650,6 +652,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				addrToKeyLock.Lock()
 				addrToKey[from.String()] = k
 				addrToKeyLock.Unlock()
+
+				keyToAddrLock.Lock()
+				keyToAddr[k] = from.String()
+				keyToAddrLock.Unlock()
 				continue
 			}
 			entry, ok := udpEntrys.Load(from.String())
@@ -684,8 +690,6 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	if err != nil {
 		return err
 	}
-
-	udpReadChans := make(map[string]chan []byte)
 
 	go func() {
 		for {
@@ -767,13 +771,17 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 
 					te.SetServerTCPConn(encryptedConn)
 
-					if metadata.UdpPort > 0 {
-						ip, _, err := net.SplitHostPort(encryptedConn.RemoteAddr().String())
+					if len(metadata.ServiceUdp) > 0 {
+						keyToAddrLock.RLock()
+						clientAddr := keyToAddr[connKey]
+						keyToAddrLock.RUnlock()
+						ip, portStr, err := net.SplitHostPort(clientAddr)
 						if err != nil {
 							return fmt.Errorf("parse host error: %v", err)
 						}
+						port, err := strconv.Atoi(portStr)
 
-						udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: int(metadata.UdpPort)}
+						udpAddr := net.UDPAddr{IP: net.ParseIP(ip), Port: port}
 						udpReadChan := make(chan []byte)
 						udpWriteChan := make(chan []byte)
 
@@ -790,15 +798,12 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 										continue
 									}
 									addrToKeyLock.RLock()
-									_, ok = addrToKey[udpAddr.String()]
+									key, ok := addrToKey[udpAddr.String()]
 									addrToKeyLock.RUnlock()
 									if !ok || len(data) < 2 {
 										log.Println("no key found from this udp addr:", udpAddr.String())
-										return
+										continue
 									}
-									addrToKeyLock.RLock()
-									key := addrToKey[udpAddr.String()]
-									addrToKeyLock.RUnlock()
 									atomic.AddUint64(&te.Common.reverseBytesExitToEntry[key][data[2]], uint64(n))
 								case <-te.udpCloseChan:
 									return
@@ -806,7 +811,6 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 							}
 						}()
 
-						udpReadChans[udpAddr.String()] = udpReadChan
 						te.SetServerUDPReadChan(udpReadChan)
 						te.SetServerUDPWriteChan(udpWriteChan)
 					}
