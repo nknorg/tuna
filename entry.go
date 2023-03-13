@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/rdegges/go-ipify"
 	"log"
 	"net"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	"github.com/nknorg/tuna/pb"
 	"github.com/nknorg/tuna/util"
 	"github.com/patrickmn/go-cache"
+	"github.com/rdegges/go-ipify"
 	"github.com/xtaci/smux"
 )
 
@@ -116,7 +116,7 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 			continue
 		}
 		if te.udpConn != nil {
-			te.StartUDPReaderWriter(te.udpConn, nil, &te.bytesExitToEntry, &te.bytesEntryToExit)
+			te.startUDPReaderWriter(te.udpConn, nil, &te.bytesExitToEntry, &te.bytesEntryToExit)
 		}
 		go func() {
 			for {
