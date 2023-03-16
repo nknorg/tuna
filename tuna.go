@@ -456,14 +456,17 @@ func (c *Common) startUDPReaderWriter(conn UDPConn, toAddr *net.UDPAddr, in *uin
 			}
 
 			if n > 0 {
-				c.udpReadChan <- buffer[:n]
+				b := make([]byte, n)
+				copy(b, buffer[:n])
+				c.udpReadChan <- b
+
 				if in != nil {
 					atomic.AddUint64(in, uint64(n))
 				} else {
 					addrToKeyLock.RLock()
 					k := addrToKey[from.String()]
 					addrToKeyLock.RUnlock()
-					atomic.AddUint64(&c.reverseBytesEntryToExit[k][buffer[2]], uint64(n))
+					atomic.AddUint64(&c.reverseBytesEntryToExit[k][b[2]], uint64(n))
 				}
 			}
 		}
