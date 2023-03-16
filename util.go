@@ -287,3 +287,12 @@ func randomIdentifier() string {
 	}
 	return string(b)
 }
+
+func closeChan(ch chan struct{}) {
+	select {
+	case _, _ = <-ch:
+		return
+	default:
+		close(ch)
+	}
+}
