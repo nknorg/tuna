@@ -596,10 +596,12 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 	tcpEntrys := new(sync.Map)
 	addrToKey := make(map[string]string)
 	keyToAddr := make(map[string]string)
-	connReady := make(map[string]chan struct{})
+	tcpReady := make(map[string]chan struct{})
+	udpReady := make(map[string]chan struct{})
 	var addrToKeyLock sync.RWMutex
 	var keyToAddrLock sync.RWMutex
-	var connReadyLock sync.RWMutex
+	var tcpReadyLock sync.RWMutex
+	var udpReadyLock sync.RWMutex
 	go func() {
 		if encConn.IsClosed() {
 			return
@@ -618,13 +620,13 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 					continue
 				}
 				k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
-				connReadyLock.Lock()
-				readyChan, ok := connReady[k]
+				tcpReadyLock.Lock()
+				readyChan, ok := tcpReady[k]
 				if !ok {
-					readyChan = make(chan struct{}, 1)
-					connReady[k] = readyChan
+					readyChan = make(chan struct{})
+					tcpReady[k] = readyChan
 				}
-				connReadyLock.Unlock()
+				tcpReadyLock.Unlock()
 				if connMetadata.EncryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
 					<-readyChan
 					encryptKey, ok := encKeys.Load(k)
@@ -656,6 +658,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				keyToAddrLock.Lock()
 				keyToAddr[k] = from.String()
 				keyToAddrLock.Unlock()
+
+				udpReadyLock.RLock()
+				closeChan(udpReady[k])
+				udpReadyLock.RUnlock()
 				continue
 			}
 			entry, ok := udpEntrys.Load(from.String())
@@ -718,14 +724,18 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 					tcpEntrys.Store(connKey, te)
 					k, _ := te.encryptKeys.Load(connKey)
 					encKeys.Store(connKey, k)
-					connReadyLock.Lock()
-					readyChan, ok := connReady[connKey]
+					tcpReadyLock.Lock()
+					readyChan, ok := tcpReady[connKey]
 					if !ok {
-						readyChan = make(chan struct{}, 1)
-						connReady[connKey] = readyChan
+						readyChan = make(chan struct{})
+						tcpReady[connKey] = readyChan
 					}
-					connReadyLock.Unlock()
-					readyChan <- struct{}{}
+					closeChan(readyChan)
+					tcpReadyLock.Unlock()
+
+					udpReadyLock.Lock()
+					udpReady[connKey] = make(chan struct{})
+					udpReadyLock.Unlock()
 
 					defer func() {
 						Close(encryptedConn)
@@ -772,6 +782,14 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 					te.SetServerTCPConn(encryptedConn)
 
 					if len(metadata.ServiceUdp) > 0 {
+						tcpReadyLock.RLock()
+						<-tcpReady[connKey]
+						tcpReadyLock.RUnlock()
+
+						udpReadyLock.RLock()
+						<-udpReady[connKey]
+						udpReadyLock.RUnlock()
+
 						keyToAddrLock.RLock()
 						clientAddr := keyToAddr[connKey]
 						keyToAddrLock.RUnlock()
