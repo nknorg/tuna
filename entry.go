@@ -670,11 +670,14 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				continue
 			}
 			if n > 0 {
-				udpReadchan <- buffer[:n]
+				b := make([]byte, n)
+				copy(b, buffer[:n])
+				udpReadchan <- b
+
 				addrToKeyLock.RLock()
 				k := addrToKey[from.String()]
 				addrToKeyLock.RUnlock()
-				atomic.AddUint64(&te.Common.reverseBytesEntryToExit[k][buffer[2]], uint64(n))
+				atomic.AddUint64(&te.Common.reverseBytesEntryToExit[k][b[2]], uint64(n))
 			}
 		}
 	}()
