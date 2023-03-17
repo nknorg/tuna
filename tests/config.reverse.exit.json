@@ -10,12 +10,12 @@
   "services": {
     "test": {
       "address": "127.0.0.1",
-      "price": "0.0001"
+      "price": "0.0"
     }
   },
   "reverse": true,
   "reverseRandomPorts": true,
-  "reverseMaxPrice": "0.001",
+  "reverseMaxPrice": "0.0",
   "reverseNanoPayFee": "",
   "minReverseNanoPayFee": "0.00001",
   "reverseNanoPayFeeRatio": 0.1,
