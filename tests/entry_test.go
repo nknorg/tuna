@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -44,34 +45,42 @@ func TestForwardProxy(t *testing.T) {
 	}
 }
 
-func TestReverseProxy(t *testing.T) {
-	_, exitPrivKey, _ := crypto.GenKeyPair()
-	exitSeed := crypto.GetSeedFromPrivateKey(exitPrivKey)
-
+func TestMultipleClientReverseProxy(t *testing.T) {
 	entryPubKey, entryPrivKey, _ := crypto.GenKeyPair()
 	entrySeed := crypto.GetSeedFromPrivateKey(entryPrivKey)
 
 	go runReverseEntry(entrySeed)
 	time.Sleep(10 * time.Second)
-	tcpPort := 0
-	udpPort := 0
-	go runReverseExit(&tcpPort, &udpPort, exitSeed, entryPubKey)
-	time.Sleep(5 * time.Second)
-	tcpAddr := "127.0.0.1:" + strconv.Itoa(tcpPort)
-	tcpConn, err := net.Dial("tcp", tcpAddr)
-	if err != nil {
-		t.Fatal("dial err:", err)
+	clientNum := 4
+	var wg sync.WaitGroup
+	for i := 0; i < clientNum; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, exitPrivKey, _ := crypto.GenKeyPair()
+			exitSeed := crypto.GetSeedFromPrivateKey(exitPrivKey)
+			tcpPort := 0
+			udpPort := 0
+			go runReverseExit(&tcpPort, &udpPort, exitSeed, entryPubKey)
+			time.Sleep(10 * time.Second)
+			tcpAddr := "127.0.0.1:" + strconv.Itoa(tcpPort)
+			tcpConn, err := net.Dial("tcp", tcpAddr)
+			if err != nil {
+				t.Fatal("dial err:", err)
+			}
+			err = testTCP(tcpConn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+				IP:   net.ParseIP("127.0.0.1"),
+				Port: udpPort,
+			})
+			err = testUDP(udpConn)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}()
 	}
-	err = testTCP(tcpConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
-		IP:   net.ParseIP("127.0.0.1"),
-		Port: udpPort,
-	})
-	err = testUDP(udpConn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	wg.Wait()
 }
