@@ -51,9 +51,10 @@ func TestMultipleClientReverseProxy(t *testing.T) {
 
 	go runReverseEntry(entrySeed)
 	time.Sleep(10 * time.Second)
+	exitNum := 4
 	clientNum := 4
 	var wg sync.WaitGroup
-	for i := 0; i < clientNum; i++ {
+	for i := 0; i < exitNum; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -72,14 +73,26 @@ func TestMultipleClientReverseProxy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
-				IP:   net.ParseIP("127.0.0.1"),
-				Port: udpPort,
-			})
-			err = testUDP(udpConn)
-			if err != nil {
-				t.Fatal(err)
+
+			var wg2 sync.WaitGroup
+			for i := 0; i < clientNum; i++ {
+				wg2.Add(1)
+				go func() {
+					defer wg2.Done()
+					udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+						IP:   net.ParseIP("127.0.0.1"),
+						Port: udpPort,
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					err = testUDP(udpConn)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}()
 			}
+			wg2.Wait()
 		}()
 	}
 	wg.Wait()

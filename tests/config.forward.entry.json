@@ -1,7 +1,7 @@
 {
   "services": {
     "test": {
-      "maxPrice": "0.001",
+      "maxPrice": "0.0",
       "ipFilter": {
         "allow": [
           {"countryCode": ""}
@@ -23,7 +23,7 @@
   "reverseBeneficiaryAddr": "",
   "reverseTCP": 30020,
   "reverseUDP": 30021,
-  "reversePrice": "0.001",
+  "reversePrice": "0.0",
   "reverseClaimInterval": 3600,
   "reverseSubscriptionDuration": 40000,
   "reverseSubscriptionFee": "0.0"
