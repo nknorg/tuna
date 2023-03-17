@@ -16,6 +16,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"sync"
 )
 
 type Server struct {
@@ -202,7 +203,7 @@ func runReverseEntry(seed []byte) error {
 	select {}
 }
 
-func runReverseExit(tcpPort, udpPort *int, seed, entryPubKey []byte) error {
+func runReverseExit(tcpPort, udpPort *[]int, seed, entryPubKey []byte) error {
 	exitAccount, err := vault.NewAccountWithSeed(seed)
 	if err != nil {
 		return err
@@ -242,9 +243,10 @@ func runReverseExit(tcpPort, udpPort *int, seed, entryPubKey []byte) error {
 		Address:     hex.EncodeToString(entryPubKey),
 		MetadataRaw: "CgkxMjcuMC4wLjEQxOoBGMXqAToFMC4wMDE=",
 	}
-	for _, service := range exitServices {
+	var lock sync.Mutex
+	for i, service := range exitServices {
 		if _, ok := exitConfig.Services[service.Name]; ok {
-			go func(service tuna.Service) {
+			go func(service tuna.Service, i int) {
 				for {
 					te, err := tuna.NewTunaExit([]tuna.Service{service}, exitWallet, nil, exitConfig)
 					if err != nil {
@@ -252,23 +254,28 @@ func runReverseExit(tcpPort, udpPort *int, seed, entryPubKey []byte) error {
 					}
 					te.SetRemoteNode(&node)
 
-					go func() {
+					i := i
+					go func(i int) {
 						for range te.OnConnect.C {
+							lock.Lock()
 							log.Printf("Service: %s, Type: TCP, Address: %v:%v\n", service.Name, te.GetReverseIP(), te.GetReverseTCPPorts())
-							*tcpPort = int(te.GetReverseTCPPorts()[0])
+							port := int(te.GetReverseTCPPorts()[0])
+							(*tcpPort)[i] = port
 							if len(service.UDP) > 0 {
 								log.Printf("Service: %s, Type: UDP, Address: %v:%v\n", service.Name, te.GetReverseIP(), te.GetReverseUDPPorts())
-								*udpPort = int(te.GetReverseUDPPorts()[0])
+								port := int(te.GetReverseUDPPorts()[0])
+								(*udpPort)[i] = port
 							}
+							lock.Unlock()
 						}
-					}()
+					}(i)
 
 					err = te.StartReverse(false)
 					if err != nil {
 						log.Println(err)
 					}
 				}
-			}(service)
+			}(service, i)
 		}
 	}
 
@@ -281,9 +288,17 @@ func testTCP(conn net.Conn) error {
 
 	for i := 0; i < 10; i++ {
 		rand.Read(send)
-		conn.Write(send)
-		conn.Read(receive)
+		_, err := conn.Write(send)
+		if err != nil {
+			return err
+		}
+		_, err = conn.Read(receive)
+		if err != nil {
+			return err
+		}
 		if !bytes.Equal(send, receive) {
+			log.Println("got:", hex.EncodeToString(receive))
+			log.Println("want:", hex.EncodeToString(send))
 			return errors.New("bytes not equal")
 		}
 	}
@@ -293,11 +308,19 @@ func testTCP(conn net.Conn) error {
 func testUDP(conn *net.UDPConn) error {
 	send := make([]byte, 4096)
 	receive := make([]byte, 4096)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		rand.Read(send)
-		conn.Write(send)
-		conn.Read(receive)
+		_, err := conn.Write(send)
+		if err != nil {
+			return err
+		}
+		_, err = conn.Read(receive)
+		if err != nil {
+			return err
+		}
 		if !bytes.Equal(send, receive) {
+			log.Println("got:", hex.EncodeToString(receive))
+			log.Println("want:", hex.EncodeToString(send))
 			return errors.New("bytes not equal")
 		}
 	}

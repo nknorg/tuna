@@ -5,5 +5,11 @@
     "tcp": [54321],
     "udpBufferSize": 65536,
     "encryption": "xsalsa20-poly1305"
+  },
+  {
+    "name": "test2",
+    "udp": [54322],
+    "tcp": [54322],
+    "udpBufferSize": 65536
   }
 ]

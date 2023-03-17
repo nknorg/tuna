@@ -11,6 +11,10 @@
     "test": {
       "address": "127.0.0.1",
       "price": "0.0"
+    },
+    "test2": {
+      "address": "127.0.0.1",
+      "price": "0.0"
     }
   },
   "reverse": true,
