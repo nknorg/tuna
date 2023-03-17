@@ -4,5 +4,11 @@
     "udp": [54321],
     "tcp": [54321],
     "udpBufferSize": 65536
+  },
+  {
+    "name": "test2",
+    "udp": [54322],
+    "tcp": [54322],
+    "udpBufferSize": 65536
   }
 ]

@@ -4,5 +4,10 @@
     "tcp": [12345],
     "udp": [12345],
     "encryption": "xsalsa20-poly1305"
+  },
+  {
+    "name": "test2",
+    "tcp": [12346],
+    "udp": [12346]
   }
 ]

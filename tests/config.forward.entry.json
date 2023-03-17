@@ -10,6 +10,17 @@
           {"countryCode": ""}
         ]
       }
+    },
+    "test2": {
+      "maxPrice": "0.0",
+      "ipFilter": {
+        "allow": [
+          {"countryCode": ""}
+        ],
+        "disallow": [
+          {"countryCode": ""}
+        ]
+      }
     }
   },
   "downloadGeoDB": false,
