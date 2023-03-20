@@ -396,9 +396,10 @@ func (c *Common) GetPrice() (common.Fixed64, common.Fixed64) {
 	return c.entryToExitPrice, c.exitToEntryPrice
 }
 
-func (c *Common) startUDPReaderWriter(conn UDPConn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
+func (c *Common) startUDPReaderWriter(conn *EncryptUDPConn, toAddr *net.UDPAddr, in *uint64, out *uint64) {
 	from := new(net.UDPAddr)
 	n := 0
+	encrypted := false
 	var err error
 	addrToKey := make(map[string]string)
 	var addrToKeyLock sync.RWMutex
@@ -409,49 +410,55 @@ func (c *Common) startUDPReaderWriter(conn UDPConn, toAddr *net.UDPAddr, in *uin
 			if c.isClosed {
 				return
 			}
-			n, from, err = conn.ReadFromUDP(buffer)
+			n, from, encrypted, err = conn.ReadFromUDPEncrypted(buffer)
 			if err != nil {
 				log.Println("Couldn't receive data:", err)
 				if strings.Contains(err.Error(), "use of closed network connection") {
 					c.udpCloseChan <- struct{}{}
 				}
 			}
-			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && c.IsServer && n > 0 {
-				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
-				if connMetadata.EncryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
-					connKey := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
-					c.udpReadyChanLock.Lock()
-					readyChan, ok := c.connReadyChan[connKey]
-					if !ok {
-						readyChan = make(chan struct{}, 1)
-						c.connReadyChan[connKey] = readyChan
-					}
-					c.udpReadyChanLock.Unlock()
-					<-readyChan
-					encryptKey, ok := c.encryptKeys.Load(connKey)
-					if !ok {
-						log.Println("no encrypt key found")
-						continue
-					}
-					k := encryptKey.(*[encryptKeySize]byte)
-					encConn := conn.(*EncryptUDPConn)
-					err = encConn.AddCodec(from, k, connMetadata.EncryptionAlgo, false)
-					if err != nil {
-						log.Println(err)
-						continue
-					}
+			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && c.IsServer && n > PrefixLen {
+				if encrypted {
+					continue
 				}
-
+				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
 				if err != nil {
 					log.Println("Couldn't read udp metadata from client:", err)
 					continue
 				}
+				connKey := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
+
+				c.udpReadyChanLock.Lock()
+				readyChan, ok := c.connReadyChan[connKey]
+				if !ok {
+					readyChan = make(chan struct{}, 1)
+					c.connReadyChan[connKey] = readyChan
+				}
+				c.udpReadyChanLock.Unlock()
+				<-readyChan
+				encryptKey, ok := c.encryptKeys.Load(connKey)
+				if !ok {
+					log.Println("no encrypt key found")
+					continue
+				}
+				k := encryptKey.(*[encryptKeySize]byte)
+				err = conn.AddCodec(from, k, connMetadata.EncryptionAlgo, false)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+
 				if in == nil && out == nil {
 					k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
 					addrToKeyLock.Lock()
 					addrToKey[from.String()] = k
 					addrToKeyLock.Unlock()
 				}
+				continue
+			}
+
+			if !encrypted {
+				log.Println("Unencrypted udp packet received")
 				continue
 			}
 
@@ -585,17 +592,16 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 		remotePublicKey = remoteConnMetadata.PublicKey
 	}
 
-	if encryptionAlgo == pb.EncryptionAlgo_ENCRYPTION_NONE {
-		return conn, remoteConnMetadata, nil
-	}
-
-	sharedKey, err := c.getOrComputeSharedKey(remotePublicKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	encryptKey := computeEncryptKey(connNonce, sharedKey[:])
 	k := string(append(remotePublicKey, connNonce...))
+	encryptKey := new([encryptKeySize]byte)
+	if encryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
+		sharedKey, err := c.getOrComputeSharedKey(remotePublicKey)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		encryptKey = computeEncryptKey(connNonce, sharedKey[:])
+	}
 	c.encryptKeys.Store(k, encryptKey)
 
 	if c.IsServer {
@@ -610,6 +616,10 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 		case readyChan <- struct{}{}:
 		default:
 		}
+	}
+
+	if encryptionAlgo == pb.EncryptionAlgo_ENCRYPTION_NONE {
+		return conn, remoteConnMetadata, nil
 	}
 
 	encryptedConn, err := encryptConn(conn, encryptKey, encryptionAlgo, len(remotePublicKey) > 0)
@@ -647,16 +657,14 @@ func (c *Common) wrapUDPConn(conn UDPConn, addr *net.UDPAddr, remotePublicKey []
 			}
 		}
 
-		if encryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
-			encryptKey, ok := c.encryptKeys.Load(string(append(remotePublicKey, connNonce...)))
-			if !ok || encryptKey == nil {
-				return nil, fmt.Errorf("encrypted key for UDP conn not found")
-			}
-			k := encryptKey.(*[encryptKeySize]byte)
-			err = encConn.AddCodec(addr, k, encryptionAlgo, true)
-			if err != nil {
-				return nil, err
-			}
+		encryptKey, ok := c.encryptKeys.Load(string(append(remotePublicKey, connNonce...)))
+		if !ok || encryptKey == nil {
+			return nil, fmt.Errorf("encrypted key for UDP conn not found")
+		}
+		k := encryptKey.(*[encryptKeySize]byte)
+		err = encConn.AddCodec(addr, k, encryptionAlgo, true)
+		if err != nil {
+			return nil, err
 		}
 	}
 
