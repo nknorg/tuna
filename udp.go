@@ -63,7 +63,7 @@ func (ec *EncryptUDPConn) AddCodec(addr *net.UDPAddr, encryptKey *[32]byte, encr
 	var err error
 	switch encryptionAlgo {
 	case pb.EncryptionAlgo_ENCRYPTION_NONE:
-		return nil
+		cipher = nil
 	case pb.EncryptionAlgo_ENCRYPTION_XSALSA20_POLY1305:
 		cipher = stream.NewXSalsa20Poly1305Cipher(encryptKey)
 	case pb.EncryptionAlgo_ENCRYPTION_AES_GCM:
@@ -88,12 +88,17 @@ func (ec *EncryptUDPConn) AddCodec(addr *net.UDPAddr, encryptKey *[32]byte, encr
 }
 
 func (ec *EncryptUDPConn) ReadFromUDP(b []byte) (n int, addr *net.UDPAddr, err error) {
+	n, addr, _, err = ec.ReadFromUDPEncrypted(b)
+	return
+}
+
+func (ec *EncryptUDPConn) ReadFromUDPEncrypted(b []byte) (n int, addr *net.UDPAddr, encrypted bool, err error) {
 	if ec == nil {
-		return 0, nil, fmt.Errorf("unconnected udp conn")
+		return 0, nil, false, fmt.Errorf("unconnected udp conn")
 	}
 
 	if ec.IsClosed() {
-		return 0, nil, io.ErrClosedPipe
+		return 0, nil, false, io.ErrClosedPipe
 	}
 
 	ec.readLock.Lock()
@@ -101,20 +106,20 @@ func (ec *EncryptUDPConn) ReadFromUDP(b []byte) (n int, addr *net.UDPAddr, err e
 
 	n, addr, err = ec.conn.ReadFromUDP(ec.readBuffer)
 	if err != nil {
-		return 0, nil, err
+		return 0, addr, false, err
 	}
 
 	decoder := ec.decoders[addr.String()]
 	if decoder == nil {
 		copy(b, ec.readBuffer[:n])
-		return n, addr, err
+		return n, addr, false, nil
 	}
 
 	plain, err := decoder.Decode(b, ec.readBuffer[:n])
 	if err != nil {
-		return 0, nil, err
+		return 0, addr, false, err
 	}
-	return len(plain), addr, nil
+	return len(plain), addr, true, nil
 }
 
 func (ec *EncryptUDPConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {

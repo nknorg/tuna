@@ -608,12 +608,15 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		}
 		buffer := make([]byte, MaxUDPBufferSize)
 		for {
-			n, from, err := encConn.ReadFromUDP(buffer)
+			n, from, encrypted, err := encConn.ReadFromUDPEncrypted(buffer)
 			if err != nil {
 				log.Println("Couldn't receive exit's data:", err)
 				continue
 			}
-			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && n > 0 {
+			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && n > PrefixLen {
+				if encrypted {
+					continue
+				}
 				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
 				if err != nil {
 					log.Println("Couldn't read udp metadata from client:", err)
@@ -627,19 +630,18 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 					tcpReady[k] = readyChan
 				}
 				tcpReadyLock.Unlock()
-				if connMetadata.EncryptionAlgo != pb.EncryptionAlgo_ENCRYPTION_NONE {
-					<-readyChan
-					encryptKey, ok := encKeys.Load(k)
-					if !ok {
-						log.Println("no encrypt key found")
-						return
-					}
-					key := encryptKey.(*[encryptKeySize]byte)
-					err = encConn.AddCodec(from, key, connMetadata.EncryptionAlgo, false)
-					if err != nil {
-						log.Println(err)
-						return
-					}
+
+				<-readyChan
+				encryptKey, ok := encKeys.Load(k)
+				if !ok {
+					log.Println("no encrypt key found")
+					continue
+				}
+				key := encryptKey.(*[encryptKeySize]byte)
+				err = encConn.AddCodec(from, key, connMetadata.EncryptionAlgo, false)
+				if err != nil {
+					log.Println(err)
+					return
 				}
 
 				te, ok := tcpEntrys.Load(k)
@@ -662,6 +664,10 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				udpReadyLock.RLock()
 				closeChan(udpReady[k])
 				udpReadyLock.RUnlock()
+				continue
+			}
+			if !encrypted {
+				log.Println("Unencrypted udp packet received")
 				continue
 			}
 			entry, ok := udpEntrys.Load(from.String())
