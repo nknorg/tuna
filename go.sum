@@ -32,8 +32,8 @@ github.com/jessevdk/go-flags v1.5.0 h1:1jKYvbxEjfUl0fmqTCOfonvskHHXMjBySTLW4y9LF
 github.com/jessevdk/go-flags v1.5.0/go.mod h1:Fw0T6WPc1dYxT4mKEZRfG5kJhaTDP9pj1c2EWnYs/m4=
 github.com/jpillora/backoff v1.0.0 h1:uvFg412JmmHBHw7iwprIxkPMI+sGQ4kzOWsMeHnm2EA=
 github.com/jpillora/backoff v1.0.0/go.mod h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=
-github.com/nknorg/encrypted-stream v1.0.1 h1:lyWouCwUY3WUOfYaoez0wNEudsZJ3qc9Knxxi4Ysjeo=
-github.com/nknorg/encrypted-stream v1.0.1/go.mod h1:VXJDhlUoF3uJSFLwIWnRLkiX5QPFB3E8oe2EUBwPoU0=
+github.com/nknorg/encrypted-stream v1.0.2-0.20230320101720-9891f770de86 h1:YraQ9G+P/DibBBVsLbfLatsDUngiCA0JWVkL1bzECAE=
+github.com/nknorg/encrypted-stream v1.0.2-0.20230320101720-9891f770de86/go.mod h1:VXJDhlUoF3uJSFLwIWnRLkiX5QPFB3E8oe2EUBwPoU0=
 github.com/nknorg/mockconn-go v0.0.0-20230125231524-d664e728352a/go.mod h1:/SvBORYxt9wlm8ZbaEFEri6ooOSDcU3ovU0L2eRRdS4=
 github.com/nknorg/ncp-go v1.0.5 h1:alJjq6bi6tRwUAAv932FIfE/R3S7DRR0pgXOgBXNHAk=
 github.com/nknorg/ncp-go v1.0.5/go.mod h1:ze88qf5e9/DBXSOaJPL2Caa0IbdZJLzESAFM1S7mGwg=
