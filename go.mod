@@ -6,7 +6,7 @@ require (
 	github.com/imdario/mergo v0.3.13
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/nknorg/encrypted-stream v1.0.2-0.20230320101720-9891f770de86
-	github.com/nknorg/nkn-sdk-go v1.4.4
+	github.com/nknorg/nkn-sdk-go v1.4.5
 	github.com/nknorg/nkn/v2 v2.2.0
 	github.com/oschwald/geoip2-golang v1.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
