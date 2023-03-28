@@ -34,8 +34,8 @@ type UDPConn interface {
 type EncryptUDPConn struct {
 	conn UDPConn
 
-	encoders map[string]*stream.Encoder
-	decoders map[string]*stream.Decoder
+	encoders sync.Map
+	decoders sync.Map
 
 	lock     sync.RWMutex
 	isClosed bool
@@ -43,15 +43,15 @@ type EncryptUDPConn struct {
 	readLock  sync.Mutex
 	writeLock sync.Mutex
 
-	readBuffer []byte
+	readBuffer  []byte
+	writeBuffer []byte
 }
 
 func NewEncryptUDPConn(conn *net.UDPConn) *EncryptUDPConn {
 	ec := &EncryptUDPConn{
-		conn:       conn,
-		encoders:   make(map[string]*stream.Encoder),
-		decoders:   make(map[string]*stream.Decoder),
-		readBuffer: make([]byte, MaxUDPBufferSize),
+		conn:        conn,
+		readBuffer:  make([]byte, MaxUDPBufferSize),
+		writeBuffer: make([]byte, MaxUDPBufferSize),
 	}
 	conn.SetReadBuffer(MaxUDPBufferSize)
 	conn.SetWriteBuffer(MaxUDPBufferSize)
@@ -82,8 +82,9 @@ func (ec *EncryptUDPConn) AddCodec(addr *net.UDPAddr, encryptKey *[32]byte, encr
 	if err != nil {
 		return err
 	}
-	ec.decoders[addr.String()] = decoder
-	ec.encoders[addr.String()] = encoder
+
+	ec.encoders.Store(addr.String(), encoder)
+	ec.decoders.Store(addr.String(), decoder)
 	return nil
 }
 
@@ -109,11 +110,12 @@ func (ec *EncryptUDPConn) ReadFromUDPEncrypted(b []byte) (n int, addr *net.UDPAd
 		return 0, addr, false, err
 	}
 
-	decoder := ec.decoders[addr.String()]
-	if decoder == nil {
+	d, ok := ec.decoders.Load(addr.String())
+	if !ok {
 		copy(b, ec.readBuffer[:n])
 		return n, addr, false, nil
 	}
+	decoder := d.(*stream.Decoder)
 
 	plain, err := decoder.Decode(b, ec.readBuffer[:n])
 	if err != nil {
@@ -123,48 +125,52 @@ func (ec *EncryptUDPConn) ReadFromUDPEncrypted(b []byte) (n int, addr *net.UDPAd
 }
 
 func (ec *EncryptUDPConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
+	n, oobn, _, err = ec.WriteMsgUDPEncrypted(b, oob, addr)
+	return
+}
+
+func (ec *EncryptUDPConn) WriteMsgUDPEncrypted(b, oob []byte, addr *net.UDPAddr) (n, oobn int, encrypted bool, err error) {
 	if ec == nil {
-		return 0, 0, fmt.Errorf("unconnected udp conn")
+		return 0, 0, false, fmt.Errorf("unconnected udp conn")
 	}
 
 	if ec.IsClosed() {
-		return 0, 0, io.ErrClosedPipe
+		return 0, 0, false, io.ErrClosedPipe
 	}
 
 	ec.writeLock.Lock()
 	defer ec.writeLock.Unlock()
 
-	k := addr.String()
+	var k string
+	var ciphertext []byte
+	encrypted = false
+
 	if addr == nil {
 		k = ec.RemoteUDPAddr().String()
-	}
-	encoder, ok := ec.encoders[k]
-	if !ok {
-		remoteAddr := ec.conn.RemoteAddr()
-		if k, ok := remoteAddr.(*net.UDPAddr); ok {
-			encoder = ec.encoders[k.String()]
-		}
-	}
-
-	var msgLen int
-	ciphertext := make([]byte, MaxUDPBufferSize)
-	if encoder != nil {
-		tmp, err := encoder.Encode(ciphertext, b)
-		if err != nil {
-			return 0, 0, err
-		}
-		msgLen = len(tmp)
 	} else {
-		copy(ciphertext, b)
-		msgLen = len(b)
+		k = addr.String()
+	}
+	e, ok := ec.encoders.Load(k)
+	if !ok {
+		ciphertext = b
+	} else {
+		encoder := e.(*stream.Encoder)
+		ciphertext, err = encoder.Encode(ec.writeBuffer, b)
+		if err != nil {
+			return 0, 0, false, err
+		}
+		encrypted = true
 	}
 
-	n, oobn, err = ec.conn.WriteMsgUDP(ciphertext[:msgLen], oob, addr)
-
+	n, oobn, err = ec.conn.WriteMsgUDP(ciphertext, oob, addr)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, false, err
 	}
-	return len(b), oobn, err
+	if n != len(ciphertext) {
+		return 0, 0, false, io.ErrShortWrite
+	}
+
+	return len(b), oobn, encrypted, err
 }
 
 func (ec *EncryptUDPConn) SetWriteBuffer(size int) error {
