@@ -35,6 +35,7 @@ const (
 	maxMeasureBandwidthTimeout               = 30 * time.Second
 	nanoPayClaimerLinger                     = 24 * time.Hour
 	maxCheckSubscribeInterval                = time.Hour
+	defaultMinBalance                        = "0.0" // default minimum wallet balance for use tuna service
 )
 
 type EntryConfiguration struct {
@@ -72,6 +73,7 @@ type EntryConfiguration struct {
 	TcpDialContext                   func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
 	HttpDialContext                  func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
 	WsDialContext                    func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
+	MinBalance                       string                                                            `json:"minBalance"`
 }
 
 var defaultEntryConfiguration = EntryConfiguration{
@@ -85,6 +87,7 @@ var defaultEntryConfiguration = EntryConfiguration{
 	ReverseServiceName:             DefaultReverseServiceName,
 	ReverseMinFlushAmount:          defaultNanoPayMinFlushAmount,
 	ReverseServiceListenIP:         defaultReverseServiceListenIP,
+	MinBalance:                     defaultMinBalance,
 }
 
 func DefaultEntryConfig() *EntryConfiguration {
@@ -130,6 +133,7 @@ type ExitConfiguration struct {
 	TcpDialContext                 func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
 	HttpDialContext                func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
 	WsDialContext                  func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
+	ReverseMinBalance              string                                                            `json:"reverseMinBalance"`
 }
 
 var defaultExitConfiguration = ExitConfiguration{
@@ -142,6 +146,7 @@ var defaultExitConfiguration = ExitConfiguration{
 	MinFlushAmount:                 defaultNanoPayMinFlushAmount,
 	ReverseSubscriptionPrefix:      DefaultSubscriptionPrefix,
 	ReverseServiceName:             DefaultReverseServiceName,
+	ReverseMinBalance:              defaultMinBalance,
 }
 
 func DefaultExitConfig() *ExitConfiguration {

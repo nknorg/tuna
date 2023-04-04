@@ -146,6 +146,8 @@ type Common struct {
 
 	reverseBytesExitToEntry map[string][]uint64
 	reverseBytesEntryToExit map[string][]uint64
+
+	minBalance common.Fixed64 // minimum wallet balance requirement for connecting
 }
 
 func NewCommon(
@@ -171,6 +173,7 @@ func NewCommon(
 	wsDialContext func(ctx context.Context, network, addr string) (net.Conn, error),
 	sortMeasuredNodes func(types.Nodes),
 	reverseMetadata *pb.ServiceMetadata,
+	minBalance string,
 ) (*Common, error) {
 	encryptionAlgo := defaultEncryptionAlgo
 	var err error
@@ -249,6 +252,10 @@ func NewCommon(
 		udpReadChan:   make(chan []byte),
 		udpWriteChan:  make(chan []byte),
 		connReadyChan: make(map[string]chan struct{}),
+	}
+	c.minBalance, err = common.StringToFixed64(minBalance)
+	if err != nil {
+		return nil, err
 	}
 
 	if !c.IsServer && c.ServiceInfo.IPFilter.NeedGeoInfo() {
@@ -743,6 +750,23 @@ func (c *Common) CreateServerConn(force bool) error {
 			err := c.SetPaymentReceiver("")
 			if err != nil {
 				return err
+			}
+
+			if c.minBalance > 0 {
+				entryToExitMaxPrice, exitToEntryMaxPrice, err := ParsePrice(c.ServiceInfo.MaxPrice)
+				if err != nil {
+					return err
+				}
+				if entryToExitMaxPrice > 0 || exitToEntryMaxPrice > 0 {
+					balance, err := c.Client.BalanceByAddress(c.Wallet.Address())
+					if err != nil {
+						log.Println("tuna.CreateServerConn BalanceByAddress error:", err)
+					} else {
+						if balance.ToFixed64() < c.minBalance {
+							return nkn.ErrInsufficientBalance
+						}
+					}
+				}
 			}
 
 			candidateSubs, err := c.GetTopPerformanceNodes(c.MeasureBandwidth, measureBandwidthTopCount)

@@ -3,7 +3,6 @@ package tuna
 import (
 	"errors"
 	"fmt"
-	"github.com/rdegges/go-ipify"
 	"log"
 	"net"
 	"strconv"
@@ -11,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rdegges/go-ipify"
 
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
@@ -115,6 +116,7 @@ func NewTunaExit(services []Service, wallet *nkn.Wallet, client *nkn.MultiClient
 		config.WsDialContext,
 		config.SortMeasuredNodes,
 		reverseMetadata,
+		config.ReverseMinBalance,
 	)
 	if err != nil {
 		return nil, err
@@ -514,6 +516,9 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 				return nil
 			}
 			log.Println("Couldn't connect to reverse entry:", err)
+			if err == nkn.ErrInsufficientBalance {
+				return err
+			}
 			time.Sleep(1 * time.Second)
 			continue
 		}

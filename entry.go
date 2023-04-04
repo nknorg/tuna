@@ -82,6 +82,7 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		config.WsDialContext,
 		config.SortMeasuredNodes,
 		nil,
+		config.MinBalance,
 	)
 	if err != nil {
 		return nil, err
@@ -112,6 +113,9 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 		err := te.CreateServerConn(true)
 		if err != nil {
 			log.Println("Couldn't connect to node:", err)
+			if err == nkn.ErrInsufficientBalance {
+				return err
+			}
 			time.Sleep(1 * time.Second)
 			continue
 		}
