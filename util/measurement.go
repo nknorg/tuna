@@ -2,7 +2,7 @@ package util
 
 import (
 	"context"
-	"math/rand"
+	"crypto/rand"
 	"net"
 	"time"
 )

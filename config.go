@@ -29,7 +29,7 @@ const (
 	defaultMeasureBandwidthConcurrentWorkers = 16 // should be >= measureBandwidthTopCount
 	defaultMeasureBandwidthTimeout           = 2  // second
 	defaultMeasureBandwidthWorkersTimeout    = 8  // second
-	defaultMeasurementBytesDownLink          = 256 << 10
+	defaultMeasurementBytesDownLink          = 256 << 8
 	defaultMaxMeasureWorkerPoolSize          = 64
 	defaultReverseTestTimeout                = 3 * time.Second
 	maxMeasureBandwidthTimeout               = 30 * time.Second
