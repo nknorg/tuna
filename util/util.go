@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"time"
 )
 
 func ReadJSON(fileName string, value interface{}) error {
-	file, err := ioutil.ReadFile(fileName)
+	file, err := os.ReadFile(fileName)
 	if err != nil {
 		return fmt.Errorf("read file error: %v", err)
 	}
@@ -67,7 +67,7 @@ func DownloadJsonFile(ctx context.Context, url, filename string) error {
 		return err
 	}
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -97,12 +97,12 @@ func DeepCopyMap(value map[string]interface{}) map[string]interface{} {
 }
 
 func CopyFile(src, dst string) error {
-	input, err := ioutil.ReadFile(src)
+	input, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
 
-	err = ioutil.WriteFile(dst, input, 0644)
+	err = os.WriteFile(dst, input, 0644)
 	if err != nil {
 		return err
 	}
