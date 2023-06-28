@@ -72,7 +72,7 @@ func (server *Server) RunUDPEchoServer() {
 	}
 }
 
-func runForwardEntry(seed, exitPubKey []byte) error {
+func runForwardEntry(seed, exitPubKey []byte, exitReady <-chan struct{}) error {
 	seedRPCServerAddr := nkn.NewStringArray(nkn.DefaultSeedRPCServerAddr...)
 
 	walletConfig := &nkn.WalletConfig{
@@ -95,6 +95,8 @@ func runForwardEntry(seed, exitPubKey []byte) error {
 	var entryServices []tuna.Service
 	err = util.ReadJSON("services.entry.json", &entryServices)
 
+	<-exitReady
+
 	for serviceName, serviceInfo := range entryConfig.Services {
 		for _, service := range entryServices {
 			if service.Name == serviceName {
@@ -102,30 +104,29 @@ func runForwardEntry(seed, exitPubKey []byte) error {
 					if len(service.UDP) > 0 && service.UDPBufferSize == 0 {
 						service.UDPBufferSize = tuna.DefaultUDPBufferSize
 					}
-					for {
-						te, err := tuna.NewTunaEntry(service, serviceInfo, entryWallet, nil, entryConfig)
-						if err != nil {
-							log.Fatal(err)
-						}
-						node := types.Node{
-							Delay:     0,
-							Bandwidth: 0,
-							Metadata: &pb.ServiceMetadata{
-								Ip:              "127.0.0.1",
-								TcpPort:         30010,
-								UdpPort:         30011,
-								ServiceId:       0,
-								Price:           "0.0",
-								BeneficiaryAddr: "",
-							},
-							Address:     hex.EncodeToString(exitPubKey),
-							MetadataRaw: "Cg4xOTIuMTY4LjMxLjIwNhC66gEYu+oBOgUwLjAwMQ==",
-						}
-						te.SetRemoteNode(&node)
-						err = te.Start(false)
-						if err != nil {
-							log.Fatal(err)
-						}
+
+					te, err := tuna.NewTunaEntry(service, serviceInfo, entryWallet, nil, entryConfig)
+					if err != nil {
+						log.Fatal(err)
+					}
+					node := types.Node{
+						Delay:     0,
+						Bandwidth: 0,
+						Metadata: &pb.ServiceMetadata{
+							Ip:              "127.0.0.1",
+							TcpPort:         30010,
+							UdpPort:         30011,
+							ServiceId:       0,
+							Price:           "0.0",
+							BeneficiaryAddr: "",
+						},
+						Address:     hex.EncodeToString(exitPubKey),
+						MetadataRaw: "Cg4xOTIuMTY4LjMxLjIwNhC66gEYu+oBOgUwLjAwMQ==",
+					}
+					te.SetRemoteNode(&node)
+					err = te.Start(false)
+					if err != nil {
+						log.Fatal(err)
 					}
 				}(service, serviceInfo)
 			}
@@ -134,7 +135,7 @@ func runForwardEntry(seed, exitPubKey []byte) error {
 	select {}
 }
 
-func runForwardExit(seed []byte) error {
+func runForwardExit(seed []byte, ready chan<- struct{}) error {
 	exitAccount, err := vault.NewAccountWithSeed(seed)
 	if err != nil {
 		return err
@@ -172,10 +173,12 @@ func runForwardExit(seed []byte) error {
 	}
 	defer te.Close()
 
+	close(ready)
+
 	select {}
 }
 
-func runReverseEntry(seed []byte) error {
+func runReverseEntry(seed []byte, ready chan<- struct{}) error {
 	entryAccount, err := vault.NewAccountWithSeed(seed)
 	if err != nil {
 		return err
@@ -199,6 +202,7 @@ func runReverseEntry(seed []byte) error {
 	if err != nil {
 		return err
 	}
+	ready <- struct{}{}
 
 	select {}
 }
@@ -244,10 +248,12 @@ func runReverseExit(tcpPort, udpPort *[]int, seed, entryPubKey []byte) error {
 		MetadataRaw: "CgkxMjcuMC4wLjEQxOoBGMXqAToFMC4wMDE=",
 	}
 	var lock sync.Mutex
+	var wg sync.WaitGroup
 	for i, service := range exitServices {
 		if _, ok := exitConfig.Services[service.Name]; ok {
 			go func(service tuna.Service, i int) {
 				for {
+					wg.Add(1)
 					te, err := tuna.NewTunaExit([]tuna.Service{service}, exitWallet, nil, exitConfig)
 					if err != nil {
 						log.Fatalln(err)
@@ -266,6 +272,7 @@ func runReverseExit(tcpPort, udpPort *[]int, seed, entryPubKey []byte) error {
 								port := int(te.GetReverseUDPPorts()[0])
 								(*udpPort)[i] = port
 							}
+							wg.Done()
 							lock.Unlock()
 						}
 					}(i)
@@ -278,6 +285,7 @@ func runReverseExit(tcpPort, udpPort *[]int, seed, entryPubKey []byte) error {
 			}(service, i)
 		}
 	}
+	wg.Wait()
 
 	select {}
 }
