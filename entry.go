@@ -429,7 +429,7 @@ func (te *TunaEntry) listenTCP(ip net.IP, ports []uint32) ([]uint32, error) {
 			for {
 				conn, err := listener.Accept()
 				if c, ok := conn.(*net.TCPConn); ok {
-					err := c.SetLinger(0)
+					err := c.SetLinger(5)
 					if err != nil {
 						log.Println("Couldn't set linger:", err)
 						continue
@@ -704,7 +704,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 		for {
 			tcpConn, err := listener.Accept()
 			if c, ok := tcpConn.(*net.TCPConn); ok {
-				err := c.SetLinger(0)
+				err := c.SetLinger(5)
 				if err != nil {
 					log.Println("Couldn't set linger:", err)
 					continue
@@ -851,6 +851,7 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 					return nil
 				}()
 				if err != nil {
+					tcpConn.Close()
 					log.Println(err)
 				}
 			}()
