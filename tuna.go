@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -127,7 +126,6 @@ type Common struct {
 
 	sync.RWMutex
 	udpReadWriteChanLock sync.RWMutex
-	udpReadyChanLock     sync.RWMutex
 	paymentReceiver      string
 	entryToExitPrice     common.Fixed64
 	exitToEntryPrice     common.Fixed64
@@ -142,7 +140,7 @@ type Common struct {
 	activeSessions       int
 	linger               time.Duration
 	presetNode           *types.Node
-	connReadyChan        map[string]chan struct{}
+	connReadyChan        sync.Map
 
 	reverseBytesExitToEntry map[string][]uint64
 	reverseBytesEntryToExit map[string][]uint64
@@ -240,6 +238,7 @@ func NewCommon(
 		curveSecretKey:                    curveSecretKey,
 		encryptionAlgo:                    encryptionAlgo,
 		closeChan:                         make(chan struct{}),
+		udpCloseChan:                      make(chan struct{}),
 		sharedKeys:                        make(map[string]*[sharedKeySize]byte),
 		measureDelayConcurrentWorkers:     measureDelayConcurrentWorkers,
 		measureBandwidthConcurrentWorkers: measureBandwidthConcurrentWorkers,
@@ -249,9 +248,8 @@ func NewCommon(
 		reverseBytesEntryToExit: make(map[string][]uint64),
 		reverseBytesExitToEntry: make(map[string][]uint64),
 
-		udpReadChan:   make(chan []byte),
-		udpWriteChan:  make(chan []byte),
-		connReadyChan: make(map[string]chan struct{}),
+		udpReadChan:  make(chan []byte),
+		udpWriteChan: make(chan []byte),
 	}
 	c.minBalance, err = common.StringToFixed64(minBalance)
 	if err != nil {
@@ -322,8 +320,6 @@ func (c *Common) GetServerUDPConn(force bool) (UDPConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.RLock()
-	defer c.RUnlock()
 	return c.GetUDPConn(), nil
 }
 
@@ -408,8 +404,7 @@ func (c *Common) startUDPReaderWriter(conn *EncryptUDPConn, toAddr *net.UDPAddr,
 	n := 0
 	encrypted := false
 	var err error
-	addrToKey := make(map[string]string)
-	var addrToKeyLock sync.RWMutex
+	addrToKey := new(sync.Map)
 
 	go func() {
 		buffer := make([]byte, MaxUDPBufferSize)
@@ -425,24 +420,19 @@ func (c *Common) startUDPReaderWriter(conn *EncryptUDPConn, toAddr *net.UDPAddr,
 				}
 			}
 			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && c.IsServer && n > PrefixLen {
-				if encrypted {
-					continue
-				}
 				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
 				if err != nil {
 					log.Println("Couldn't read udp metadata from client:", err)
 					continue
 				}
+				if connMetadata.IsPing || encrypted {
+					continue
+				}
 				connKey := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
 
-				c.udpReadyChanLock.Lock()
-				readyChan, ok := c.connReadyChan[connKey]
-				if !ok {
-					readyChan = make(chan struct{}, 1)
-					c.connReadyChan[connKey] = readyChan
-				}
-				c.udpReadyChanLock.Unlock()
-				<-readyChan
+				readyChan, _ := c.connReadyChan.LoadOrStore(connKey, make(chan struct{}, 1))
+				<-readyChan.(chan struct{})
+
 				encryptKey, ok := c.encryptKeys.Load(connKey)
 				if !ok {
 					log.Println("no encrypt key found")
@@ -457,9 +447,7 @@ func (c *Common) startUDPReaderWriter(conn *EncryptUDPConn, toAddr *net.UDPAddr,
 
 				if in == nil && out == nil {
 					k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))
-					addrToKeyLock.Lock()
-					addrToKey[from.String()] = k
-					addrToKeyLock.Unlock()
+					addrToKey.Store(from.String(), k)
 				}
 				continue
 			}
@@ -477,10 +465,10 @@ func (c *Common) startUDPReaderWriter(conn *EncryptUDPConn, toAddr *net.UDPAddr,
 				if in != nil {
 					atomic.AddUint64(in, uint64(n))
 				} else {
-					addrToKeyLock.RLock()
-					k := addrToKey[from.String()]
-					addrToKeyLock.RUnlock()
-					atomic.AddUint64(&c.reverseBytesEntryToExit[k][b[2]], uint64(n))
+					k, ok := addrToKey.Load(from.String())
+					if ok {
+						atomic.AddUint64(&c.reverseBytesEntryToExit[k.(string)][b[2]], uint64(n))
+					}
 				}
 			}
 		}
@@ -505,10 +493,10 @@ func (c *Common) startUDPReaderWriter(conn *EncryptUDPConn, toAddr *net.UDPAddr,
 				if out != nil {
 					atomic.AddUint64(out, uint64(n))
 				} else {
-					addrToKeyLock.RLock()
-					k := addrToKey[from.String()]
-					addrToKeyLock.RUnlock()
-					atomic.AddUint64(&c.reverseBytesExitToEntry[k][data[2]], uint64(n))
+					k, ok := addrToKey.Load(from.String())
+					if ok {
+						atomic.AddUint64(&c.reverseBytesExitToEntry[k.(string)][data[2]], uint64(n))
+					}
 				}
 			case <-c.udpCloseChan:
 				return
@@ -612,15 +600,9 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 	c.encryptKeys.Store(k, encryptKey)
 
 	if c.IsServer {
-		c.udpReadyChanLock.Lock()
-		readyChan, ok := c.connReadyChan[k]
-		if !ok {
-			readyChan = make(chan struct{}, 1)
-			c.connReadyChan[k] = readyChan
-		}
-		c.udpReadyChanLock.Unlock()
+		readyChan, _ := c.connReadyChan.LoadOrStore(k, make(chan struct{}, 1))
 		select {
-		case readyChan <- struct{}{}:
+		case readyChan.(chan struct{}) <- struct{}{}:
 		default:
 		}
 	}
@@ -1583,7 +1565,7 @@ func ConnIDToPort(data []byte) uint16 {
 }
 
 func LoadPassword(path string) (string, error) {
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
@@ -1599,7 +1581,7 @@ func LoadOrCreateAccount(walletFile, passwordFile string) (*vault.Account, error
 		if _, err = os.Stat(passwordFile); os.IsNotExist(err) {
 			pswd = base64.StdEncoding.EncodeToString(util.RandomBytes(24))
 			log.Println("Creating wallet.pswd")
-			err = ioutil.WriteFile(passwordFile, []byte(pswd), 0644)
+			err = os.WriteFile(passwordFile, []byte(pswd), 0644)
 			if err != nil {
 				return nil, fmt.Errorf("save password to file error: %v", err)
 			}

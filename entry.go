@@ -121,6 +121,7 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 		}
 		if te.udpConn != nil {
 			te.startUDPReaderWriter(te.udpConn, nil, &te.bytesExitToEntry, &te.bytesEntryToExit)
+			go sendPingMsg(te.udpConn, te.udpCloseChan)
 		}
 		go func() {
 			for {
@@ -311,6 +312,7 @@ func (te *TunaEntry) Close() {
 
 	te.isClosed = true
 	close(te.closeChan)
+	close(te.udpCloseChan)
 	for _, listener := range te.tcpListeners {
 		Close(listener)
 	}
@@ -617,12 +619,12 @@ func StartReverse(config *EntryConfiguration, wallet *nkn.Wallet) error {
 				continue
 			}
 			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && n > PrefixLen {
-				if encrypted {
-					continue
-				}
 				connMetadata, err := parseUDPConnMetadata(buffer[PrefixLen:n])
 				if err != nil {
 					log.Println("Couldn't read udp metadata from client:", err)
+					continue
+				}
+				if connMetadata.IsPing || encrypted {
 					continue
 				}
 				k := string(append(connMetadata.PublicKey, connMetadata.Nonce...))

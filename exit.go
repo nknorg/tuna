@@ -534,6 +534,7 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 				time.Sleep(1 * time.Second)
 				continue
 			}
+			go sendPingMsg(udpConn, te.udpCloseChan)
 		}
 
 		var tcpPorts []uint32
@@ -705,10 +706,10 @@ func (te *TunaExit) Close() {
 
 	te.isClosed = true
 	close(te.closeChan)
+	close(te.udpCloseChan)
 	Close(te.tcpListener)
 	Close(te.udpConn)
-	Close(te.Common.tcpConn)
-	Close(te.Common.udpConn)
+	Close(te.tcpConn)
 
 	te.CloseUDPConn()
 	te.OnConnect.close()
