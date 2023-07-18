@@ -10,6 +10,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nknorg/nkn-sdk-go"
 	"github.com/nknorg/nkn/v2/common"
@@ -24,6 +25,7 @@ const (
 	nodeRPCPort            = 30003
 	randomIdentifierChars  = "abcdefghijklmnopqrstuvwxyz0123456789"
 	randomIdentifierLength = 8
+	heartbeatInterval      = 30 * time.Second
 )
 
 var encryptionAlgoMap = map[string]pb.EncryptionAlgo{
@@ -189,6 +191,26 @@ func writeUDPConnMetadata(conn UDPConn, addr *net.UDPAddr, connMetadata *pb.Conn
 
 	_, _, err = conn.WriteMsgUDP(append([]byte{PrefixLen - 1: 0}, b...), nil, addr)
 	return err
+}
+
+func sendPingMsg(conn UDPConn, closeChan chan struct{}) {
+	pingMsg := new(pb.ConnectionMetadata)
+	pingMsg.IsPing = true
+
+	for {
+		select {
+		case <-closeChan:
+			break
+		default:
+		}
+		err := writeUDPConnMetadata(conn, nil, pingMsg)
+		if err != nil {
+			log.Println("write udp ping msg error:", err)
+			break
+		}
+		time.Sleep(heartbeatInterval)
+	}
+	return
 }
 
 func readStreamMetadata(stream *smux.Stream) (*pb.StreamMetadata, error) {

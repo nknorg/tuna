@@ -16,6 +16,7 @@ message ConnectionMetadata {
   bytes nonce = 3;
   bool is_measurement = 4;
   uint32 measurement_bytes_downlink = 5;
+  bool is_ping = 6;
 }
 
 message ServiceMetadata {
