@@ -63,12 +63,14 @@ func BandwidthMeasurementClientContext(ctx context.Context, conn net.Conn, bytes
 	}()
 
 	b := make([]byte, readBufferSize)
-	for bytesRead := 0; bytesRead < bytesDownlink; {
+	var bytesRead, m int
+	var err error
+	for bytesRead = 0; bytesRead < bytesDownlink; {
 		n := bytesDownlink - bytesRead
 		if n > len(b) {
 			n = len(b)
 		}
-		m, err := conn.Read(b[:n])
+		m, err = conn.Read(b[:n])
 		if err != nil {
 			return 0, 0, err
 		}
@@ -82,7 +84,10 @@ func BandwidthMeasurementClientContext(ctx context.Context, conn net.Conn, bytes
 
 	timeToLastByte := time.Since(timeStart)
 	bps := float32(bytesDownlink) / float32(timeToLastByte) * float32(time.Second)
-	bpsRead := float32(bytesDownlink) / float32(timeToLastByte-timeToFirstByte) * float32(time.Second)
+	bpsRead := bps
+	if bytesRead > m {
+		bpsRead = float32(bytesDownlink) / float32(timeToLastByte-timeToFirstByte) * float32(time.Second)
+	}
 
 	return bps, bpsRead, nil
 }
