@@ -512,11 +512,11 @@ func (te *TunaExit) StartReverse(shouldReconnect bool) error {
 	for {
 		err = te.Common.CreateServerConn(true)
 		if err != nil {
-			if err == ErrClosed {
+			if errors.Is(err, ErrClosed) {
 				return nil
 			}
 			log.Println("Couldn't connect to reverse entry:", err)
-			if err == nkn.ErrInsufficientBalance {
+			if errors.Is(err, nkn.ErrInsufficientBalance) {
 				return err
 			}
 			time.Sleep(1 * time.Second)

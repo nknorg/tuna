@@ -415,8 +415,8 @@ func (c *Common) startUDPReaderWriter(conn *EncryptUDPConn, toAddr *net.UDPAddr,
 			n, from, encrypted, err = conn.ReadFromUDPEncrypted(buffer)
 			if err != nil {
 				log.Println("Couldn't receive data:", err)
-				if strings.Contains(err.Error(), "use of closed network connection") {
-					c.udpCloseChan <- struct{}{}
+				if errors.Is(err, io.ErrClosedPipe) {
+					return
 				}
 			}
 			if bytes.Equal(buffer[:PrefixLen], []byte{PrefixLen - 1: 0}) && c.IsServer && n > PrefixLen {
@@ -561,6 +561,9 @@ func (c *Common) wrapConn(conn net.Conn, remotePublicKey []byte, localConnMetada
 		remoteConnMetadata, err = readConnMetadata(conn)
 		if err != nil {
 			return nil, nil, err
+		}
+		if !bytes.Equal(remoteConnMetadata.PublicKey, remotePublicKey) {
+			return nil, nil, fmt.Errorf("public key mismatch")
 		}
 		connNonce = remoteConnMetadata.Nonce
 	} else {
@@ -1067,7 +1070,8 @@ func measureDelay(ctx context.Context, nodes types.Nodes, concurrentWorkers, num
 				addr := node.Metadata.Ip + ":" + strconv.Itoa(int(node.Metadata.TcpPort))
 				delay, err := tunaUtil.DelayMeasurementContext(ctx, tcp4, addr, timeout, dialContext)
 				if err != nil {
-					if _, ok := err.(net.Error); !ok {
+					var e net.Error
+					if !errors.As(err, &e) {
 						log.Println(err)
 					}
 					return
@@ -1126,7 +1130,8 @@ func (c *Common) measureBandwidth(ctx context.Context, nodes types.Nodes, n int,
 			}
 			conn, err := dialContext(ctx, tcp4, addr)
 			if err != nil {
-				if _, ok := err.(net.Error); !ok {
+				var e net.Error
+				if !errors.As(err, &e) {
 					log.Println(err)
 				}
 				return
