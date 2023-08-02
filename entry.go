@@ -113,7 +113,7 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 		err := te.CreateServerConn(true)
 		if err != nil {
 			log.Println("Couldn't connect to node:", err)
-			if err == nkn.ErrInsufficientBalance {
+			if errors.Is(err, nkn.ErrInsufficientBalance) {
 				return err
 			}
 			time.Sleep(1 * time.Second)
