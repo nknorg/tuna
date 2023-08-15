@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nknorg/nkn-sdk-go"
+	"github.com/nknorg/nkn/v2/config"
 )
 
 const (
@@ -50,7 +51,7 @@ func init() {
 				log.Println("Subscribed to topic", subData.topic, "success:", txnHash)
 				break
 			}
-			time.Sleep(time.Second)
+			time.Sleep(config.ConsensusTimeout)
 		}
 	}()
 }
