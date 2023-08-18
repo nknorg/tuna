@@ -248,8 +248,8 @@ func NewCommon(
 		reverseBytesEntryToExit: make(map[string][]uint64),
 		reverseBytesExitToEntry: make(map[string][]uint64),
 
-		udpReadChan:  make(chan []byte),
-		udpWriteChan: make(chan []byte),
+		udpReadChan:  make(chan []byte, 64),
+		udpWriteChan: make(chan []byte, 64),
 	}
 	c.minBalance, err = common.StringToFixed64(minBalance)
 	if err != nil {
