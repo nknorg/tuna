@@ -95,10 +95,6 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 		serviceConn:  make(map[byte]*net.UDPConn),
 		clientAddr:   cache.New(time.Duration(config.UDPTimeout)*time.Second, time.Second),
 	}
-
-	te.SetServerUDPReadChan(make(chan []byte))
-	te.SetServerUDPWriteChan(make(chan []byte))
-
 	return te, nil
 }
 
