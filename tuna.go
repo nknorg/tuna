@@ -844,7 +844,7 @@ func (c *Common) GetTopPerformanceNodes(measureBandwidth bool, n int) (types.Nod
 }
 
 func (c *Common) GetTopPerformanceNodesContext(ctx context.Context, measureBandwidth bool, n int) (types.Nodes, error) {
-	if len(c.ServiceInfo.IPFilter.GetProviders()) > 0 {
+	if c.ServiceInfo.IPFilter != nil && len(c.ServiceInfo.IPFilter.GetProviders()) > 0 {
 		c.ServiceInfo.IPFilter.UpdateDataFileContext(ctx)
 	}
 
