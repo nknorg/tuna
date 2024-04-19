@@ -51,6 +51,7 @@ all:
 	${MAKE} build GOOS=linux GOARCH=arm GOARM=7
 	${MAKE} build GOOS=linux GOARCH=arm64
 	${MAKE} build GOOS=darwin GOARCH=amd64
+	${MAKE} build GOOS=darwin GOARCH=arm64
 	${MAKE} build GOOS=windows GOARCH=amd64 EXT=.exe
 
 .PHONY: pb
