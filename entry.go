@@ -40,6 +40,8 @@ type TunaEntry struct {
 	paymentStream      *smux.Stream
 	reverseBeneficiary common.Uint160
 	sessionLock        sync.Mutex
+	tcpPorts           []uint32
+	udpPorts           []uint32
 }
 
 func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, client *nkn.MultiClient, config *EntryConfiguration) (*TunaEntry, error) {
@@ -101,6 +103,29 @@ func NewTunaEntry(service Service, serviceInfo ServiceInfo, wallet *nkn.Wallet, 
 func (te *TunaEntry) Start(shouldReconnect bool) error {
 	defer te.Close()
 
+	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
+	if listenIP == nil {
+		listenIP = net.ParseIP(defaultServiceListenIP)
+	}
+
+	tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
+	if err != nil {
+		return err
+	}
+	if len(tcpPorts) > 0 {
+		log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
+		te.tcpPorts = tcpPorts
+	}
+
+	udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
+	if err != nil {
+		return err
+	}
+	if len(udpPorts) > 0 {
+		log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
+		te.udpPorts = udpPorts
+	}
+
 	for {
 		if te.IsClosed() {
 			return nil
@@ -153,27 +178,6 @@ func (te *TunaEntry) Start(shouldReconnect bool) error {
 		)
 
 		break
-	}
-
-	listenIP := net.ParseIP(te.ServiceInfo.ListenIP)
-	if listenIP == nil {
-		listenIP = net.ParseIP(defaultServiceListenIP)
-	}
-
-	tcpPorts, err := te.listenTCP(listenIP, te.Service.TCP)
-	if err != nil {
-		return err
-	}
-	if len(tcpPorts) > 0 {
-		log.Printf("Serving %s on localhost tcp port %v", te.Service.Name, tcpPorts)
-	}
-
-	udpPorts, err := te.listenUDP(listenIP, te.Service.UDP)
-	if err != nil {
-		return err
-	}
-	if len(udpPorts) > 0 {
-		log.Printf("Serving %s on localhost udp port %v", te.Service.Name, udpPorts)
 	}
 
 	geoCloseChan := make(chan struct{})
@@ -294,6 +298,14 @@ func (te *TunaEntry) StartReverse(stream *smux.Stream, connMetadata *pb.Connecti
 	}
 
 	return nil
+}
+
+func (te *TunaEntry) GetTCPPorts() []uint32 {
+	return te.tcpPorts
+}
+
+func (te *TunaEntry) GetUDPPorts() []uint32 {
+	return te.udpPorts
 }
 
 func (te *TunaEntry) Close() {
